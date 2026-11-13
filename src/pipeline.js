@@ -1,0 +1,238 @@
+/**
+ * @file src/pipeline.js
+ * @module pipeline
+ * @purpose The orchestrator of the stages: the order, the pause and the continuation.
+ *
+ *   The pipeline runs the stages of the registry one after another and writes the progress
+ *   of the run to the disk after every stage. That is what makes a run resumable: when the
+ *   process dies, the next run reads the progress and continues at the first stage that is
+ *   not done.
+ *
+ *   The pause happens on the border of a stage: a stage is never cut in half. The user may
+ *   stop after a stage (`stopAfter`) or press Ctrl+C (an aborted signal); in both cases the
+ *   progress of the run stays on the disk and the run may be continued later.
+ *
+ * @depends stages/index, stages/workspace, stages/plan, stages/architect, stages/setup,
+ *          stages/review, agent/work-plan
+ * @usedBy cli, jobs/manager
+ * @exports runPipeline, resumePipeline, pipelineFiles
+ * @ai.tags pipeline, orchestration, resume
+ * @ai.hint io
+ * @ai.hint legacy-0.2
+ * @changed 2026-11-13 Ported from the monolith: оркестратор стадий и продолжение прогона.
+ */
+
+import { runId as makeRunId } from './stages/workspace.js';
+import { enabledStages } from './stages/index.js';
+import { readPlan } from './stages/plan.js';
+import { readArchitecture } from './stages/architect.js';
+import { readSetup } from './stages/setup.js';
+import { readReview } from './stages/review.js';
+import { createProgress, recordStep, readProgress, writeProgress } from './agent/work-plan.js';
+
+/**
+ * The files a stage touched.
+ * @param {object} result
+ * @returns {string[]}
+ * @exports
+ * @ai.hint pure
+ */
+export function pipelineFiles(result = {}) {
+    const written = new Set();
+    for (const item of result?.applied?.written ?? []) written.add(String(item));
+    for (const item of result?.files ?? []) {
+        const rel = String(item?.path ?? item ?? '').trim();
+        if (rel) written.add(rel);
+    }
+    for (const item of result?.steps ?? []) {
+        for (const rel of item?.applied?.written ?? []) written.add(String(rel));
+    }
+    return [...written];
+}
+
+/**
+ * The short report of a stage.
+ * @param {object} result
+ * @returns {string}
+ * @exports
+ * @ai.hint pure
+ */
+function reportOf(result = {}) {
+    const text = String(result?.text ?? result?.summary ?? '').trim();
+    if (text) return text;
+    const steps = Array.isArray(result?.steps) ? result.steps : [];
+    return steps.map((step) => `${step?.step?.id ?? 'step'}: ${step?.summary ?? ''}`).join('\n');
+}
+
+/**
+ * Run the stages of a run.
+ *
+ * @param {{ client: object, config?: object, root?: string, task?: string, runId?: string|null,
+ *   stageNames?: string[]|null, stopAfter?: string|null, signal?: AbortSignal|null,
+ *   notify?: (event: object) => void, env?: object, inputs?: object|null, resume?: boolean,
+ *   stages?: object[]|null }} request
+ * @returns {Promise<{ status: string, runId: string, stages: object[], progress: object,
+ *   file: string|null, warnings: string[], error: string|null }>}
+ * @exports
+ * @ai.hint io
+ */
+export async function runPipeline({
+    client,
+    config = {},
+    root = process.cwd(),
+    task = '',
+    runId: id = null,
+    stageNames = null,
+    stopAfter = null,
+    signal = null,
+    notify = () => {},
+    env = process.env,
+    inputs = null,
+    resume = false,
+    stages: override = null,
+} = {}) {
+    const run = id ?? makeRunId();
+    const selected = override
+        ? { stages: override, warnings: [] }
+        : enabledStages(config, stageNames);
+    const list = selected.stages;
+    const warnings = [...selected.warnings];
+
+    // The context of the run: every stage reads it and puts its result into it.
+    const ctx = {
+        client,
+        config,
+        root,
+        task,
+        runId: run,
+        notify,
+        env,
+        inputs,
+        plan: null,
+        architecture: null,
+        setup: null,
+        reports: [],
+        review: null,
+        audit: null,
+        lessons: [],
+    };
+
+    let progress = createProgress({ id: run, task, stages: list });
+
+    if (resume) {
+        const stored = await readProgress(root, config, run);
+        if (stored) progress = stored;
+        // The artifacts of the finished stages are read back, so the run continues with
+        // the same plan and the same structure.
+        ctx.plan = await readPlan(root, config, run);
+        ctx.architecture = await readArchitecture(root, config, run);
+        ctx.setup = await readSetup(root, config, run);
+        const review = await readReview(root, config, run);
+        if (review) ctx.review = review;
+    }
+
+    const done = new Map((progress.stages ?? []).map((stage) => [stage.name, stage]));
+    const reports = [];
+    let status = 'completed';
+    let error = null;
+    let paused = false;
+
+    for (const stage of list) {
+        const record = done.get(stage.name);
+        if (resume && record?.status === 'completed') {
+            reports.push({ name: stage.name, status: 'skipped', result: null, warnings: [] });
+            notify({ type: 'stage.skip', stage: stage.name });
+            continue;
+        }
+
+        if (signal?.aborted) {
+            paused = true;
+            status = 'paused';
+            warnings.push(`Прогон остановлен до стадии ${stage.name}.`);
+            break;
+        }
+
+        notify({ type: 'stage.start', stage: stage.name, title: stage.title });
+        let result = null;
+        try {
+            result = await stage.run(ctx);
+        } catch (cause) {
+            error = cause?.message ?? String(cause);
+            warnings.push(`Стадия ${stage.name} упала: ${error}`);
+            progress = recordStep(progress, {
+                stage: stage.name,
+                status: 'failed',
+                report: error,
+            });
+            await writeProgress(root, config, run, progress);
+            reports.push({ name: stage.name, status: 'failed', result: null, warnings: [error] });
+            status = 'failed';
+            break;
+        }
+
+        const stageWarnings = Array.isArray(result?.warnings) ? result.warnings : [];
+        warnings.push(...stageWarnings.map((item) => `${stage.name}: ${item}`));
+        const ok = result?.ok !== false;
+        if (typeof stage.apply === 'function') stage.apply(ctx, result);
+
+        progress = recordStep(progress, {
+            stage: stage.name,
+            status: ok ? 'completed' : 'failed',
+            report: reportOf(result),
+            files: pipelineFiles(result),
+        });
+        await writeProgress(root, config, run, progress);
+
+        reports.push({ name: stage.name, status: ok ? 'completed' : 'failed', result, warnings: stageWarnings });
+        notify({ type: 'stage.done', stage: stage.name, status: ok ? 'completed' : 'failed' });
+
+        if (!ok) {
+            status = 'failed';
+            break;
+        }
+        if (stopAfter && stopAfter === stage.name) {
+            paused = true;
+            status = 'paused';
+            warnings.push(`Прогон остановлен после стадии ${stage.name}.`);
+            break;
+        }
+    }
+
+    if (status === 'completed') progress = { ...progress, status: 'completed' };
+    else if (paused) progress = { ...progress, status: 'paused' };
+    else progress = { ...progress, status: 'failed' };
+
+    const file = await writeProgress(root, config, run, progress);
+
+    return {
+        status,
+        runId: run,
+        stages: reports,
+        progress,
+        file,
+        warnings,
+        error,
+    };
+}
+
+/**
+ * Continue a run that was interrupted.
+ *
+ * @param {{ runId: string, client: object } & object} request the same request as `runPipeline`
+ * @returns {Promise<object>} the report of the run
+ * @exports
+ * @ai.hint io
+ */
+export async function resumePipeline(request = {}) {
+    return await runPipeline({ ...request, resume: true });
+}
+
+/**
+ * The name of the stage a run continues at.
+ * @param {object} progress
+ * @param {object[]} [stages]
+ * @returns {string|null}
+ * @exports
+ * @ai.hint pure
+ */
+export { resumeStageName } from './stages/index.js';
