@@ -177,6 +177,24 @@ export const defaults = {
     projectInstructions: true,
   },
 
+  // --- memory ------------------------------------------------------------------
+  /**
+   * The permanent memory of the CLI: the lessons of the runs, the summaries of the
+   * files and the finished tasks. `dbFile` is null → <home>/memory.db.
+   */
+  memory: {
+    /** The database of the memory: a path or null for the one of the home. */
+    dbFile: null,
+    /** The scope of the records: global or project. */
+    scope: 'project',
+    /** How many records go into the context of the roles. */
+    limit: 40,
+    /** Keep the summaries of the files. */
+    files: true,
+    /** Keep the finished tasks. */
+    tasks: true,
+  },
+
   // --- components ---------------------------------------------------------------
   /**
    * The local component registry: a directory of sources and a SQLite index.

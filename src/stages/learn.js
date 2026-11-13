@@ -18,6 +18,7 @@
  */
 
 import { runRole } from '../roles/index.js';
+import { rememberLessons } from '../memory.js';
 import { runId, runFile, writeJsonFile, readJsonFile } from './workspace.js';
 
 /** The name of the file of the lessons inside the directory of the run. */
@@ -107,10 +108,10 @@ export async function readLessons(root, config = {}, id = null) {
  * The stage of the lessons.
  *
  * @param {{ client: object, config?: object, root?: string, task?: string, plan?: object|null,
- *   review?: object|null, memory?: string, runId?: string|null,
+ *   review?: object|null, memory?: string, runId?: string|null, store?: object|null,
  *   notify?: (event: object) => void, env?: object }} request
  * @returns {Promise<{ stage: string, ok: boolean, lessons: object[], text: string,
- *   file: string|null, warnings: string[], runId: string }>}
+ *   file: string|null, stored: object, warnings: string[], runId: string }>}
  * @exports
  * @ai.hint io
  */
@@ -123,6 +124,7 @@ export async function learnStage({
     review = null,
     memory = '',
     runId: id = null,
+    store = null,
     notify = () => {},
     env = process.env,
 } = {}) {
@@ -171,12 +173,20 @@ export async function learnStage({
     const warnings = [];
     if (!text) warnings.push('Ученик не ответил.');
 
+    // The lessons go into the permanent memory of the project.
+    const stored = rememberLessons(store, lessons, {
+        scope: config?.memory?.scope ?? 'project',
+        source: `run:${run}`,
+    });
+    warnings.push(...stored.warnings);
+
     return {
         stage: 'learn',
         ok: true,
         lessons,
         text,
         file,
+        stored,
         warnings,
         runId: run,
     };

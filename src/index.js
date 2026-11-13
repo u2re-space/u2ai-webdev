@@ -53,6 +53,7 @@ export * from './stages/index.js';
 export * from './agent/work-plan.js';
 export * from './pipeline.js';
 export * from './jobs/manager.js';
+export * from './memory.js';
 export * from './agent/paths.js';
 export * from './agent/fs-tools.js';
 export * from './agent/project-backup.js';

@@ -49,6 +49,7 @@ export const STAGES = Object.freeze([
         title: 'Collect the context',
         dependsOn: [],
         run: collectStage,
+        args: (ctx) => ({ memory: ctx.memory ?? null }),
         apply: (ctx, result) => { ctx.inputs = result?.inputs ?? null; },
     },
     {
@@ -126,6 +127,7 @@ export const STAGES = Object.freeze([
         title: 'Learn the lessons',
         dependsOn: ['audit'],
         run: learnStage,
+        args: (ctx) => ({ memory: ctx.memoryText ?? '', store: ctx.memory ?? null }),
         apply: (ctx, result) => { ctx.lessons = result?.lessons ?? []; },
     },
 ]);

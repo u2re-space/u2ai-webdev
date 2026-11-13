@@ -152,6 +152,25 @@ function validatePace(pace, fail) {
 }
 
 /**
+ * Validate the `memory` section: the permanent memory of the CLI.
+ * @param {object} memory
+ * @param {(message: string) => never} fail
+ */
+function validateMemory(memory, fail) {
+  const where = 'memory';
+  if (!isRecord(memory)) fail(`${where} должен быть объектом`);
+  for (const key of Object.keys(memory)) {
+    if (!(key in defaults.memory)) fail(`${where}.${key}: неизвестное поле (допустимо: ${Object.keys(defaults.memory).join(', ')})`);
+  }
+  if (memory.dbFile !== null && (typeof memory.dbFile !== 'string' || !memory.dbFile.trim())) fail(`${where}.dbFile: путь или null`);
+  if (!ENUMS.memoryScopes.includes(memory.scope)) fail(`${where}.scope: ${ENUMS.memoryScopes.join(' | ')}`);
+  if (!(Number.isSafeInteger(memory.limit) && memory.limit > 0)) fail(`${where}.limit: целое > 0`);
+  for (const key of ['files', 'tasks']) {
+    if (typeof memory[key] !== 'boolean') fail(`${where}.${key}: true | false`);
+  }
+}
+
+/**
  * Validate the `components` section: the local registry.
  * @param {object} components
  * @param {(message: string) => never} fail
@@ -269,6 +288,7 @@ export function validateConfig(config) {
   }
   if (typeof c.inputs.projectInstructions !== 'boolean') fail('inputs.projectInstructions: true | false');
 
+  validateMemory(c.memory, fail);
   validateComponents(c.components, fail);
   validateBridges(c.bridges, fail);
 

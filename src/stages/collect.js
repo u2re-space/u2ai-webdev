@@ -25,6 +25,7 @@ import { collectInputs, inputContext, inputSummary } from '../inputs/index.js';
 import { ensureProjectMap, projectMapFile } from '../agent/map.js';
 import { discoverSkills, loadSkillPacks, skillDirectories } from '../agent/skills.js';
 import { openRegistry } from '../registry.js';
+import { memoryContext } from '../memory.js';
 
 /**
  * The files of the project as short lines: the path and the size.
@@ -91,15 +92,18 @@ export function collectText(collected = {}) {
         ].join('\n'));
     }
 
+    if (collected.memory) blocks.push(collected.memory);
+
     return blocks.join('\n\n');
 }
 
 /**
  * The stage of the collection: the inputs, the project, the registry and the skills.
  *
- * @param {{ root?: string, config?: object, task?: string, env?: object }} request
+ * @param {{ root?: string, config?: object, task?: string, env?: object, memory?: object|null }} request
  * @returns {Promise<{ stage: string, ok: boolean, inputs: object, summary: object,
- *   project: object, components: object[], skills: object, warnings: string[], text: string }>}
+ *   project: object, components: object[], skills: object, memory: string, warnings: string[],
+ *   text: string }>}
  * @exports
  * @ai.hint io
  */
@@ -108,6 +112,7 @@ export async function collectStage({
     config = {},
     task = '',
     env = process.env,
+    memory = null,
 } = {}) {
     const warnings = [];
 
@@ -165,6 +170,13 @@ export async function collectStage({
         warnings.push(`Скиллы не прочитаны: ${error?.message ?? error}`);
     }
 
+    // The memory of the project: the lessons of the earlier runs.
+    const memoryText = memoryContext(memory, {
+        query: task,
+        scope: config?.memory?.scope ?? 'project',
+        limit: config?.memory?.limit ?? 40,
+    });
+
     const collected = {
         stage: 'collect',
         ok: true,
@@ -173,6 +185,7 @@ export async function collectStage({
         project,
         components,
         skills: { packs, directories },
+        memory: memoryText,
         warnings,
         text: '',
     };

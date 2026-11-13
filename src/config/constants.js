@@ -24,11 +24,13 @@ export const ENUMS = Object.freeze({
   backendRoutes: Object.freeze(['responses', 'chat']),
   /** Pipeline stages in execution order. */
   stages: Object.freeze([
-    'plan', 'collect', 'architect', 'setup',
+    'collect', 'plan', 'architect', 'setup',
     'markup', 'coding', 'styling',
     'vector', 'iconify',
-    'review', 'audit',
+    'review', 'audit', 'learn',
   ]),
+  /** The scopes of the records of the memory. */
+  memoryScopes: Object.freeze(['global', 'project']),
   /** The markup the generator may write. */
   markupLanguages: Object.freeze(['html', 'jsx', 'tsx', 'vue', 'svelte']),
   /** The stylesheet language the generator may write. */

@@ -39,6 +39,7 @@ export * from './src/stages/index.js';
 export * from './src/agent/work-plan.js';
 export * from './src/pipeline.js';
 export * from './src/jobs/manager.js';
+export * from './src/memory.js';
 export * from './src/agent/quality.js';
 export * from './src/agent/pace.js';
 export * from './src/openai/client.js';

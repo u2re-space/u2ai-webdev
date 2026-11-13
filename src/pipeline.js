@@ -29,6 +29,8 @@ import { readArchitecture } from './stages/architect.js';
 import { readSetup } from './stages/setup.js';
 import { readReview } from './stages/review.js';
 import { createProgress, recordStep, readProgress, writeProgress } from './agent/work-plan.js';
+import { openMemory, memoryContext, memoryFile } from './memory.js';
+import { defaultHome } from './config/paths.js';
 
 /**
  * The files a stage touched.
@@ -108,6 +110,8 @@ export async function runPipeline({
         notify,
         env,
         inputs,
+        memory: null,
+        memoryText: '',
         plan: null,
         architecture: null,
         setup: null,
@@ -116,6 +120,23 @@ export async function runPipeline({
         audit: null,
         lessons: [],
     };
+
+    // The permanent memory of the project: the run reads it and writes the lessons into it.
+    let memory = null;
+    if (config?.memory?.enabled !== false) {
+        try {
+            const file = config?.memory?.dbFile ?? memoryFile(defaultHome(env));
+            memory = openMemory({ file, project: root });
+            ctx.memory = memory;
+            ctx.memoryText = memoryContext(memory, {
+                query: task,
+                scope: config?.memory?.scope ?? 'project',
+                limit: config?.memory?.limit ?? 40,
+            });
+        } catch (error) {
+            warnings.push(`Память недоступна: ${error?.message ?? error}`);
+        }
+    }
 
     let progress = createProgress({ id: run, task, stages: list });
 
@@ -155,7 +176,8 @@ export async function runPipeline({
         notify({ type: 'stage.start', stage: stage.name, title: stage.title });
         let result = null;
         try {
-            result = await stage.run(ctx);
+            const args = typeof stage.args === 'function' ? { ...ctx, ...stage.args(ctx) } : ctx;
+            result = await stage.run(args);
         } catch (cause) {
             error = cause?.message ?? String(cause);
             warnings.push(`Стадия ${stage.name} упала: ${error}`);
@@ -203,6 +225,21 @@ export async function runPipeline({
     else progress = { ...progress, status: 'failed' };
 
     const file = await writeProgress(root, config, run, progress);
+
+    // The finished task goes into the memory of the project.
+    if (memory && status === 'completed') {
+        try {
+            memory.completeTask({
+                task,
+                runId: run,
+                summary: String(ctx.plan?.summary ?? ''),
+                files: (progress.files ?? []).map((file) => file.path),
+            });
+        } catch (cause) {
+            warnings.push(`Задача не записана в память: ${cause?.message ?? cause}`);
+        }
+    }
+    memory?.close?.();
 
     return {
         status,
