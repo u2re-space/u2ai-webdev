@@ -1,6 +1,6 @@
 # План перехода: Universal-AI (монолит 0.2.xx) → @u2ai/webdev (0.3.xx)
 
-> Актуальный статус: **план создан, шаги ещё не начаты**.
+> Актуальный статус: **step-1 выполнен** — каркас пакета на месте; остальные шаги впереди.
 > Рабочий дом переносимого кода: `submodules/u2ai-webdev/`.
 > Репозиторий: <https://github.com/u2re-space/u2ai-webdev> (remote настроен, пуш не делаем).
 >
@@ -111,8 +111,8 @@ CLI `ai-webdev` (`@u2ai/webdev`) с собственным конфигом `~/.
 | `src/jobs/manager.js` | фоновые задачи и восстановление после обрыва |
 | `src/pipeline.js` | оркестратор стадий и точек восстановления |
 
-Косметика каркаса: файл `src/roles/archititor.js` переименовывается в
-`src/roles/architect.js` (в каркасе опечатка; файлы пустые, конфликта не будет).
+Каталог `src/shared/` каркаса остаётся под общие помощники (текст, пути, формат);
+имена ролей и стадий в каркасе совпадают с планом.
 
 ### 1.2. Входные данные
 
@@ -190,14 +190,16 @@ CLI `ai-webdev` (`@u2ai/webdev`) с собственным конфигом `~/.
 ## 1. Шаги
 
 ### step-1 — Каркас пакета и лаунчеры
-- [ ] `package.json` (`@u2ai/webdev`, бинарь `ai-webdev`, Node >= 26, ESM, зависимости)
-- [ ] `bin/ai-webdev.{js,cmd,ps1,sh}`
-- [ ] `index.js` — публичный точечный вход
-- [ ] `scripts/check-syntax.mjs` — разбор всех файлов пакета
-- [ ] `.gitignore` (без `package-lock.json`)
-- [ ] Каркас каталогов `src/{cli,help,index}.js`, `src/agent`, `src/cli`, `src/config`,
+- [x] `package.json` (`@u2ai/webdev`, бинарь `ai-webdev`, Node >= 26, ESM, зависимости)
+- [x] `bin/ai-webdev.{js,cmd,ps1,sh}`
+- [x] `index.js` — публичный точечный вход
+- [x] `scripts/check-syntax.mjs` — разбор всех файлов пакета
+- [x] `.gitignore` (без `package-lock.json`)
+- [x] Каркас каталогов `src/{cli,help,index}.js`, `src/agent`, `src/cli`, `src/config`,
       `src/core`, `src/generate`, `src/inputs`, `src/jobs`, `src/model`, `src/openai`,
-      `src/roles`, `src/structure`, `src/stages`
+      `src/roles`, `src/shared`, `src/structure`, `src/stages`
+- [x] `src/cli.js` и `src/help.js` — заготовка: только `--help` и `--version`
+      (полная поверхность команд приходит в step-18)
 
 ### step-2 — Система конфигурации `~/.ai-webdev`
 - [ ] `src/config/constants.js` — enum'ы (стадии, языки разметки/стилей/скриптов, фреймворки, наборы иконок, режимы мостов)

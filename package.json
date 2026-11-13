@@ -1,0 +1,45 @@
+{
+  "name": "@u2ai/webdev",
+  "version": "0.3.0-alpha",
+  "description": "AI web developer: plans a web project, generates markup, code, styles and components, picks the icons and the setup, and reviews the result.",
+  "type": "module",
+  "main": "./index.js",
+  "bin": {
+    "ai-webdev": "./bin/ai-webdev.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/u2re-space/u2ai-webdev.git"
+  },
+  "engines": {
+    "node": ">=26.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "start": "node bin/ai-webdev.js",
+    "test": "node --test --test-timeout=60000 \"test/*.test.js\"",
+    "check": "node scripts/check-syntax.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "index.js",
+    "README.md"
+  ],
+  "keywords": [
+    "openai",
+    "responses-api",
+    "cli",
+    "web-development",
+    "codegen",
+    "components",
+    "design-tokens",
+    "icons"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/node": "^2.1.1"
+  }
+}

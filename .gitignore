@@ -147,3 +147,21 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+#
+.ai-agent/
+.ai/
+.ai-webdev/
+*.log
+
+#
+.env
+.tmp
+.tmp-*
+.temp
+
+#
+package-lock.json
+.dbg-*
+.debug-*
+test/*.png
