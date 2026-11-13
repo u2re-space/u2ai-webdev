@@ -1,7 +1,7 @@
 # План перехода: Universal-AI (монолит 0.2.xx) → @u2ai/webdev (0.3.xx)
 
-> Актуальный статус: **шаги 1–2 выполнены** — каркас и конфигурация на месте; дальше
-> openai-слой и агентный слой.
+> Актуальный статус: **шаги 1–3 выполнены** — каркас, конфигурация и openai-слой на
+> месте; дальше агентный слой.
 > Рабочий дом переносимого кода: `submodules/u2ai-webdev/`.
 > Репозиторий: <https://github.com/u2re-space/u2ai-webdev> (remote настроен, пуш не делаем).
 >
@@ -212,13 +212,15 @@ CLI `ai-webdev` (`@u2ai/webdev`) с собственным конфигом `~/.
 - [x] `src/config/index.js`, `src/config.js` — загрузка, `ensureConfigFile`, `redactConfig`
 
 ### step-3 — OpenAI-слой
-- [ ] `src/openai/http.js` — транспорт: бэкенды, ретраи, таймауты, редиректы
-- [ ] `src/openai/api.js` — тело запроса, заголовки, `purpose`/роль
-- [ ] `src/openai/responses.js` — Responses-запрос: `imagePart` (vision), строгий JSON, текст
-- [ ] `src/openai/chat.js` — запасной транспорт Chat Completions
-- [ ] `src/openai/fallback.js` — цепочка моделей и их откат
-- [ ] `src/openai/client.js` — клиент: ротация бэкендов, ретраи, `responses.create`
-- [ ] `src/model/profiles.js` — профили моделей, reasoning-усилие, лимиты контекста, цены
+- [x] `src/openai/http.js` — транспорт: бэкенды, ретраи, таймауты, редиректы
+- [x] `src/openai/api.js` — ошибки API (`ApiError`), разбор SSE, редуктор потока, чтение usage
+- [x] `src/openai/responses.js` — Responses-запрос: `imagePart` (vision), строгий JSON, текст
+- [x] `src/openai/chat.js` — запасной транспорт Chat Completions
+- [x] `src/openai/fallback.js` — цепочка моделей и их откат
+- [x] `src/openai/client.js` — клиент: ротация бэкендов, ретраи, `responses.create`
+- [x] `src/model/profiles.js` — профили моделей, reasoning-усилие, лимиты контекста, цены
+- [x] Слой перенесён из `u2ai-measurer` (тот же openai-слой), проверен на локальном
+      мокк-хосте `node:http`
 
 ### step-4 — Агентный слой: инструменты
 - [ ] `src/agent/paths.js` — пути внутри рабочего каталога, запрет секретов
