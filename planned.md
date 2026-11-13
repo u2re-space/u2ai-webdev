@@ -1,7 +1,7 @@
 # План перехода: Universal-AI (монолит 0.2.xx) → @u2ai/webdev (0.3.xx)
 
-> Актуальный статус: **шаги 1–7 выполнены** — каркас, конфигурация, openai-слой,
-> агентный слой, скиллы, MCP, схемы и роли на месте; дальше входные данные.
+> Актуальный статус: **шаги 1–8 выполнены** — каркас, конфигурация, openai-слой,
+> агентный слой, скиллы, MCP, схемы, роли и входные данные на месте; дальше генератор.
 > Рабочий дом переносимого кода: `submodules/u2ai-webdev/`.
 > Репозиторий: <https://github.com/u2re-space/u2ai-webdev> (remote настроен, пуш не делаем).
 >
@@ -277,11 +277,12 @@ CLI `ai-webdev` (`@u2ai/webdev`) с собственным конфигом `~/.
       на локальном мокк-хосте, остановка по лимиту ходов, падение инструмента
 
 ### step-8 — Входные данные
-- [ ] `src/inputs/design-md.js` — разбор `DESIGN.md`: палитра, типографика, шкала, компоненты, конфликты
-- [ ] `src/inputs/measurements.js` — разбор `measurements.json`: боксы, размеры, юниты, регионы
-- [ ] `src/inputs/palette.js`, `src/inputs/tokens.js` — `palette.json` и `tokens.css`
-- [ ] `src/inputs/assets.js` — референсы, кропы, изображения-ассеты, `AGENTS.md`
-- [ ] `src/inputs/index.js` — сводный контекст задачи для ролей
+- [x] `src/inputs/design-md.js` — разбор `DESIGN.md`: палитра, типографика, шкала, компоненты, конфликты
+- [x] `src/inputs/measurements.js` — разбор `measurements.json`: боксы, размеры, юниты, регионы
+- [x] `src/inputs/palette.js`, `src/inputs/tokens.js` — `palette.json` и `tokens.css`
+- [x] `src/inputs/assets.js` — референсы, кропы, изображения-ассеты, `AGENTS.md`
+- [x] `src/inputs/index.js` — сводный контекст задачи для ролей
+- [x] Проверка: разбор всех четырёх форматов, перевод пикселей в rem, контраст палитры, приоритет `tokens.css`, пропуск отсутствующих входов как предупреждения
 
 ### step-9 — Генератор: бриф, скаффолд, платформа, fidelity, референсы
 - [ ] `src/generate/brief.js` — бриф генерации: вид задачи (`landing|site|backend|app|component`), выходы, ограничения, манифест
@@ -340,7 +341,7 @@ CLI `ai-webdev` (`@u2ai/webdev`) с собственным конфигом `~/.
 - [ ] `test/config.test.js` — конфиг, валидация, русские сообщения
 - [x] `test/tools.test.js` — инструменты агента, запись только в разрешённые каталоги, запрет выхода за пределы проекта (сделан в step-4)
 - [x] `test/roles.test.js` — резолв ролей, схемы, цикл вызовов (сделан в step-7)
-- [ ] `test/inputs.test.js` — разбор `DESIGN.md`, `measurements.json`, `palette.json`, `tokens.css`
+- [x] `test/inputs.test.js` — разбор `DESIGN.md`, `measurements.json`, `palette.json`, `tokens.css` (сделан в step-8)
 - [ ] `test/structure.test.js` — сортировка импортов, структура файла, CSS/SCSS
 - [ ] `test/component.test.js` — контракт компонента, реестр, установка
 - [ ] `test/memory.test.js` — SQLite-память, поиск, области
