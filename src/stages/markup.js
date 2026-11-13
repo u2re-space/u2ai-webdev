@@ -1,0 +1,62 @@
+/**
+ * @file src/stages/markup.js
+ * @module stages/markup
+ * @purpose The markup of the steps of the plan: the structure of the page, its landmarks and
+ *          its accessibility.
+ *
+ *   The stage gives the markup specialist the step, the brief of the architect and the
+ *   collected context (the design direction, the measurements and the assets), and then
+ *   applies the files the specialist wrote.
+ *
+ * @depends roles/index, stages/architect, stages/step
+ * @usedBy stages/index, pipeline
+ * @exports markupStage
+ * @ai.tags stages, markup, accessibility
+ * @ai.hint io
+ * @ai.hint legacy-0.2
+ * @changed 2026-11-13 Ported from the monolith: разметка по шагу плана и брифу.
+ */
+
+import { architectureText } from './architect.js';
+import { runStepStage } from './step.js';
+
+/**
+ * The stage of the markup.
+ *
+ * @param {{ client: object, config?: object, root?: string, task?: string, plan?: object|null,
+ *   architecture?: object|null, inputs?: object|null, runId?: string|null,
+ *   notify?: (event: object) => void, env?: object }} request
+ * @returns {Promise<object>} the report of the stage
+ * @exports
+ * @ai.hint io
+ */
+export async function markupStage({
+    client,
+    config = {},
+    root = process.cwd(),
+    task = '',
+    plan = null,
+    architecture = null,
+    inputs = null,
+    runId: id = null,
+    notify = () => {},
+    env = process.env,
+} = {}) {
+    const brief = architecture ? architectureText(architecture) : '';
+    return await runStepStage({
+        client,
+        config,
+        root,
+        task,
+        role: 'markup',
+        plan,
+        brief,
+        inputs,
+        runId: id,
+        notify,
+        env,
+        context: {
+            markup: architecture?.stack?.markup ?? config?.stack?.markupLanguage ?? 'html',
+        },
+    });
+}
