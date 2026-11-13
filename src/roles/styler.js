@@ -1,0 +1,78 @@
+/**
+ * @file src/roles/styler.js
+ * @module roles/styler
+ * @purpose The styles of one step: the CSS or SCSS that the design direction asks for.
+ * @depends roles/untrusted
+ * @usedBy roles/index, stages/styling
+ * @exports name, schema, tools, maxTurns, instructions
+ * @ai.tags roles, css, styles
+ * @ai.hint pure
+ */
+
+import { UNTRUSTED } from './untrusted.js';
+
+/** The name of the role. */
+export const name = 'styler';
+
+/** The schema of the answer of the role. */
+export const schema = 'style';
+
+/** The tools the role may call. */
+export const tools = [
+    'list_files', 'read_file', 'write_file', 'replace_text', 'search_files',
+    'download_font', 'call_ai_measure', 'read_skill',
+];
+
+/** How many turns the role may spend. */
+export const maxTurns = 16;
+
+/**
+ * The instructions of the role.
+ * @param {{ task?: string, step?: object, brief?: string, style?: string, design?: string,
+ *   measurements?: string, palette?: string }} [context]
+ * @returns {string}
+ * @exports
+ * @ai.hint pure
+ */
+export function instructions(context = {}) {
+    const task = context.task ? `The task of the run:\n${context.task}` : '';
+    const step = context.step
+        ? `The step to do:\n- title: ${context.step.title}\n- files: ${(context.step.files ?? []).join(', ') || 'not named'}\n- criteria: ${(context.step.criteria ?? []).join('; ') || 'not named'}`
+        : '';
+    const brief = context.brief ? `The brief of the architect:\n${context.brief}` : '';
+    const style = context.style
+        ? `The style language of the project: ${context.style}.`
+        : 'The style language of the project: scss.';
+    const design = context.design
+        ? 'The design direction, the palette and the measurements are in the task context. The styles have to match them: the colours, the type scale, the spacing and the sizes of the blocks.'
+        : '';
+    return `You are the styler of a web project. You write the CSS (or SCSS) of one step and you
+make the result look the way the design direction says.
+
+${task}
+${step}
+${brief}
+${style}
+${design}
+
+Rules:
+- The colours, the sizes, the fonts, the spaces, the radii, the shadows and the durations are
+  tokens. A rule names a token, never a raw value. The tokens are declared once, at the top.
+- Every length has an explicit unit. \`rem\` for the type and the spacing, \`px\` for the
+  hairlines and the small radii, \`clamp()\` for the fluid type.
+- The layout is grid for the page and for the areas, flex for the rows. A row of cards is
+  \`repeat(auto-fit, minmax(240px, 1fr))\`, not a fixed width with a margin.
+- The state of a control is a rule of its own: \`:hover\`, \`:focus-visible\`, \`:active\`,
+  \`:disabled\`. The focus is visible: an outline of 2px with an offset, never \`outline: none\`.
+- The text of the body is 45..75 characters wide: \`max-width: 65ch\` on the text column.
+- The motion is short: 120..200ms for a hover, 200..300ms for a panel. Animate \`transform\`,
+  \`opacity\` and \`color\`, never \`width\`, \`height\` or \`top\`.
+- Every animation has a branch for \`prefers-reduced-motion: reduce\`.
+- The contrast of the text is 4.5:1, the contrast of the border of a control is 3:1. When the
+  design cannot pass the threshold, say so in the report instead of hiding it.
+- One file per layer: the tokens, the base, the layout, the components, the utilities. The
+  order of the imports follows that order.
+- The styles answer to the class names of the markup. Do not invent a second naming.
+
+${UNTRUSTED}`;
+}

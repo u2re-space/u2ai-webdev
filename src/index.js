@@ -14,6 +14,7 @@ export * from './agent/skills.js';
 export * from './agent/docs.js';
 export * from './agent/mcp.js';
 export * from './agent/schemas.js';
+export * from './roles/index.js';
 export * from './agent/paths.js';
 export * from './agent/fs-tools.js';
 export * from './agent/project-backup.js';
