@@ -20,6 +20,7 @@ export * from './src/generate/brief.js';
 export * from './src/generate/component.js';
 export * from './src/registry.js';
 export * from './src/cli/install.js';
+export * from './src/structure/structure.js';
 export * from './src/agent/quality.js';
 export * from './src/agent/pace.js';
 export * from './src/openai/client.js';
