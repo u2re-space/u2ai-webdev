@@ -1,0 +1,295 @@
+/**
+ * @file src/stages/plan.js
+ * @module stages/plan
+ * @purpose The plan of the work: the steps, their order, their files and their criteria.
+ *
+ *   The planner reads the project and the collected context and answers with a plan. The plan
+ *   is normalized before it is used: the ids become unique, the dependencies that point
+ *   nowhere are dropped, and the steps are sorted in the order they may be done.
+ *
+ *   The plan is written to the directory of the run (`.tmp/<id>/plan.json`), so the next stages
+ *   and a resumed run read the same plan and do not drift.
+ *
+ * @depends node:path, roles/index, inputs/index, stages/workspace
+ * @usedBy stages/index, stages/architect, pipeline
+ * @exports PLAN_FILE, normalizePlan, orderSteps, planText, writePlan, readPlan, planStage
+ * @ai.tags stages, plan
+ * @ai.hint io
+ * @ai.hint legacy-0.2
+ * @changed 2026-11-13 Ported from the monolith: the plan is a file of the run, not a chat.
+ */
+
+import { runRole, ROLE_NAMES } from '../roles/index.js';
+import { inputContext } from '../inputs/index.js';
+import { runId, runFile, writeJsonFile, readJsonFile } from './workspace.js';
+
+/** The name of the file of the plan inside the directory of the run. */
+export const PLAN_FILE = 'plan.json';
+
+/**
+ * The text of a list, one item per line.
+ * @param {unknown} value
+ * @returns {string[]}
+ * @ai.hint pure
+ */
+function lines(value) {
+    if (Array.isArray(value)) return value.map((item) => String(item ?? '').trim()).filter(Boolean);
+    if (typeof value === 'string' && value.trim()) return value.split('\n').map((item) => item.trim()).filter(Boolean);
+    return [];
+}
+
+/**
+ * Sort the steps in the order they may be done.
+ *
+ * The sort is stable: a step that waits for nothing keeps its place. A cycle in the
+ * dependencies does not break the plan — the steps of the cycle keep their order and the
+ * caller learns about the cycle from the warnings.
+ * @param {object[]} steps
+ * @returns {{ steps: object[], warnings: string[] }}
+ * @exports
+ * @ai.hint pure
+ */
+export function orderSteps(steps = []) {
+    const list = Array.isArray(steps) ? steps : [];
+    const byId = new Map(list.map((step) => [step.id, step]));
+    const pending = new Map(list.map((step) => [step.id, new Set((step.dependsOn ?? []).filter((id) => byId.has(id) && id !== step.id))]));
+    const done = new Set();
+    const out = [];
+    const warnings = [];
+
+    while (out.length < list.length) {
+        const ready = list.find((step) => !done.has(step.id) && (pending.get(step.id)?.size ?? 0) === 0);
+        if (!ready) break;
+        done.add(ready.id);
+        out.push(ready);
+        for (const set of pending.values()) set.delete(ready.id);
+    }
+
+    if (out.length < list.length) {
+        const rest = list.filter((step) => !done.has(step.id));
+        const names = rest.map((step) => step.id).join(', ');
+        warnings.push(`Цикл в зависимостях шагов: ${names}. Шаги оставлены в исходном порядке.`);
+        out.push(...rest);
+    }
+
+    return { steps: out, warnings };
+}
+
+/**
+ * Normalize the plan of the model into the shape the stages read.
+ *
+ * Every field of a step has a default, the ids are unique, the dependencies that point to
+ * nothing are dropped, and the steps are sorted in the order they may be done.
+ * @param {object} plan
+ * @returns {{ summary: string, steps: object[], risks: string[], questions: string[], warnings: string[] }}
+ * @exports
+ * @ai.hint pure
+ */
+export function normalizePlan(plan = {}) {
+    const warnings = [];
+    const raw = Array.isArray(plan?.steps) ? plan.steps : [];
+    const seen = new Map();
+
+    const steps = raw.map((step, at) => {
+        const source = step && typeof step === 'object' ? step : {};
+        let id = String(source.id ?? '').trim() || `step-${at + 1}`;
+        if (seen.has(id)) {
+            const count = seen.get(id) + 1;
+            seen.set(id, count);
+            warnings.push(`Шаг с id "${id}" повторяется: он переименован в "${id}-${count}".`);
+            id = `${id}-${count}`;
+        } else {
+            seen.set(id, 1);
+        }
+        const role = String(source.role ?? '').trim().toLowerCase();
+        if (role && !ROLE_NAMES.includes(role)) {
+            warnings.push(`Шаг ${id}: роль "${role}" неизвестна, взята роль planner.`);
+        }
+        return {
+            id,
+            title: String(source.title ?? '').trim() || `Шаг ${id}`,
+            role: ROLE_NAMES.includes(role) ? role : 'planner',
+            dependsOn: lines(source.dependsOn),
+            files: lines(source.files),
+            criteria: lines(source.criteria),
+        };
+    });
+
+    const known = new Set(steps.map((step) => step.id));
+    for (const step of steps) {
+        const before = step.dependsOn.length;
+        step.dependsOn = step.dependsOn.filter((id) => {
+            if (id === step.id) {
+                warnings.push(`Шаг ${step.id}: зависимость от самого себя убрана.`);
+                return false;
+            }
+            if (!known.has(id)) {
+                warnings.push(`Шаг ${step.id}: зависимость "${id}" не найдена и убрана.`);
+                return false;
+            }
+            return true;
+        });
+        if (step.dependsOn.length !== before) continue;
+    }
+
+    const ordered = orderSteps(steps);
+    warnings.push(...ordered.warnings);
+
+    return {
+        summary: String(plan?.summary ?? '').trim(),
+        steps: ordered.steps,
+        risks: lines(plan?.risks),
+        questions: lines(plan?.questions),
+        warnings,
+    };
+}
+
+/**
+ * The plan as the text the roles read.
+ * @param {object} plan
+ * @returns {string}
+ * @exports
+ * @ai.hint pure
+ */
+export function planText(plan = {}) {
+    const steps = Array.isArray(plan?.steps) ? plan.steps : [];
+    if (!steps.length) return '';
+    const out = ['# The plan of the work'];
+    if (plan.summary) out.push(plan.summary, '');
+    for (const step of steps) {
+        out.push(`## ${step.id} — ${step.title}`);
+        out.push(`- role: ${step.role}`);
+        if (step.dependsOn?.length) out.push(`- after: ${step.dependsOn.join(', ')}`);
+        if (step.files?.length) out.push(`- files: ${step.files.join(', ')}`);
+        if (step.criteria?.length) {
+            out.push('- criteria:');
+            for (const item of step.criteria) out.push(`  - ${item}`);
+        }
+        out.push('');
+    }
+    if (plan.risks?.length) {
+        out.push('# Risks');
+        for (const item of plan.risks) out.push(`- ${item}`);
+        out.push('');
+    }
+    if (plan.questions?.length) {
+        out.push('# Questions for the user');
+        for (const item of plan.questions) out.push(`- ${item}`);
+        out.push('');
+    }
+    return out.join('\n').trim();
+}
+
+/**
+ * The path of the plan of a run.
+ * @param {string} root
+ * @param {object} config
+ * @param {string} id
+ * @returns {string}
+ * @exports
+ * @ai.hint pure
+ */
+export function planPath(root, config = {}, id = null) {
+    return runFile(root, config, id, PLAN_FILE);
+}
+
+/**
+ * Write the plan of a run.
+ * @param {string} root
+ * @param {object} config
+ * @param {string} id
+ * @param {object} plan
+ * @returns {Promise<string>} the path of the file
+ * @exports
+ * @ai.hint io
+ */
+export async function writePlan(root, config = {}, id = null, plan = {}) {
+    return await writeJsonFile(planPath(root, config, id), plan);
+}
+
+/**
+ * Read the plan of a run. A missing plan gives null.
+ * @param {string} root
+ * @param {object} config
+ * @param {string} id
+ * @returns {Promise<object|null>}
+ * @exports
+ * @ai.hint io
+ */
+export async function readPlan(root, config = {}, id = null) {
+    return await readJsonFile(planPath(root, config, id));
+}
+
+/**
+ * The stage of the plan: the planner reads the project and answers with the steps of the work.
+ *
+ * @param {{ client: object, config?: object, root?: string, task?: string, inputs?: object|null,
+ *   runId?: string|null, notify?: (event: object) => void, env?: object }} request
+ * @returns {Promise<{ stage: string, ok: boolean, plan: object|null, file: string|null,
+ *   text: string, warnings: string[], turns: number, usage: object|null, runId: string }>}
+ * @exports
+ * @ai.hint io
+ */
+export async function planStage({
+    client,
+    config = {},
+    root = process.cwd(),
+    task = '',
+    inputs = null,
+    runId: id = null,
+    notify = () => {},
+    env = process.env,
+} = {}) {
+    if (!client?.responses) throw new Error('Клиент API не передан.');
+
+    const run = id ?? runId();
+    const context = inputs ? inputContext(inputs) : '';
+    const prompt = [String(task ?? '').trim(), context].filter(Boolean).join('\n\n');
+    const stack = config?.stack ?? {};
+
+    const result = await runRole({
+        client,
+        config,
+        role: 'planner',
+        input: prompt,
+        context: {
+            task: String(task ?? ''),
+            kind: config?.agent?.kind ?? null,
+            stack,
+            design: Boolean(context),
+            project: root,
+        },
+        root,
+        env,
+        maxTurns: config?.stages?.plan?.maxTurns ?? null,
+        notify,
+    });
+
+    if (!result.data) {
+        return {
+            stage: 'plan',
+            ok: false,
+            plan: null,
+            file: null,
+            text: result.text ?? '',
+            warnings: ['Планировщик не вернул план.'],
+            turns: result.turns,
+            usage: result.usage,
+            runId: run,
+        };
+    }
+
+    const plan = normalizePlan(result.data);
+    const file = await writePlan(root, config, run, plan);
+    return {
+        stage: 'plan',
+        ok: true,
+        plan,
+        file,
+        text: planText(plan),
+        warnings: plan.warnings,
+        turns: result.turns,
+        usage: result.usage,
+        runId: run,
+    };
+}
