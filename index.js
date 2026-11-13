@@ -7,3 +7,11 @@
 export { EXIT, main, parseArgv } from './src/cli.js';
 export { HELP } from './src/help.js';
 export * from './src/config.js';
+export * from './src/agent/tool-specs.js';
+export * from './src/agent/tools.js';
+export * from './src/agent/bridges.js';
+export * from './src/agent/quality.js';
+export * from './src/agent/pace.js';
+export * from './src/openai/client.js';
+export * from './src/openai/responses.js';
+export * from './src/model/profiles.js';

@@ -74,6 +74,8 @@ export const defaults = {
     command: true,
     /** Run a script file in the project directory. */
     script: true,
+    /** Fetch a page of the internet and read its text. */
+    fetch: true,
     /** Generate and edit SVG as code. */
     svg: true,
     /** Download fonts from Google Fonts. */

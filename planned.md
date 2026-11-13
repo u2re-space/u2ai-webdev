@@ -1,7 +1,7 @@
 # План перехода: Universal-AI (монолит 0.2.xx) → @u2ai/webdev (0.3.xx)
 
-> Актуальный статус: **шаги 1–3 выполнены** — каркас, конфигурация и openai-слой на
-> месте; дальше агентный слой.
+> Актуальный статус: **шаги 1–4 выполнены** — каркас, конфигурация, openai-слой и
+> агентный слой на месте; дальше скиллы, документация и MCP.
 > Рабочий дом переносимого кода: `submodules/u2ai-webdev/`.
 > Репозиторий: <https://github.com/u2re-space/u2ai-webdev> (remote настроен, пуш не делаем).
 >
@@ -223,18 +223,26 @@ CLI `ai-webdev` (`@u2ai/webdev`) с собственным конфигом `~/.
       мокк-хосте `node:http`
 
 ### step-4 — Агентный слой: инструменты
-- [ ] `src/agent/paths.js` — пути внутри рабочего каталога, запрет секретов
-- [ ] `src/agent/tool-specs.js` — каталог инструментов веба и их схемы
-- [ ] `src/agent/tools.js` — исполнитель: `list_files`, `read_file`, `write_file`, `copy_path`,
+- [x] `src/agent/paths.js` — пути внутри рабочего каталога, запрет секретов
+- [x] `src/agent/tool-specs.js` — каталог инструментов веба и их схемы
+- [x] `src/agent/tools.js` — исполнитель: `list_files`, `read_file`, `write_file`, `copy_path`,
       `replace_text`, `delete_file`, `make_dir`, `search_files`, `list_backups`,
-      `restore_backup`, `structure_file`, `run_command`, `run_script`, `fetch_url`,
-      `generate_svg`, `vectorize_image`, `download_font`, `download_icons`,
-      `read_skill`, `run_skill`, `call_ai_decompose`, `call_ai_measure`, `call_ai_image`
-- [ ] `src/agent/fs-tools.js` — безопасные файловые операции
-- [ ] `src/agent/diff.js`, `src/agent/extract.js` — диффы и извлечение фрагментов
-- [ ] `src/agent/project-backup.js` — бэкап и откат
-- [ ] `src/agent/workspace-scan.js`, `src/agent/task-map.js`, `src/agent/map.js` — обзор проекта и карта символов
-- [ ] `src/agent/quality.js`, `src/agent/pace.js` — уровни качества и темп
+      `restore_backup`, `run_command`, `run_script`, `fetch_url`,
+      `generate_svg`, `download_font`, `download_icons`,
+      `call_ai_decompose`, `call_ai_measure`, `call_ai_image`
+      (`structure_file` — в step-11, `read_skill`/`run_skill` — в step-5;
+      растр не векторизуется: картинки — работа мостов)
+- [x] `src/agent/fs-tools.js` — безопасные файловые операции
+- [x] `src/agent/diff.js`, `src/agent/extract.js` — диффы и извлечение фрагментов
+- [x] `src/agent/project-backup.js` — бэкап и откат
+- [x] `src/agent/workspace-scan.js`, `src/agent/task-map.js`, `src/agent/map.js` — обзор проекта и карта символов
+- [x] `src/agent/quality.js`, `src/agent/pace.js` — уровни качества и темп
+- [x] `src/agent/assets.js` — SVG, шрифты и наборы иконок
+- [x] `src/agent/bridges.js` — мосты к `ai-decompose`, `ai-measure`, `ai-image`:
+      каждый выключается, падение моста не ломает запуск
+- [x] `src/util/text.js` — общие помощники текста и чисел
+- [x] Проверка: запись, чтение, замена, бэкап и откат, отказ записи вне каталога,
+      выключенный мост, `fetch_url` на локальном мокк-хосте
 
 ### step-5 — Скиллы, документация и MCP
 - [ ] `src/agent/skills.js` — чтение скилл-паков из `~/.ai-webdev/skills` и `skills.dir`,
@@ -325,7 +333,7 @@ CLI `ai-webdev` (`@u2ai/webdev`) с собственным конфигом `~/.
 
 ### step-19 — Тесты
 - [ ] `test/config.test.js` — конфиг, валидация, русские сообщения
-- [ ] `test/tools.test.js` — инструменты агента, запись только в разрешённые каталоги, запрет выхода за пределы проекта
+- [x] `test/tools.test.js` — инструменты агента, запись только в разрешённые каталоги, запрет выхода за пределы проекта (сделан в step-4)
 - [ ] `test/roles.test.js` — резолв ролей, схемы, цикл вызовов
 - [ ] `test/inputs.test.js` — разбор `DESIGN.md`, `measurements.json`, `palette.json`, `tokens.css`
 - [ ] `test/structure.test.js` — сортировка импортов, структура файла, CSS/SCSS
