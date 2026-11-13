@@ -16,7 +16,7 @@ import { mkdtemp } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 import { EXIT, VALUE_FLAGS, parseArgv } from '../src/cli.js';
-import { configOverrides, parseRoleSpecs, expandRoute, routeStages } from '../src/cli/run.js';
+import { configOverrides, parseRoleSpecs, expandRoute, routeStages, splitKind } from '../src/cli/run.js';
 import { createRenderer, detectMode } from '../src/cli/renderer.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -42,6 +42,13 @@ async function cli(args, { home, cwd } = {}) {
         );
     });
 }
+
+test('a leading kind token is the kind of the run, the flag wins over it', () => {
+    assert.deepEqual(splitKind(['landing', 'собери страницу'], {}), { kind: 'landing', task: 'собери страницу' });
+    assert.deepEqual(splitKind(['landing', 'задача'], { kind: 'site' }), { kind: 'site', task: 'задача' });
+    assert.deepEqual(splitKind(['собери страницу'], {}), { kind: null, task: 'собери страницу' });
+    assert.deepEqual(splitKind([], { kind: 'app' }), { kind: 'app', task: '' });
+});
 
 test('the argv is split into the command, the arguments and the flags', () => {
     const parsed = parseArgv(['run', 'make', 'a', 'landing', '--json']);
@@ -234,6 +241,30 @@ test('the registry of the components is empty in a fresh home', async () => {
     const result = await cli(['component', 'list']);
     assert.equal(result.code, EXIT.ok);
     assert.match(result.stdout, /Реестр пуст/);
+});
+
+test('the config command writes the home file once and shows it', async () => {
+    const home = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-cli-'));
+    const init = await cli(['config', 'init'], { home });
+    assert.equal(init.code, EXIT.ok);
+    assert.match(init.stdout, /The configuration is written/);
+
+    const again = await cli(['config', 'init'], { home });
+    assert.match(again.stdout, /already there/);
+
+    const where = await cli(['config', 'path'], { home });
+    assert.match(where.stdout.trim(), /config\.json$/);
+
+    const shown = await cli(['config', 'show'], { home });
+    assert.equal(shown.code, EXIT.ok);
+    const parsed = JSON.parse(shown.stdout.slice(shown.stdout.indexOf('{')));
+    assert.ok(parsed.stages.learn);
+});
+
+test('the config command rejects an unknown subcommand', async () => {
+    const result = await cli(['config', 'wat']);
+    assert.equal(result.code, EXIT.usage);
+    assert.match(result.stderr, /config init \| show \| path/);
 });
 
 test('the renderer writes the events of the run', () => {

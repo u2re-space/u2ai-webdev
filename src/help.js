@@ -6,6 +6,7 @@
  * @ai.hint keep
  * @changed 2026-11-13 The skeleton of the help: the full command surface lands with the CLI.
  * @changed 2026-11-13 The whole surface: run, plan, stages, component, install, jobs, memory.
+ * @changed 2026-11-13 The command of the configuration: config.
  */
 
 /**
@@ -27,6 +28,7 @@ Commands:
   component [publish|list|search|show|rm|path]
                               The local registry of the components.
   install <tag>[@version]     Install a component as a local file: package.
+  config [init|show|path]     The configuration of the home.
   jobs [list|show|cancel|rm|prune|run]
                               The background jobs.
   memory [list|search|add|rm|tasks]

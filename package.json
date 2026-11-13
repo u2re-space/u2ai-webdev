@@ -11,6 +11,10 @@
     "type": "git",
     "url": "git+https://github.com/u2re-space/u2ai-webdev.git"
   },
+  "homepage": "https://github.com/u2re-space/u2ai-webdev#readme",
+  "bugs": {
+    "url": "https://github.com/u2re-space/u2ai-webdev/issues"
+  },
   "engines": {
     "node": ">=26.0.0"
   },

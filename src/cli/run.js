@@ -21,7 +21,29 @@
 import { createClient } from '../openai/client.js';
 import { runPipeline, resumePipeline } from '../pipeline.js';
 import { STAGES, stageDependencies } from '../stages/index.js';
+import { ENUMS } from '../config/constants.js';
 import { UsageError } from './errors.js';
+
+/**
+ * The kind of the task and the task itself.
+ *
+ * A leading token that names a kind is the kind of the run: `ai-webdev run landing "сделать"`
+ * is the same as `ai-webdev run --kind landing "сделать"`. The flag wins over the token.
+ * @param {string[]} [args] the positional arguments of the command
+ * @param {Record<string, string|boolean|string[]>} [flags] the flags of the command
+ * @returns {{ kind: string|null, task: string }}
+ * @exports
+ * @ai.hint pure
+ */
+export function splitKind(args = [], flags = {}) {
+    const list = Array.isArray(args) ? args.map((item) => String(item)) : [];
+    const flag = typeof flags?.kind === 'string' ? flags.kind.trim() : '';
+    const first = (list[0] ?? '').trim().toLowerCase();
+    if (ENUMS.generationKinds.includes(first)) {
+        return { kind: flag || first, task: list.slice(1).join(' ').trim() };
+    }
+    return { kind: flag || null, task: list.join(' ').trim() };
+}
 
 /**
  * A flag as a string. A flag without a value is a mistake: the name says what it wants.
@@ -247,7 +269,8 @@ export function stageReportText(result = {}) {
  */
 export async function runCommand(ctx) {
     const { config, cwd, args = [], flags = {}, renderer = null, env = process.env } = ctx;
-    const task = args.join(' ').trim();
+    const { kind, task } = splitKind(args, flags);
+    if (kind && config?.agent) config.agent.kind = kind;
     if (flags.resume === true) {
         throw new UsageError('--resume: нужен идентификатор прогона.');
     }
@@ -325,7 +348,8 @@ export async function runCommand(ctx) {
  */
 export async function planCommand(ctx) {
     const { config, cwd, args = [], flags = {}, renderer = null, env = process.env } = ctx;
-    const task = args.join(' ').trim();
+    const { kind, task } = splitKind(args, flags);
+    if (kind && config?.agent) config.agent.kind = kind;
     if (!task) throw new UsageError('Укажите задачу: ai-webdev plan "сделать лендинг".');
 
     const client = await createClient({ config, env });
