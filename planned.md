@@ -1,7 +1,7 @@
 # План перехода: Universal-AI (монолит 0.2.xx) → @u2ai/webdev (0.3.xx)
 
-> Актуальный статус: **шаги 1–4 выполнены** — каркас, конфигурация, openai-слой и
-> агентный слой на месте; дальше скиллы, документация и MCP.
+> Актуальный статус: **шаги 1–5 выполнены** — каркас, конфигурация, openai-слой,
+> агентный слой, скиллы и MCP на месте; дальше схемы ответов и роли.
 > Рабочий дом переносимого кода: `submodules/u2ai-webdev/`.
 > Репозиторий: <https://github.com/u2re-space/u2ai-webdev> (remote настроен, пуш не делаем).
 >
@@ -245,10 +245,13 @@ CLI `ai-webdev` (`@u2ai/webdev`) с собственным конфигом `~/.
       выключенный мост, `fetch_url` на локальном мокк-хосте
 
 ### step-5 — Скиллы, документация и MCP
-- [ ] `src/agent/skills.js` — чтение скилл-паков из `~/.ai-webdev/skills` и `skills.dir`,
+- [x] `src/agent/skills.js` — чтение скилл-паков из `~/.ai-webdev/skills` и `skills.dir`,
       frontmatter, инъекция подсказок в роли
-- [ ] `src/agent/docs.js` — тексты стандартов (CSS units, CSS shapes, WCAG colors, SVG, a11y)
-- [ ] `src/agent/mcp.js` — подключение MCP-серверов из конфига, доступ к их инструментам
+- [x] `src/agent/docs.js` — тексты стандартов (CSS units, CSS shapes, WCAG colors, SVG, a11y)
+- [x] `src/agent/mcp.js` — подключение MCP-серверов из конфига, доступ к их инструментам
+- [x] Инструменты `read_skill` и `run_skill` (команда пака — в frontmatter)
+- [x] Проверка: ролевые паки, `SKILL.md` проекта, документация роли, MCP-сервер
+      на локальном мокк-хосте и недоступный сервер
 
 ### step-6 — Схемы ответов ролей
 - [ ] `src/agent/schemas.js` — `PLAN_SCHEMA`, `ARCHITECTURE_SCHEMA`, `CODE_SCHEMA`,

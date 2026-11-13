@@ -216,6 +216,36 @@ export const TOOL_SPECS = Object.freeze({
         required: ['path'],
         roles: ['installer'],
     },
+    read_skill: {
+        configKey: 'skill',
+        description: 'Read a skill pack: the markdown that describes a task, its standards and its steps.',
+        parameters: {
+            type: 'object',
+            properties: {
+                name: str('The name of the skill pack, for example `ego-browser`.'),
+            },
+            required: ['name'],
+            additionalProperties: false,
+        },
+        required: ['name'],
+        roles: [],
+    },
+    run_skill: {
+        configKey: 'skill',
+        description: 'Run the command a skill pack declares. The pack must name the command in its frontmatter.',
+        parameters: {
+            type: 'object',
+            properties: {
+                name: str('The name of the skill pack.'),
+                args: str('JSON array of the arguments of the command, as strings.'),
+                timeoutMs: int('How long the command may run. Default 120000.'),
+            },
+            required: ['name'],
+            additionalProperties: false,
+        },
+        required: ['name'],
+        roles: [],
+    },
     fetch_url: {
         configKey: 'fetch',
         description: 'Fetch a page of the internet and read its text. The answer is cut to a size that fits the context.',

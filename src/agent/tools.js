@@ -22,6 +22,7 @@ import { listFiles, readTextFile, searchFiles, writeTextFile, replaceInFile, del
 import { listProjectBackups, restoreProjectBackup } from './project-backup.js';
 import { generateSvg, downloadFont, downloadIcons } from './assets.js';
 import { runBridge } from './bridges.js';
+import { readSkill } from './skills.js';
 import { isInside, resolveInside } from './paths.js';
 
 export { toolSpecs, enabledToolNames } from './tool-specs.js';
@@ -171,6 +172,15 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
     }));
     const specs = [...buildSpecs(config?.tools, { role }), ...mcpSpecs];
     let allowed = (writeDirs ?? [root]).map((dir) => path.resolve(dir));
+
+    /**
+     * The directories the skill packs may live in, beyond the standard ones.
+     * @returns {string[]}
+     */
+    function skillDirs() {
+        const dir = config?.skills?.dir;
+        return dir ? [path.resolve(dir)] : [];
+    }
 
     /**
      * Resolve a path the model wants to write, and refuse the ones outside the allowed dirs.
@@ -338,6 +348,21 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                     [script.abs, ...parseArgsList(args.args)],
                     Number.isSafeInteger(Number(args.timeoutMs)) ? Number(args.timeoutMs) : 120_000,
                 );
+            }
+            case 'read_skill': {
+                const skill = await readSkill(String(args.name ?? ''), root, { extraDirs: skillDirs(), env });
+                if (!skill) return `Скилл не найден: ${args.name}`;
+                const head = skill.description ? `${skill.description}\n\n` : '';
+                return `# ${skill.name}\n\n${head}${skill.body}`;
+            }
+            case 'run_skill': {
+                const skill = await readSkill(String(args.name ?? ''), root, { extraDirs: skillDirs(), env });
+                if (!skill) return `Скилл не найден: ${args.name}`;
+                const command = skill.metadata?.command;
+                if (!command) return `Скилл "${skill.name}" не объявляет команду.`;
+                const parts = String(command).trim().split(/\s+/);
+                const timeout = Number.isSafeInteger(Number(args.timeoutMs)) ? Number(args.timeoutMs) : 120_000;
+                return await runProgram(parts[0], [...parts.slice(1), ...parseArgsList(args.args)], timeout);
             }
             case 'fetch_url': {
                 const answer = await fetchPage({
