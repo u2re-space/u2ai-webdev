@@ -16,6 +16,7 @@ export * from './src/agent/mcp.js';
 export * from './src/agent/schemas.js';
 export * from './src/roles/index.js';
 export * from './src/inputs/index.js';
+export * from './src/generate/brief.js';
 export * from './src/agent/quality.js';
 export * from './src/agent/pace.js';
 export * from './src/openai/client.js';

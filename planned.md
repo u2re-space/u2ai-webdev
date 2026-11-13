@@ -1,7 +1,8 @@
 # План перехода: Universal-AI (монолит 0.2.xx) → @u2ai/webdev (0.3.xx)
 
-> Актуальный статус: **шаги 1–8 выполнены** — каркас, конфигурация, openai-слой,
-> агентный слой, скиллы, MCP, схемы, роли и входные данные на месте; дальше генератор.
+> Актуальный статус: **шаги 1–9 выполнены** — каркас, конфигурация, openai-слой,
+> агентный слой, скиллы, MCP, схемы, роли, входные данные и генератор на месте; дальше
+> компоненты и реестр.
 > Рабочий дом переносимого кода: `submodules/u2ai-webdev/`.
 > Репозиторий: <https://github.com/u2re-space/u2ai-webdev> (remote настроен, пуш не делаем).
 >
@@ -285,11 +286,13 @@ CLI `ai-webdev` (`@u2ai/webdev`) с собственным конфигом `~/.
 - [x] Проверка: разбор всех четырёх форматов, перевод пикселей в rem, контраст палитры, приоритет `tokens.css`, пропуск отсутствующих входов как предупреждения
 
 ### step-9 — Генератор: бриф, скаффолд, платформа, fidelity, референсы
-- [ ] `src/generate/brief.js` — бриф генерации: вид задачи (`landing|site|backend|app|component`), выходы, ограничения, манифест
-- [ ] `src/generate/scaffold.js` — стек, `package.json`, рекомендации, безопасное слияние скаффолда
-- [ ] `src/generate/platform.js` — замороженный профиль веб-платформы
-- [ ] `src/generate/fidelity.js` — цели fidelity и creativity
-- [ ] `src/generate/references.js` — эталонизация референсов в `.ai/refs/`
+- [x] `src/generate/brief.js` — бриф генерации: вид задачи (`landing|site|backend|app|component`), выходы, ограничения, манифест
+- [x] `src/generate/scaffold.js` — стек, `package.json`, рекомендации, безопасное слияние скаффолда
+- [x] `src/generate/platform.js` — замороженный профиль веб-платформы
+- [x] `src/generate/fidelity.js` — цели fidelity и creativity
+- [x] `src/generate/references.js` — эталонизация референсов в `.ai/refs/`
+- [x] Проверка: бриф и манифест, файлы по стеку, `package.json`, рекомендации по словам задачи,
+      слияние манифеста без перезаписи, замороженный профиль платформы, staging референсов
 
 ### step-10 — Компоненты: контракт и локальный реестр
 - [ ] `src/generate/component.js` — контракт `.ai/component.json`, теги и классы, `custom-elements.json`, README-API
@@ -342,6 +345,7 @@ CLI `ai-webdev` (`@u2ai/webdev`) с собственным конфигом `~/.
 - [x] `test/tools.test.js` — инструменты агента, запись только в разрешённые каталоги, запрет выхода за пределы проекта (сделан в step-4)
 - [x] `test/roles.test.js` — резолв ролей, схемы, цикл вызовов (сделан в step-7)
 - [x] `test/inputs.test.js` — разбор `DESIGN.md`, `measurements.json`, `palette.json`, `tokens.css` (сделан в step-8)
+- [x] `test/generate.test.js` — бриф, скаффолд, платформа, fidelity, staging референсов (сделан в step-9)
 - [ ] `test/structure.test.js` — сортировка импортов, структура файла, CSS/SCSS
 - [ ] `test/component.test.js` — контракт компонента, реестр, установка
 - [ ] `test/memory.test.js` — SQLite-память, поиск, области
