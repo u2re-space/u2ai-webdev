@@ -48,7 +48,7 @@ export function styleTokensText(tokens = [], selector = ':root') {
  * The stage of the styles.
  *
  * @param {{ client: object, config?: object, root?: string, task?: string, plan?: object|null,
- *   architecture?: object|null, inputs?: object|null, runId?: string|null,
+ *   architecture?: object|null, inputs?: object|null, runId?: string|null, apply?: boolean,
  *   notify?: (event: object) => void, env?: object }} request
  * @returns {Promise<object>} the report of the stage
  * @exports
@@ -63,6 +63,7 @@ export async function stylingStage({
     architecture = null,
     inputs = null,
     runId: id = null,
+    apply = true,
     notify = () => {},
     env = process.env,
 } = {}) {
@@ -80,6 +81,7 @@ export async function stylingStage({
         brief,
         inputs,
         runId: id,
+        apply,
         notify,
         env,
         context: {

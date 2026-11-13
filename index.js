@@ -4,8 +4,15 @@
  * @purpose Public entry of the package: the CLI entry and the programmatic API.
  * @ai.hint keep
  */
-export { EXIT, main, parseArgv } from './src/cli.js';
+export { EXIT, main, parseArgv, VALUE_FLAGS } from './src/cli.js';
 export { HELP } from './src/help.js';
+export * from './src/cli/colors.js';
+export * from './src/cli/compatibility.js';
+export * from './src/cli/stdio.js';
+export * from './src/cli/renderer.js';
+export * from './src/cli/run.js';
+export * from './src/cli/jobs.js';
+export * from './src/cli/memory.js';
 export * from './src/config.js';
 export * from './src/agent/tool-specs.js';
 export * from './src/agent/tools.js';

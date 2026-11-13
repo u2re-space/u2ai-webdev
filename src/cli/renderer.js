@@ -1,0 +1,318 @@
+/**
+ * @file src/cli/renderer.js
+ * @module cli/renderer
+ * @purpose The renderer of the CLI: the plan, the stages, the files, the tools, the
+ *          warnings and the progress of a run.
+ *
+ *   Four modes:
+ *   tty   — the colors and the symbols, the status of the stages on stderr.
+ *   plain — the same without the colors: the output is a pipe or a file.
+ *   json  — one json object per line on stdout, nothing else.
+ *   quiet — only the result of the run on stdout and the errors on stderr.
+ *
+ * @depends cli/colors, cli/stdio
+ * @usedBy cli, cli/run, cli/jobs, cli/memory
+ * @exports detectMode, createRenderer, SYMBOLS, ASCII_SYMBOLS
+ * @ai.tags cli, renderer, terminal
+ * @ai.hint keep
+ * @ai.hint legacy-0.2
+ * @changed 2026-11-13 Ported from the monolith: the modes, the symbols and the blocks.
+ */
+
+import { createColors } from './colors.js';
+import { sanitizeText } from './stdio.js';
+
+/** The symbols of the status lines. */
+export const SYMBOLS = Object.freeze({
+    action: '▸',
+    ok: '✓',
+    fail: '✗',
+    warn: '⚠',
+    info: '·',
+    skip: '→',
+});
+
+/** The symbols for a terminal that does not know the unicode ones. */
+export const ASCII_SYMBOLS = Object.freeze({
+    action: '>',
+    ok: '+',
+    fail: 'x',
+    warn: '!',
+    info: '-',
+    skip: '->',
+});
+
+/**
+ * The mode of the output: json, quiet, tty or plain.
+ *
+ * @param {{ json?: boolean, quiet?: boolean, stdout?: object, stderr?: object }} [options]
+ * @returns {string}
+ * @exports
+ * @ai.hint pure
+ */
+export function detectMode({
+    json = false,
+    quiet = false,
+    stdout = process.stdout,
+    stderr = process.stderr,
+} = {}) {
+    if (json) return 'json';
+    if (quiet) return 'quiet';
+    return stderr?.isTTY && stdout?.isTTY ? 'tty' : 'plain';
+}
+
+/**
+ * Create the renderer of the CLI.
+ *
+ * @param {{ mode?: string, stdout?: object, stderr?: object, colors?: object,
+ *   ascii?: boolean, verbose?: boolean }} [options]
+ * @returns {object} the renderer
+ * @exports
+ * @ai.hint io
+ */
+export function createRenderer({
+    mode = detectMode(),
+    stdout = process.stdout,
+    stderr = process.stderr,
+    colors = null,
+    ascii = false,
+    verbose = false,
+} = {}) {
+    const paint = colors ?? createColors(mode === 'tty');
+    const symbols = ascii ? ASCII_SYMBOLS : SYMBOLS;
+    const json = mode === 'json';
+    const quiet = mode === 'quiet';
+
+    /**
+     * Write one line on stdout.
+     * @param {string} text
+     * @returns {void}
+     */
+    const out = (text) => {
+        if (quiet) return;
+        stdout.write(`${sanitizeText(text)}\n`);
+    };
+
+    /**
+     * Write one line on stderr.
+     * @param {string} text
+     * @returns {void}
+     */
+    const err = (text) => {
+        if (quiet) return;
+        stderr.write(`${sanitizeText(text)}\n`);
+    };
+
+    /**
+     * Write one json event on stdout.
+     * @param {string} type
+     * @param {object} payload
+     * @returns {void}
+     */
+    const emit = (type, payload = {}) => {
+        stdout.write(`${JSON.stringify({ time: new Date().toISOString(), type, ...payload })}\n`);
+    };
+
+    /**
+     * The text of a file list.
+     * @param {string[]} files
+     * @returns {string}
+     */
+    const fileList = (files) => (Array.isArray(files) ? files : []).map(String).filter(Boolean);
+
+    return {
+        mode,
+        colors: paint,
+        verbose,
+
+        /**
+         * A line of the answer: the text of the run.
+         * @param {string} text
+         * @returns {void}
+         */
+        note(text) {
+            const body = String(text ?? '');
+            if (json) { emit('text', { text: body }); return; }
+            stdout.write(body.endsWith('\n') ? body : `${body}\n`);
+        },
+
+        /**
+         * A title of a block.
+         * @param {string} text
+         * @returns {void}
+         */
+        heading(text) {
+            if (json) { emit('heading', { text: String(text ?? '') }); return; }
+            out(`${paint.bold(String(text ?? ''))}`);
+        },
+
+        /**
+         * The plan of the work.
+         * @param {object} plan
+         * @returns {void}
+         */
+        plan(plan) {
+            const steps = Array.isArray(plan?.steps) ? plan.steps : [];
+            if (json) { emit('plan', { plan }); return; }
+            const summary = String(plan?.summary ?? '').trim();
+            if (summary) {
+                if (quiet) stdout.write(`${sanitizeText(summary)}\n`);
+                else out(`${paint.bold('Plan')}: ${summary}`);
+            }
+            steps.forEach((step, index) => {
+                const role = step?.role ? ` ${paint.dim(`(${step.role})`)}` : '';
+                const line = `  ${index + 1}. ${step?.id ?? 'step'} — ${step?.title ?? ''}${role}`;
+                if (quiet) stdout.write(`${sanitizeText(line)}\n`);
+                else out(line);
+            });
+        },
+
+        /**
+         * The list of the stages of the pipeline.
+         * @param {object[]} stages
+         * @returns {void}
+         */
+        stages(stages) {
+            const list = Array.isArray(stages) ? stages : [];
+            if (json) { emit('stages', { stages: list }); return; }
+            for (const stage of list) {
+                const title = stage?.title ?? '';
+                const line = `  ${stage?.name ?? ''}${title ? ` — ${title}` : ''}`;
+                if (quiet) stdout.write(`${sanitizeText(line)}\n`);
+                else out(line);
+            }
+        },
+
+        /**
+         * A stage has started.
+         * @param {string} name
+         * @param {string} [title]
+         * @returns {void}
+         */
+        stageStart(name, title = '') {
+            if (json) { emit('stage.start', { stage: name, title }); return; }
+            err(`${paint.cyan(symbols.action)} ${name}${title ? ` — ${title}` : ''}`);
+        },
+
+        /**
+         * A stage is done.
+         * @param {string} name
+         * @param {string} [status] completed, failed or skipped
+         * @returns {void}
+         */
+        stageDone(name, status = 'completed') {
+            if (json) { emit('stage.done', { stage: name, status }); return; }
+            if (status === 'completed') err(`${paint.green(symbols.ok)} ${name}`);
+            else if (status === 'skipped') err(`${paint.dim(symbols.skip)} ${name} (skipped)`);
+            else err(`${paint.red(symbols.fail)} ${name} (${status})`);
+        },
+
+        /**
+         * A tool of a role has been called.
+         * @param {string} name
+         * @param {object} [detail]
+         * @returns {void}
+         */
+        tool(name, detail = null) {
+            if (json) { emit('tool', { name, detail }); return; }
+            const extra = detail && typeof detail === 'object' ? Object.keys(detail).length : '';
+            err(`${paint.dim(`${symbols.info} ${name}${extra ? ` ${JSON.stringify(detail)}` : ''}`)}`);
+        },
+
+        /**
+         * The files the run touched.
+         * @param {string[]} files
+         * @returns {void}
+         */
+        files(files) {
+            const list = fileList(files);
+            if (json) { emit('files', { files: list }); return; }
+            if (!list.length) return;
+            out(`${paint.bold('Files')}: ${list.join(', ')}`);
+        },
+
+        /**
+         * A warning of the run.
+         * @param {string} text
+         * @returns {void}
+         */
+        warning(text) {
+            if (json) { emit('warning', { text: String(text ?? '') }); return; }
+            err(`${paint.yellow(symbols.warn)} ${text}`);
+        },
+
+        /**
+         * The progress of the run.
+         * @param {object} progress
+         * @returns {void}
+         */
+        progress(progress) {
+            if (json) { emit('progress', { progress }); return; }
+            const stages = Array.isArray(progress?.stages) ? progress.stages : [];
+            const done = stages.filter((stage) => stage?.status === 'completed').length;
+            const files = fileList((progress?.files ?? []).map((file) => file?.path ?? file));
+            const head = `Progress: ${done}/${stages.length} stages — ${progress?.stage ?? 'start'}`;
+            out(`${paint.bold(head)}${files.length ? `, ${files.length} files` : ''}`);
+        },
+
+        /**
+         * The result of the run.
+         * @param {object} report
+         * @returns {void}
+         */
+        summary(report) {
+            if (json) { emit('summary', { report }); return; }
+            const status = String(report?.status ?? 'completed');
+            const label = status === 'completed'
+                ? paint.green('completed')
+                : (status === 'paused' ? paint.yellow('paused') : paint.red(status));
+            const lines = [`${paint.bold('Run')} ${report?.runId ?? ''}: ${label}`];
+            for (const stage of Array.isArray(report?.stages) ? report.stages : []) {
+                const mark = stage?.status === 'completed' ? symbols.ok
+                    : (stage?.status === 'skipped' ? symbols.skip : symbols.fail);
+                lines.push(`  ${mark} ${stage?.name ?? ''} — ${stage?.status ?? ''}`);
+            }
+            const files = fileList((report?.progress?.files ?? []).map((file) => file?.path ?? file));
+            if (files.length) lines.push(`  files: ${files.join(', ')}`);
+            if (report?.file) lines.push(`  progress: ${report.file}`);
+            if (report?.error) lines.push(`  error: ${report.error}`);
+            const text = lines.join('\n');
+            if (quiet) {
+                stdout.write(`${sanitizeText(`Run ${report?.runId ?? ''}: ${status}`)}\n`);
+                return;
+            }
+            stdout.write(`${sanitizeText(text)}\n`);
+        },
+
+        /**
+         * An error of the command.
+         * @param {string} text
+         * @returns {void}
+         */
+        error(text) {
+            if (json) { emit('error', { text: String(text ?? '') }); return; }
+            stderr.write(`ai-webdev: ${sanitizeText(text)}\n`);
+        },
+
+        /**
+         * An event of the pipeline.
+         *
+         * The pipeline tells the renderer what happens; the renderer decides how it
+         * looks. An event nobody knows is ignored.
+         *
+         * @param {object} event
+         * @returns {void}
+         */
+        event(event) {
+            const type = String(event?.type ?? '');
+            if (type === 'stage.start') this.stageStart(event.stage, event.title);
+            else if (type === 'stage.done') this.stageDone(event.stage, event.status);
+            else if (type === 'stage.skip') this.stageDone(event.stage, 'skipped');
+            else if (type === 'role.tool') this.tool(event.name, event.arguments ?? null);
+            else if (type === 'warning') this.warning(event.text);
+            else if (type === 'files') this.files(event.files);
+            else if (type === 'plan') this.plan(event.plan);
+            else if (type === 'progress') this.progress(event.progress);
+        },
+    };
+}

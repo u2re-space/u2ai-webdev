@@ -1,11 +1,11 @@
 # План перехода: Universal-AI (монолит 0.2.xx) → @u2ai/webdev (0.3.xx)
 
-> Актуальный статус: **шаги 1–17 выполнены** — каркас, конфигурация, openai-слой,
+> Актуальный статус: **шаги 1–18 выполнены** — каркас, конфигурация, openai-слой,
 > агентный слой, скиллы, MCP, схемы, роли, входные данные, генератор, контракт компонента,
 > локальный реестр, подготовка кода, все стадии (`plan`, `collect`, `architect`, `setup`,
 > `markup`, `coding`, `styling`, `vector`, `iconify`, `review`, `audit`, `learn`), реестр
-> стадий, план работ, прогресс, пауза/возобновление, фоновые задачи и постоянная память
-> на месте; дальше CLI и рендерер.
+> стадий, план работ, прогресс, пауза/возобновление, фоновые задачи, постоянная память,
+> CLI `ai-webdev` и рендерер на месте; дальше тесты и релиз.
 > Рабочий дом переносимого кода: `submodules/u2ai-webdev/`.
 > Репозиторий: <https://github.com/u2re-space/u2ai-webdev> (remote настроен, пуш не делаем).
 >
@@ -356,10 +356,15 @@ CLI `ai-webdev` (`@u2ai/webdev`) с собственным конфигом `~/.
       контекст памяти, запись уроков, чтение памяти в сборе контекста
 
 ### step-18 — CLI `ai-webdev` и рендерер
-- [ ] `src/cli/colors.js`, `src/cli/compatibility.js`, `src/cli/stdio.js` — цвета, проверка версии Node, работа со stdout/stderr
-- [ ] `src/cli/renderer.js` — рендер событий: план, стадии, файлы, инструменты, предупреждения, прогресс
-- [ ] `src/cli.js` — разбор argv, диспетчер команд, коды возврата, флаги
-- [ ] `src/help.js` — справка на английском языке
+- [x] `src/cli/colors.js`, `src/cli/compatibility.js`, `src/cli/stdio.js` — цвета, проверка версии Node, работа со stdout/stderr
+- [x] `src/cli/renderer.js` — рендер событий: план, стадии, файлы, инструменты, предупреждения, прогресс
+- [x] `src/cli.js` — разбор argv, диспетчер команд, коды возврата, флаги
+- [x] `src/help.js` — справка на английском языке
+- [x] Поверх API: команды `run`, `plan`, `stages`, `component`, `install`, `jobs`, `memory`;
+      флаги `--route`, `--stop-after`, `--resume`, `--pace`, `--quality`, `--fidelity`,
+      `--creativity`, `--platform`, `--frontend-*`, `--icon-set`, `--role`, `--summary`,
+      `--context`, `--extract`, `--approve`, `--detail`, `--json`, `--quiet`
+- [x] Политика записи: `agent.approve` и `agent.extract` решают, пишет ли прогон файлы в проект
 
 ### step-19 — Тесты
 - [ ] `test/config.test.js` — конфиг, валидация, русские сообщения

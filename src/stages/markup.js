@@ -24,7 +24,7 @@ import { runStepStage } from './step.js';
  * The stage of the markup.
  *
  * @param {{ client: object, config?: object, root?: string, task?: string, plan?: object|null,
- *   architecture?: object|null, inputs?: object|null, runId?: string|null,
+ *   architecture?: object|null, inputs?: object|null, runId?: string|null, apply?: boolean,
  *   notify?: (event: object) => void, env?: object }} request
  * @returns {Promise<object>} the report of the stage
  * @exports
@@ -39,6 +39,7 @@ export async function markupStage({
     architecture = null,
     inputs = null,
     runId: id = null,
+    apply = true,
     notify = () => {},
     env = process.env,
 } = {}) {
@@ -53,6 +54,7 @@ export async function markupStage({
         brief,
         inputs,
         runId: id,
+        apply,
         notify,
         env,
         context: {

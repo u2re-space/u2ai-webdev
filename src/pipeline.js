@@ -15,7 +15,7 @@
  * @depends stages/index, stages/workspace, stages/plan, stages/architect, stages/setup,
  *          stages/review, agent/work-plan
  * @usedBy cli, jobs/manager
- * @exports runPipeline, resumePipeline, pipelineFiles
+ * @exports runPipeline, resumePipeline, pipelineFiles, filesAllowed
  * @ai.tags pipeline, orchestration, resume
  * @ai.hint io
  * @ai.hint legacy-0.2
@@ -33,7 +33,24 @@ import { openMemory, memoryContext, memoryFile } from './memory.js';
 import { defaultHome } from './config/paths.js';
 
 /**
- * The files a stage touched.
+ * May the run write the files of the answers into the project?
+ *
+ * Two knobs decide it: the extraction (`off` keeps the files in the report) and the
+ * policy of the confirmations (`read` writes nothing).
+ *
+ * @param {object} [config]
+ * @returns {boolean}
+ * @exports
+ * @ai.hint pure
+ */
+export function filesAllowed(config = {}) {
+    if (String(config?.agent?.extract ?? 'auto') === 'off') return false;
+    const approve = String(config?.agent?.approve ?? 'write');
+    return approve === 'write' || approve === 'all';
+}
+
+/**
+ * The files of the stages are collected.
  * @param {object} result
  * @returns {string[]}
  * @exports
@@ -93,7 +110,7 @@ export async function runPipeline({
     resume = false,
     stages: override = null,
 } = {}) {
-    const run = id ?? makeRunId();
+    const run = id || makeRunId();
     const selected = override
         ? { stages: override, warnings: [] }
         : enabledStages(config, stageNames);
@@ -112,6 +129,7 @@ export async function runPipeline({
         inputs,
         memory: null,
         memoryText: '',
+        apply: filesAllowed(config),
         plan: null,
         architecture: null,
         setup: null,
@@ -206,7 +224,7 @@ export async function runPipeline({
         await writeProgress(root, config, run, progress);
 
         reports.push({ name: stage.name, status: ok ? 'completed' : 'failed', result, warnings: stageWarnings });
-        notify({ type: 'stage.done', stage: stage.name, status: ok ? 'completed' : 'failed' });
+        notify({ type: 'stage.done', stage: stage.name, status: ok ? 'completed' : 'failed', result });
 
         if (!ok) {
             status = 'failed';
@@ -227,10 +245,11 @@ export async function runPipeline({
     const file = await writeProgress(root, config, run, progress);
 
     // The finished task goes into the memory of the project.
-    if (memory && status === 'completed') {
+    const taskText = String(task ?? '').trim() || String(progress?.task ?? '').trim();
+    if (memory && status === 'completed' && taskText) {
         try {
             memory.completeTask({
-                task,
+                task: taskText,
                 runId: run,
                 summary: String(ctx.plan?.summary ?? ''),
                 files: (progress.files ?? []).map((file) => file.path),

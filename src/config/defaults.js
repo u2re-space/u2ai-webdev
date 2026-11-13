@@ -116,6 +116,18 @@ export const defaults = {
     platform: 'chromium',
     /** The kind of the task: landing | site | backend | app | component. */
     kind: 'app',
+    /**
+     * The policy of the confirmations before the run writes into the project:
+     * ask (ask in a terminal, read without one), read (write nothing), write (the
+     * files of the answers are written), all (the files and the commands).
+     */
+    approve: 'write',
+    /**
+     * How the files are taken out of the answers of the roles: off (nothing is
+     * written, the files stay in the report), auto (the files are written when the
+     * role gives them), always (the same as auto for this package).
+     */
+    extract: 'auto',
     /** Tool turns the planner may spend. */
     plannerMaxTurns: 12,
     /** Tool turns the architect may spend. */
@@ -153,6 +165,7 @@ export const defaults = {
     iconify: { enabled: true, maxTurns: 8 },
     review: { enabled: true, maxTurns: 12 },
     audit: { enabled: true, maxTurns: 8 },
+    learn: { enabled: true, maxTurns: 8 },
   },
 
   /** Where the artifacts of a run are written, relative to cwd. */

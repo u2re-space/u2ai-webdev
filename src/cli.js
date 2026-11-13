@@ -2,21 +2,35 @@
  * @file src/cli.js
  * @module cli
  * @purpose Parse argv, dispatch the commands, and map the failures to the exit codes.
- * @depends node:module, help, config, cli/errors, cli/install, cli/component
+ *
+ *   The CLI has one entry: `main`. It reads the flags, loads the config, builds the
+ *   renderer and gives the work to the command. Every failure of the user is a usage
+ *   error (exit code 2), every failure of the run is a runtime error (exit code 1), and
+ *   an interrupted run leaves 130.
+ *
+ * @depends node:module, help, config, cli/errors, cli/compatibility, cli/renderer,
+ *          cli/run, cli/install, cli/component, cli/jobs, cli/memory
  * @usedBy bin/ai-webdev, index
- * @exports EXIT, parseArgv, main
+ * @exports EXIT, VALUE_FLAGS, parseArgv, main
  * @ai.tags cli, dispatch
  * @ai.hint keep
+ * @ai.hint legacy-0.2
  * @changed 2026-11-13 The skeleton of the CLI: the help and the version only.
  * @changed 2026-11-13 The commands of the registry: `component` and `install`.
+ * @changed 2026-11-13 The whole surface: run, plan, stages, component, install, jobs, memory.
  */
 
 import { createRequire } from 'node:module';
 import { HELP } from './help.js';
 import { loadConfig } from './config/index.js';
 import { UsageError, CommandError } from './cli/errors.js';
+import { checkNode } from './cli/compatibility.js';
+import { createRenderer, detectMode } from './cli/renderer.js';
+import { runCommand, planCommand, stagesCommand, configOverrides } from './cli/run.js';
 import { installCommand } from './cli/install.js';
 import { componentCommand } from './cli/component.js';
+import { jobsCommand } from './cli/jobs.js';
+import { memoryCommand } from './cli/memory.js';
 
 const require = createRequire(import.meta.url);
 const pkg = require('../package.json');
@@ -25,53 +39,118 @@ const pkg = require('../package.json');
 export const EXIT = Object.freeze({ ok: 0, failure: 1, usage: 2, aborted: 130 });
 
 /**
+ * The flags that take a value: the value is the next argument, when it is there.
+ *
+ * @type {Set<string>}
+ */
+export const VALUE_FLAGS = new Set([
+    'config', 'id', 'resume', 'route', 'stop-after', 'model', 'effort', 'summary',
+    'context', 'role', 'extract', 'approve', 'pace', 'quality', 'fidelity',
+    'creativity', 'platform', 'kind', 'frontend-framework', 'frontend-markup-language',
+    'frontend-style-language', 'frontend-script-language', 'icon-set',
+    'tag', 'tags', 'version', 'framework', 'scope', 'name', 'kind', 'as',
+]);
+
+/**
  * Parse the arguments of the CLI.
  *
  * The first positional is the command, the rest are its inputs; `--name=value` and
- * `--name` are flags, `-x` is a short flag.
+ * `--name` are flags, `-x` is a short flag. A flag that is given twice becomes a list.
+ * Everything after `--` is the rest: it goes to the command as it is.
  *
  * @param {string[]} argv
- * @returns {{ command: string|null, args: string[], flags: Record<string, string|boolean> }}
+ * @returns {{ command: string|null, args: string[], flags: Record<string, string|boolean|string[]>,
+ *   rest: string[] }}
  * @exports
  * @ai.hint pure
  */
 export function parseArgv(argv = []) {
     const flags = {};
     const args = [];
-    for (const item of argv) {
+    const rest = [];
+    const list = Array.isArray(argv) ? argv : [];
+
+    /**
+     * Put a flag into the map: a flag that is given twice becomes a list.
+     * @param {string} name
+     * @param {string|boolean} value
+     * @returns {void}
+     */
+    const setFlag = (name, value) => {
+        if (!Object.hasOwn(flags, name)) {
+            flags[name] = value;
+            return;
+        }
+        const current = flags[name];
+        if (Array.isArray(current)) current.push(value);
+        else flags[name] = [current, value];
+    };
+
+    let literal = false;
+    for (let index = 0; index < list.length; index += 1) {
+        const item = String(list[index] ?? '');
+        if (literal) {
+            rest.push(item);
+            continue;
+        }
         if (item === '--') {
-            flags.rest = true;
+            literal = true;
             continue;
         }
         if (item.startsWith('--')) {
             const [name, value] = item.slice(2).split('=');
-            flags[name] = value === undefined ? true : value;
-        } else if (item.startsWith('-') && item.length > 1) {
-            flags[item.slice(1)] = true;
-        } else {
-            args.push(item);
+            if (value === undefined && VALUE_FLAGS.has(name)) {
+                const next = list[index + 1];
+                if (next !== undefined && !String(next).startsWith('-')) {
+                    index += 1;
+                    setFlag(name, String(next));
+                    continue;
+                }
+            }
+            setFlag(name, value === undefined ? true : value);
+            continue;
         }
+        if (item.startsWith('-') && item.length > 1) {
+            setFlag(item.slice(1), true);
+            continue;
+        }
+        args.push(item);
     }
-    return { command: args.shift() ?? null, args, flags };
+
+    return { command: args.shift() ?? null, args, flags, rest };
 }
 
 /**
- * The commands that need the resolved configuration.
+ * The commands of the CLI.
  * @type {Record<string, (ctx: object) => Promise<number>>}
  */
-const CONFIG_COMMANDS = Object.freeze({
+const COMMANDS = Object.freeze({
+    run: runCommand,
+    plan: planCommand,
+    stages: stagesCommand,
     install: installCommand,
     component: componentCommand,
+    jobs: jobsCommand,
+    memory: memoryCommand,
 });
 
 /**
  * The entry of the CLI.
  * @param {string[]} argv
- * @returns {Promise<number>}
+ * @returns {Promise<number>} the exit code
  * @exports
+ * @ai.hint io
  */
 export async function main(argv = []) {
-    const { command, args, flags } = parseArgv(argv);
+    const { command, args, flags, rest } = parseArgv(argv);
+
+    try {
+        checkNode();
+    } catch (error) {
+        process.stderr.write(`ai-webdev: ${error.message}\n`);
+        return EXIT.usage;
+    }
+
     if (flags.version || flags.v) {
         process.stdout.write(`${pkg.version}\n`);
         return EXIT.ok;
@@ -81,28 +160,49 @@ export async function main(argv = []) {
         return EXIT.ok;
     }
 
-    const runner = CONFIG_COMMANDS[command];
-    if (!runner) {
-        process.stderr.write(`ai-webdev: the command "${command}" is not ready yet.\n`);
-        return EXIT.failure;
-    }
+    const mode = detectMode({
+        json: Boolean(flags.json),
+        quiet: Boolean(flags.quiet),
+    });
+    const renderer = createRenderer({
+        mode,
+        ascii: Boolean(flags.ascii),
+        verbose: Boolean(flags.detail),
+    });
+
+    // A command that is not known is a task: `ai-webdev "make a landing"` is a run.
+    const known = Object.hasOwn(COMMANDS, command);
+    const name = known ? command : 'run';
+    const commandArgs = known ? args : [command, ...args];
 
     try {
         const config = await loadConfig({
             configPath: typeof flags.config === 'string' ? flags.config : null,
+            overrides: configOverrides(flags),
             cwd: process.cwd(),
+            env: process.env,
         });
-        return await runner({ config, cwd: process.cwd(), args, flags });
+        const runner = COMMANDS[name];
+        return await runner({
+            config,
+            cwd: process.cwd(),
+            args: commandArgs,
+            flags,
+            rest,
+            renderer,
+            write: (text) => renderer.note(text),
+            env: process.env,
+        });
     } catch (error) {
         if (error instanceof UsageError) {
-            process.stderr.write(`ai-webdev: ${error.message}\n`);
+            renderer.error(error.message);
             return EXIT.usage;
         }
         if (error instanceof CommandError) {
-            process.stderr.write(`ai-webdev: ${error.message}\n`);
+            renderer.error(error.message);
             return EXIT.failure;
         }
-        process.stderr.write(`ai-webdev: ${error?.message ?? error}\n`);
+        renderer.error(error?.message ?? error);
         return EXIT.failure;
     }
 }

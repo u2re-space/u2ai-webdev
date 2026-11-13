@@ -38,7 +38,7 @@ export function iconFiles(icons = []) {
  * The stage of the icons.
  *
  * @param {{ client: object, config?: object, root?: string, task?: string, plan?: object|null,
- *   architecture?: object|null, inputs?: object|null, runId?: string|null,
+ *   architecture?: object|null, inputs?: object|null, runId?: string|null, apply?: boolean,
  *   notify?: (event: object) => void, env?: object }} request
  * @returns {Promise<object>} the report of the stage
  * @exports
@@ -53,6 +53,7 @@ export async function iconifyStage({
     architecture = null,
     inputs = null,
     runId: id = null,
+    apply = true,
     notify = () => {},
     env = process.env,
 } = {}) {
@@ -69,6 +70,7 @@ export async function iconifyStage({
         brief,
         inputs,
         runId: id,
+        apply,
         notify,
         env,
         context: {

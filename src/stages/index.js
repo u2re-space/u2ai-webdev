@@ -78,6 +78,7 @@ export const STAGES = Object.freeze([
         title: 'Write the markup',
         dependsOn: ['setup'],
         run: markupStage,
+        args: (ctx) => ({ apply: ctx.apply !== false }),
         apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
     },
     {
@@ -85,6 +86,7 @@ export const STAGES = Object.freeze([
         title: 'Write the code',
         dependsOn: ['markup'],
         run: codingStage,
+        args: (ctx) => ({ apply: ctx.apply !== false }),
         apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
     },
     {
@@ -92,6 +94,7 @@ export const STAGES = Object.freeze([
         title: 'Write the styles',
         dependsOn: ['coding'],
         run: stylingStage,
+        args: (ctx) => ({ apply: ctx.apply !== false }),
         apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
     },
     {
@@ -99,6 +102,7 @@ export const STAGES = Object.freeze([
         title: 'Draw the vector graphics',
         dependsOn: ['coding'],
         run: vectorStage,
+        args: (ctx) => ({ apply: ctx.apply !== false }),
         apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
     },
     {
@@ -106,6 +110,7 @@ export const STAGES = Object.freeze([
         title: 'Choose the icons',
         dependsOn: ['markup'],
         run: iconifyStage,
+        args: (ctx) => ({ apply: ctx.apply !== false }),
         apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
     },
     {

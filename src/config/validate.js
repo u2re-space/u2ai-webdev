@@ -128,6 +128,8 @@ function validateAgent(agent, fail) {
   }
   if (typeof agent.platform !== 'string' || !agent.platform.trim()) fail(`${where}.platform: непустая строка`);
   if (!ENUMS.generationKinds.includes(agent.kind)) fail(`${where}.kind: ${ENUMS.generationKinds.join(' | ')}`);
+  if (!ENUMS.approvalLevels.includes(agent.approve)) fail(`${where}.approve: ${ENUMS.approvalLevels.join(' | ')}`);
+  if (!ENUMS.extractModes.includes(agent.extract)) fail(`${where}.extract: ${ENUMS.extractModes.join(' | ')}`);
   for (const key of ['plannerMaxTurns', 'architectMaxTurns', 'coderMaxTurns']) {
     if (!(Number.isSafeInteger(agent[key]) && agent[key] > 0)) fail(`${where}.${key}: целое > 0`);
   }

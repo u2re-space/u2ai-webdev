@@ -47,6 +47,10 @@ export const ENUMS = Object.freeze({
   paceModes: Object.freeze(['auto', 'speed', 'quality']),
   /** The kinds of a generation task. */
   generationKinds: Object.freeze(['landing', 'site', 'backend', 'app', 'component']),
+  /** The policy of the confirmations before the run writes into the project. */
+  approvalLevels: Object.freeze(['ask', 'read', 'write', 'all']),
+  /** How the files are taken out of the answers of the roles. */
+  extractModes: Object.freeze(['off', 'auto', 'always']),
   /** The documentation sources a role may be given. */
   documentationSources: Object.freeze([
     'cssUnits', 'cssShapes', 'cssGrid', 'cssFlex', 'cssFonts', 'cssColors',
