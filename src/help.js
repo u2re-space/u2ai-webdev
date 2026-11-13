@@ -18,9 +18,13 @@ export const HELP = `ai-webdev — plan, build and refine web projects with AI.
 Usage:
   ai-webdev <command> [options]
 
+Commands:
+  component [publish|list|search|show|rm|path]  The local registry of the components.
+  install <tag>[@version]                      Install a component as a local file: package.
+
 Options:
   -h, --help     Print this help.
   -v, --version  Print the version.
 
 The commands arrive with the stages that own them: run, plan, markup, code, style,
-review, audit, component, install, icons, svg, jobs, memory, map.`;
+review, audit, icons, svg, jobs, memory, map.`;

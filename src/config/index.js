@@ -76,6 +76,13 @@ export async function loadConfig({ configPath = null, overrides = {}, env = proc
 
   validateConfig(config);
   if (ensureHome) await ensureHomeDir(home);
+
+  // The paths of the registry point at the home unless the config names its own.
+  config.components = {
+    ...config.components,
+    dir: config.components.dir ?? homeComponentsDir(home),
+    dbFile: config.components.dbFile ?? homeComponentsDb(home),
+  };
   return config;
 }
 

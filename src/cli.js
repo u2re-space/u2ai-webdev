@@ -2,16 +2,21 @@
  * @file src/cli.js
  * @module cli
  * @purpose Parse argv, dispatch the commands, and map the failures to the exit codes.
- * @depends node:module, help
+ * @depends node:module, help, config, cli/errors, cli/install, cli/component
  * @usedBy bin/ai-webdev, index
  * @exports EXIT, parseArgv, main
  * @ai.tags cli, dispatch
  * @ai.hint keep
  * @changed 2026-11-13 The skeleton of the CLI: the help and the version only.
+ * @changed 2026-11-13 The commands of the registry: `component` and `install`.
  */
 
 import { createRequire } from 'node:module';
 import { HELP } from './help.js';
+import { loadConfig } from './config/index.js';
+import { UsageError, CommandError } from './cli/errors.js';
+import { installCommand } from './cli/install.js';
+import { componentCommand } from './cli/component.js';
 
 const require = createRequire(import.meta.url);
 const pkg = require('../package.json');
@@ -51,13 +56,22 @@ export function parseArgv(argv = []) {
 }
 
 /**
+ * The commands that need the resolved configuration.
+ * @type {Record<string, (ctx: object) => Promise<number>>}
+ */
+const CONFIG_COMMANDS = Object.freeze({
+    install: installCommand,
+    component: componentCommand,
+});
+
+/**
  * The entry of the CLI.
  * @param {string[]} argv
  * @returns {Promise<number>}
  * @exports
  */
 export async function main(argv = []) {
-    const { command, flags } = parseArgv(argv);
+    const { command, args, flags } = parseArgv(argv);
     if (flags.version || flags.v) {
         process.stdout.write(`${pkg.version}\n`);
         return EXIT.ok;
@@ -66,6 +80,29 @@ export async function main(argv = []) {
         process.stdout.write(`${HELP}\n`);
         return EXIT.ok;
     }
-    process.stderr.write(`ai-webdev: the command "${command}" is not ready yet.\n`);
-    return EXIT.failure;
+
+    const runner = CONFIG_COMMANDS[command];
+    if (!runner) {
+        process.stderr.write(`ai-webdev: the command "${command}" is not ready yet.\n`);
+        return EXIT.failure;
+    }
+
+    try {
+        const config = await loadConfig({
+            configPath: typeof flags.config === 'string' ? flags.config : null,
+            cwd: process.cwd(),
+        });
+        return await runner({ config, cwd: process.cwd(), args, flags });
+    } catch (error) {
+        if (error instanceof UsageError) {
+            process.stderr.write(`ai-webdev: ${error.message}\n`);
+            return EXIT.usage;
+        }
+        if (error instanceof CommandError) {
+            process.stderr.write(`ai-webdev: ${error.message}\n`);
+            return EXIT.failure;
+        }
+        process.stderr.write(`ai-webdev: ${error?.message ?? error}\n`);
+        return EXIT.failure;
+    }
 }
