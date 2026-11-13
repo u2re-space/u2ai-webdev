@@ -6,3 +6,4 @@
  */
 export { EXIT, main, parseArgv } from './src/cli.js';
 export { HELP } from './src/help.js';
+export * from './src/config.js';

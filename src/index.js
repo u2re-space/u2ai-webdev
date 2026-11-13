@@ -6,3 +6,4 @@
  */
 export * from './cli.js';
 export * from './help.js';
+export * from './config.js';

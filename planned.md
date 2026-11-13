@@ -1,6 +1,7 @@
 # План перехода: Universal-AI (монолит 0.2.xx) → @u2ai/webdev (0.3.xx)
 
-> Актуальный статус: **step-1 выполнен** — каркас пакета на месте; остальные шаги впереди.
+> Актуальный статус: **шаги 1–2 выполнены** — каркас и конфигурация на месте; дальше
+> openai-слой и агентный слой.
 > Рабочий дом переносимого кода: `submodules/u2ai-webdev/`.
 > Репозиторий: <https://github.com/u2re-space/u2ai-webdev> (remote настроен, пуш не делаем).
 >
@@ -202,13 +203,13 @@ CLI `ai-webdev` (`@u2ai/webdev`) с собственным конфигом `~/.
       (полная поверхность команд приходит в step-18)
 
 ### step-2 — Система конфигурации `~/.ai-webdev`
-- [ ] `src/config/constants.js` — enum'ы (стадии, языки разметки/стилей/скриптов, фреймворки, наборы иконок, режимы мостов)
-- [ ] `src/config/defaults.js` — дефолты: API, лимиты, инструменты, стадии, роли, темп и качество, `components.*`, `bridges.*`, `pipeline`
-- [ ] `src/config/env.js` — `AI_WEBDEV_*` → поля конфига
-- [ ] `src/config/paths.js` — `~/.ai-webdev`, `config.json`, `skills/`, `components/`, `memory.db`, `components.db`, `jobs/`
-- [ ] `src/config/merge.js`, `src/config/parser.js` — merge, JSON, `{{env:}}`/`{{file:}}`
-- [ ] `src/config/validate.js` — проверки с русскими сообщениями
-- [ ] `src/config/index.js`, `src/config.js` — загрузка, `ensureConfigFile`, `redactConfig`
+- [x] `src/config/constants.js` — enum'ы (стадии, языки разметки/стилей/скриптов, фреймворки, наборы иконок, режимы мостов)
+- [x] `src/config/defaults.js` — дефолты: API, лимиты, инструменты, стадии, роли, темп и качество, `components.*`, `bridges.*`, `pipeline`
+- [x] `src/config/env.js` — `AI_WEBDEV_*` → поля конфига
+- [x] `src/config/paths.js` — `~/.ai-webdev`, `config.json`, `skills/`, `components/`, `memory.db`, `components.db`, `jobs/`
+- [x] `src/config/merge.js`, `src/config/parser.js` — merge, JSON, `{{env:}}`/`{{file:}}`
+- [x] `src/config/validate.js` — проверки с русскими сообщениями
+- [x] `src/config/index.js`, `src/config.js` — загрузка, `ensureConfigFile`, `redactConfig`
 
 ### step-3 — OpenAI-слой
 - [ ] `src/openai/http.js` — транспорт: бэкенды, ретраи, таймауты, редиректы
