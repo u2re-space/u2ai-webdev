@@ -244,6 +244,8 @@ export async function runStepStage({
             landmarks: Array.isArray(data.landmarks) ? data.landmarks : [],
             accessibility: Array.isArray(data.accessibility) ? data.accessibility : [],
             tokens: Array.isArray(data.tokens) ? data.tokens : [],
+            set: String(data.set ?? '').trim(),
+            icons: Array.isArray(data.icons) ? data.icons : [],
             applied: {
                 written: applied.written,
                 skipped: applied.skipped,
