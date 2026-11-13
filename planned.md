@@ -1,7 +1,7 @@
 # План перехода: Universal-AI (монолит 0.2.xx) → @u2ai/webdev (0.3.xx)
 
-> Актуальный статус: **шаги 1–5 выполнены** — каркас, конфигурация, openai-слой,
-> агентный слой, скиллы и MCP на месте; дальше схемы ответов и роли.
+> Актуальный статус: **шаги 1–6 выполнены** — каркас, конфигурация, openai-слой,
+> агентный слой, скиллы, MCP и схемы на месте; дальше роли.
 > Рабочий дом переносимого кода: `submodules/u2ai-webdev/`.
 > Репозиторий: <https://github.com/u2re-space/u2ai-webdev> (remote настроен, пуш не делаем).
 >
@@ -254,9 +254,9 @@ CLI `ai-webdev` (`@u2ai/webdev`) с собственным конфигом `~/.
       на локальном мокк-хосте и недоступный сервер
 
 ### step-6 — Схемы ответов ролей
-- [ ] `src/agent/schemas.js` — `PLAN_SCHEMA`, `ARCHITECTURE_SCHEMA`, `CODE_SCHEMA`,
+- [x] `src/agent/schemas.js` — `PLAN_SCHEMA`, `ARCHITECTURE_SCHEMA`, `CODE_SCHEMA`,
       `STYLE_SCHEMA`, `MARKUP_SCHEMA`, `ICON_SCHEMA`, `SETUP_SCHEMA`, `REVIEW_SCHEMA`
-- [ ] Проверка схем на строгость (все поля обязательны, лишние запрещены)
+- [x] Проверка схем на строгость (все поля обязательны, лишние запрещены)
 
 ### step-7 — Роли
 - [ ] `src/roles/untrusted.js` — общая директива о недоверенных данных
