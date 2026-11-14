@@ -357,8 +357,9 @@ leaves every role with the effort of the run.
 
 A thinking model works for minutes without a word. The run says that it waits (`· thinking (60s)`)
 and a failed request is shown, with its retry — the silence of the terminal is never a hang. The
-request itself may stay silent for `timeoutMs` (ten minutes by default): a shorter timeout does
-not make the model faster, it throws the whole reasoning away and asks the same question again.
+request itself may stay silent for `timeoutMs` (fifteen minutes by default, half an hour at the
+most): a shorter timeout does not make the model faster, it throws the whole reasoning away and
+asks the same question again.
 
 The channel of the schema says how the answer of a role reaches the code: `tool` makes the
 schema a function the model calls, `format` pins the text of the answer to it, `auto` picks

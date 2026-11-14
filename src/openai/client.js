@@ -177,7 +177,7 @@ export async function createClient({ config, env = process.env, signal = null, o
     const transport = createHttp({
         // A thinking model may work for minutes without a word: a short idle timeout
         // throws the reasoning away and asks the same question again.
-        idleTimeoutMs: Number.isSafeInteger(config?.timeoutMs) ? config.timeoutMs : 600_000,
+        idleTimeoutMs: Number.isSafeInteger(config?.timeoutMs) ? config.timeoutMs : 900_000,
         connectTimeoutMs: 30_000,
     });
     const retries = Number.isSafeInteger(config?.limits?.requestRetries)

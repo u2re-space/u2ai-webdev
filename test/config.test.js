@@ -99,12 +99,19 @@ test('the validation rejects an unknown stage and an unknown field', () => {
     assert.throws(() => validateConfig(section), /Конфигурация: stack\.colors: неизвестное поле/);
 });
 
-test('a request may stay silent for ten minutes', () => {
+test('a request may stay silent for fifteen minutes', () => {
     // A thinking model works for minutes without a word. A short timeout does not make
     // the model faster: it throws the reasoning away and asks again.
     const config = cloneDefaults();
-    assert.equal(config.timeoutMs, 600_000);
+    assert.equal(config.timeoutMs, 900_000);
     assert.doesNotThrow(() => validateConfig(config));
+
+    // The ceiling of the config is half an hour.
+    const long = cloneDefaults();
+    long.timeoutMs = 1_800_000;
+    assert.doesNotThrow(() => validateConfig(long));
+    long.timeoutMs = 1_800_001;
+    assert.throws(() => validateConfig(long), /timeoutMs: 5000\.\.1800000/);
 });
 
 test('the validation of the profile of the stages names the role', () => {

@@ -70,7 +70,7 @@ export function fromEnv(env = process.env) {
   // --- HTTP plumbing --------------------------------------------------------
   const retries = intInRange(env.AI_WEBDEV_RETRIES, 0, 10);
   if (retries != null) set(['retries'], retries);
-  const timeoutMs = intInRange(env.AI_WEBDEV_TIMEOUT_MS, 5_000, 600_000);
+  const timeoutMs = intInRange(env.AI_WEBDEV_TIMEOUT_MS, 5_000, 1_800_000);
   if (timeoutMs != null) set(['timeoutMs'], timeoutMs);
   const maxTurns = intInRange(env.AI_WEBDEV_MAX_TURNS, 1, 200);
   if (maxTurns != null) set(['limits', 'maxTurns'], maxTurns);

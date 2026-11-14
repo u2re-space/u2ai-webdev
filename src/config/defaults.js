@@ -71,9 +71,9 @@ export const defaults = {
    *
    * A thinking model works for minutes without a word. A short timeout does not make
    * the model faster: it throws away the whole reasoning and asks again. The ceiling
-   * of the config is ten minutes.
+   * of the config is thirty minutes.
    */
-  timeoutMs: 600_000,
+  timeoutMs: 900_000,
 
   // --- HTTP backends -------------------------------------------------------
   /**
