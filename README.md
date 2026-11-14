@@ -539,6 +539,11 @@ after the step means the work is gone, and the step is done again. A file that i
 holds something else than the answer of the role, means the answer was lost — the step is done
 again too. The run never asks a model to write the same file twice.
 
+A stage of a continued run is skipped only when its work is still on the disk: the progress
+says that the stage ran, but the answer of the role may have been lost, and a stage whose
+files are gone is done again. A file that was changed after the report of the step belongs to
+a later stage, and the run does not undo it.
+
 The screenshot of the reference goes to the roles that copy the look — the markup, the styles
 and the vector graphics. The scripts, the icons and the other mechanical work get the numbers,
 the palette and the tokens, and no picture: a picture they do not need is uploaded, read and

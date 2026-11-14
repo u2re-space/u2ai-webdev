@@ -14,7 +14,8 @@
  *          inputs/index, inputs/references, stages/workspace
  * @usedBy stages/markup, stages/coding, stages/styling
  * @exports STEPS_DIR, LOOKS_AT_DESIGN, stepsForRole, applyFiles, filesByTool, stepReportPath,
- *          writeStepReport, readStepReport, resumableStep, missingFiles, runStepStage
+ *          writeStepReport, readStepReport, resumableStep, roleWorkOnDisk, laterSteps,
+ *          missingFiles, runStepStage
  * @ai.tags stages, steps, files
  * @ai.hint io
  * @ai.hint legacy-0.2
@@ -90,6 +91,73 @@ async function currentContent(root, rel) {
     } catch {
         return null;
     }
+}
+
+/**
+ * The time of the last change of a file, or null when it is not there.
+ * @param {string} file
+ * @returns {Promise<number|null>}
+ * @ai.hint io
+ */
+async function fileTime(file) {
+    try {
+        const info = await stat(file);
+        return info.mtimeMs;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * The steps of the plan that come after this one.
+ *
+ * A file of a later step belongs to that step now: the earlier step does not compare it
+ * with its own answer, or the run would undo the work that came after it.
+ * @param {object} plan
+ * @param {object} step
+ * @returns {object[]}
+ * @exports
+ * @ai.hint pure
+ */
+export function laterSteps(plan, step) {
+    const steps = Array.isArray(plan?.steps) ? plan.steps : [];
+    const id = String(step?.id ?? '').trim();
+    const index = steps.findIndex((item) => String(item?.id ?? '').trim() === id);
+    if (index < 0) return [];
+    return steps.slice(index + 1);
+}
+
+/**
+ * Does a later step of the plan own this file now?
+ *
+ * The later step owns it when its work is on the disk: the answer of the later role is
+ * what the file holds, and the answer of the earlier role is old.
+ * @param {string} root
+ * @param {object} config
+ * @param {string} id
+ * @param {object} plan
+ * @param {object} step
+ * @param {string} rel
+ * @returns {Promise<boolean>}
+ * @ai.hint io
+ */
+async function ownedByLater(root, config, id, plan, step, rel) {
+    for (const later of laterSteps(plan, step)) {
+        const files = Array.isArray(later.files) ? later.files.map((item) => String(item ?? '').trim()) : [];
+        if (!files.includes(rel)) continue;
+        const report = await readStepReport(root, config, id, String(later.id ?? '').trim()).catch(() => null);
+        if (!report || report.ok !== true) continue;
+        const own = new Set((Array.isArray(report.applied?.own) ? report.applied.own : []).map((item) => String(item)));
+        // The later role wrote the file with its own tool: the disk is the truth.
+        if (own.has(rel)) return true;
+        const answer = (Array.isArray(report.files) ? report.files : [])
+            .find((file) => String(file?.path ?? '').trim() === rel);
+        const content = typeof answer?.content === 'string' ? answer.content : null;
+        if (content === null) continue;
+        const disk = await currentContent(root, rel);
+        if (disk === content) return true;
+    }
+    return false;
 }
 
 /**
@@ -318,16 +386,18 @@ export async function missingFiles(root, files = []) {
  *
  * A step is done when its report says so and its files are still on the disk. A file that
  * was deleted after the step means the work is not there any more, and the step is done
- * again.
+ * again. A file that a later step of the plan owns now is not compared: the answer of
+ * this step is old, and the run must not undo the work that came after it.
  * @param {string} root
  * @param {object} config
  * @param {string} id
  * @param {object} step the step of the plan
+ * @param {object} [plan] the plan of the run
  * @returns {Promise<object|null>}
  * @exports
  * @ai.hint io
  */
-export async function resumableStep(root, config = {}, id = null, step = {}) {
+export async function resumableStep(root, config = {}, id = null, step = {}, plan = null) {
     const stepId = String(step?.id ?? '').trim();
     if (!stepId) return null;
     const report = await readStepReport(root, config, id, stepId).catch(() => null);
@@ -347,10 +417,51 @@ export async function resumableStep(root, config = {}, id = null, step = {}) {
         if (!rel || content === null) continue;
         // The role wrote this file with its own tool: the file on the disk is the truth.
         if (own.has(rel)) continue;
+        // A later step of the plan owns the file now.
+        if (await ownedByLater(root, config, id, plan, step, rel)) continue;
         const disk = await currentContent(root, rel);
         if (disk === null || disk !== content) return null;
     }
     return { ...report, resumed: true };
+}
+
+/**
+ * Is the work of a role still on the disk?
+ *
+ * A stage that the progress calls done may have lost its work: the answer of the role was
+ * never written, or somebody changed the files afterwards. The stage is done again only
+ * when the answer of the role is not on the disk. A file that was changed after the report
+ * of the step belongs to a later stage now, and it is not a loss.
+ * @param {{ root: string, config?: object, id?: string|null, plan?: object|null, role: string }} request
+ * @returns {Promise<boolean>}
+ * @exports
+ * @ai.hint io
+ */
+export async function roleWorkOnDisk({ root, config = {}, id = null, plan = null, role } = {}) {
+    const steps = stepsForRole(plan, role);
+    if (!steps.length) return true;
+    for (const step of steps) {
+        const stepId = String(step?.id ?? '').trim();
+        const report = await readStepReport(root, config, id, stepId).catch(() => null);
+        if (!report || report.ok !== true) return false;
+        const own = new Set((Array.isArray(report.applied?.own) ? report.applied.own : []).map((item) => String(item)));
+        const reportTime = await fileTime(stepReportPath(root, config, id, stepId));
+        for (const file of Array.isArray(report.files) ? report.files : []) {
+            const rel = String(file?.path ?? '').trim();
+            const content = typeof file?.content === 'string' ? file.content : null;
+            if (!rel || content === null) continue;
+            if (own.has(rel)) continue;
+            if (await ownedByLater(root, config, id, plan, step, rel)) continue;
+            const disk = await currentContent(root, rel);
+            if (disk === null) return false;
+            if (disk === content) continue;
+            // The file was changed after the step: it belongs to a later stage now.
+            const time = await fileTime(path.join(root, rel));
+            if (time !== null && reportTime !== null && time > reportTime) continue;
+            return false;
+        }
+    }
+    return true;
 }
 
 /**
@@ -419,7 +530,7 @@ export async function runStepStage({
         // A step that is already done is not done again: the run continues with what is
         // on the disk. A model that has to write the same file a second time pays for
         // the whole stage and changes nothing.
-        const done = await resumableStep(root, config, run, step);
+        const done = await resumableStep(root, config, run, step, plan);
         if (done) {
             reports.push(done);
             continue;

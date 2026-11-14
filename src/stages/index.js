@@ -36,6 +36,26 @@ import { iconifyStage } from './iconify.js';
 import { reviewStage } from './review.js';
 import { auditStage } from './audit.js';
 import { learnStage } from './learn.js';
+import { roleWorkOnDisk } from './step.js';
+
+/**
+ * The check of a stage that works on the steps of the plan.
+ *
+ * The stage is done only when the work of its role is still on the disk: the progress of
+ * the run says that the stage ran, but the answer of the role may have been lost.
+ * @param {string} role
+ * @returns {Function}
+ * @ai.hint pure
+ */
+function workOnDisk(role) {
+    return (ctx) => roleWorkOnDisk({
+        root: ctx.root,
+        config: ctx.config,
+        id: ctx.runId,
+        plan: ctx.plan,
+        role,
+    });
+}
 
 /**
  * The stages of a run, in the order they are declared.
@@ -92,6 +112,7 @@ export const STAGES = Object.freeze([
         dependsOn: ['setup'],
         run: markupStage,
         args: (ctx) => ({ apply: ctx.apply !== false }),
+        verify: workOnDisk('markup'),
         apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
     },
     {
@@ -100,6 +121,7 @@ export const STAGES = Object.freeze([
         dependsOn: ['markup'],
         run: codingStage,
         args: (ctx) => ({ apply: ctx.apply !== false }),
+        verify: workOnDisk('coder'),
         apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
     },
     {
@@ -108,6 +130,7 @@ export const STAGES = Object.freeze([
         dependsOn: ['coding'],
         run: stylingStage,
         args: (ctx) => ({ apply: ctx.apply !== false }),
+        verify: workOnDisk('styler'),
         apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
     },
     {

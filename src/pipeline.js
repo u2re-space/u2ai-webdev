@@ -204,9 +204,16 @@ export async function runPipeline({
     for (const stage of list) {
         const record = done.get(stage.name);
         if (resume && record?.status === 'completed') {
-            reports.push({ name: stage.name, status: 'skipped', result: null, warnings: [] });
-            notify({ type: 'stage.skip', stage: stage.name });
-            continue;
+            // The progress says that the stage ran. The disk says whether its work is
+            // still there: a stage whose files are gone is done again.
+            const lost = stage.verify ? !(await stage.verify(ctx)) : false;
+            if (!lost) {
+                reports.push({ name: stage.name, status: 'skipped', result: null, warnings: [] });
+                notify({ type: 'stage.skip', stage: stage.name });
+                continue;
+            }
+            warnings.push(`Стадия ${stage.name}: работа потеряна — стадия выполняется заново.`);
+            progress = recordStep(progress, { stage: stage.name, status: 'pending' });
         }
 
         if (signal?.aborted) {

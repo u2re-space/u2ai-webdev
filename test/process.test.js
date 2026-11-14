@@ -257,6 +257,46 @@ test('the pipeline pauses on the border of a stage and may continue', async () =
     assert.equal(continued.stages[0].status, 'skipped');
 });
 
+test('a stage whose work was lost is done again on a resumed run', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-lost-stage-'));
+    const done = [];
+    const stages = [
+        { name: 'one', title: 'One', dependsOn: [], run: async () => { done.push('one'); return { ok: true }; } },
+        {
+            name: 'two',
+            title: 'Two',
+            dependsOn: ['one'],
+            run: async () => { done.push('two'); return { ok: true }; },
+            verify: async () => false,
+        },
+    ];
+
+    await runPipeline({
+        client: { responses: { create: async () => ({ output: [] }) } },
+        config: CONFIG,
+        root,
+        task: 'Make a landing.',
+        runId: 'run-1',
+        stages,
+    });
+    assert.deepEqual(done, ['one', 'two']);
+
+    const continued = await resumePipeline({
+        client: { responses: { create: async () => ({ output: [] }) } },
+        config: CONFIG,
+        root,
+        task: 'Make a landing.',
+        runId: 'run-1',
+        stages,
+    });
+
+    // The work of the stage is gone: the stage runs again.
+    assert.deepEqual(done, ['one', 'two', 'two']);
+    assert.equal(continued.stages[0].status, 'skipped');
+    assert.equal(continued.stages[1].status, 'completed');
+    assert.ok(continued.warnings.some((item) => /работа потеряна/.test(item)));
+});
+
 test('an aborted signal pauses the run before the next stage', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-abort-'));
     const controller = new AbortController();

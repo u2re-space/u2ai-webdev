@@ -11,9 +11,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promises';
 
-import { stepsForRole, applyFiles, stepReportPath, readStepReport, runStepStage } from '../src/stages/step.js';
+import { stepsForRole, applyFiles, laterSteps, roleWorkOnDisk, stepReportPath, readStepReport, runStepStage } from '../src/stages/step.js';
 import { markupStage } from '../src/stages/markup.js';
 import { codingStage } from '../src/stages/coding.js';
 import { stylingStage, styleTokensText } from '../src/stages/styling.js';
@@ -244,6 +244,75 @@ test('a step whose answer was lost is done again', async () => {
     });
     assert.ok(asked > 0, 'the step has to be done again');
     assert.equal(second.steps[0].resumed, undefined);
+});
+
+test('the work of a role that was lost is not on the disk', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-steps-work-'));
+    const config = { output: { work: './.tmp' }, stages: { coder: { maxTurns: 4 } } };
+    const client = fakeClient([schemaAnswer('code', {
+        summary: 'The entry.',
+        files: [{ path: 'src/main.js', content: 'export const x = 1;\n', language: 'js' }],
+        commands: [],
+        notes: '',
+    })]);
+
+    await runStepStage({
+        client,
+        config,
+        root,
+        task: 'Make a landing.',
+        role: 'coder',
+        plan: PLAN,
+        runId: 'run-1',
+    });
+    assert.equal(await roleWorkOnDisk({ root, config, id: 'run-1', plan: PLAN, role: 'coder' }), true);
+
+    // The answer of the role was never written: the file still holds the old one.
+    const old = new Date(Date.now() - 60_000);
+    await writeFile(path.join(root, 'src', 'main.js'), '// the old file\n', 'utf8');
+    await utimes(path.join(root, 'src', 'main.js'), old, old);
+    assert.equal(await roleWorkOnDisk({ root, config, id: 'run-1', plan: PLAN, role: 'coder' }), false);
+});
+
+test('a file of a later step belongs to that step', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-steps-own-'));
+    const config = { output: { work: './.tmp' }, stages: { coder: { maxTurns: 4 } } };
+    // Two steps of the same role touch the same file: the later one owns it.
+    const plan = {
+        summary: 'A landing.',
+        steps: [
+            { id: 'code-1', title: 'Code', role: 'coder', dependsOn: [], files: ['src/main.js'], criteria: ['runs'] },
+            { id: 'code-2', title: 'More code', role: 'coder', dependsOn: ['code-1'], files: ['src/main.js'], criteria: ['runs'] },
+        ],
+    };
+    const client = fakeClient([
+        schemaAnswer('code', {
+            summary: 'The entry.',
+            files: [{ path: 'src/main.js', content: 'export const x = 1;\n', language: 'js' }],
+            commands: [],
+            notes: '',
+        }),
+        schemaAnswer('code', {
+            summary: 'The behaviour.',
+            files: [{ path: 'src/main.js', content: 'export const y = 2;\n', language: 'js' }],
+            commands: [],
+            notes: '',
+        }),
+    ]);
+    await runStepStage({
+        client,
+        config,
+        root,
+        task: 'Make a landing.',
+        role: 'coder',
+        plan,
+        runId: 'run-1',
+    });
+
+    // The script belongs to the later step now: the answer of the first step is old, and
+    // the run must not undo the work that came after it.
+    assert.equal(await roleWorkOnDisk({ root, config, id: 'run-1', plan, role: 'coder' }), true);
+    assert.deepEqual(laterSteps(plan, plan.steps[0]).map((step) => step.id), ['code-2']);
 });
 
 test('a step that is already done is not done again', async () => {
