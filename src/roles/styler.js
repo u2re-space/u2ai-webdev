@@ -22,7 +22,7 @@ export const schema = 'style';
 /** The tools the role may call. */
 export const tools = [
     'list_files', 'read_file', 'write_file', 'replace_text', 'search_files',
-    'download_font', 'call_ai_measure', 'read_skill', 'web_guidance',
+    'run_command', 'download_font', 'call_ai_measure', 'read_skill', 'web_guidance',
 ];
 
 /** How many turns the role may spend. */
@@ -88,6 +88,8 @@ ${INPUTS_IN_CONTEXT}
 - The SCSS has an entry point: a file whose name does not start with an underscore and that
   \`@use\`s the other files of the styles. A file that nobody uses renders nothing.
 - The styles answer to the class names of the markup. Do not invent a second naming.
+- The styles are checked by the compiler of the stylesheets, not by the eye: run the build of the
+  project with the \`run_command\` tool after you write and fix what it reports.
 
 ${UNTRUSTED}`;
 }

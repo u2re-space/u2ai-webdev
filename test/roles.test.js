@@ -214,6 +214,14 @@ test('the roles that may measure the reference have the tool of the measurer', (
     assert.ok(specs.some((spec) => spec.name === 'call_ai_measure'));
 });
 
+test('the roles that check their work have the tool of the command', () => {
+    for (const name of ['coder', 'styler', 'editor']) {
+        assert.ok(ROLES[name].tools.includes('run_command'), `the role ${name} cannot run a command`);
+        const specs = toolSpecs(defaults.tools, { role: name });
+        assert.ok(specs.some((spec) => spec.name === 'run_command'), `the role ${name} has no command to run`);
+    }
+});
+
 test('a role that answers with the schema and writes nothing is told to work, and the JSON format is dropped', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-loop-work-'));
     const home = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-home-'));

@@ -554,6 +554,18 @@ when it is short — the content of a file is never a line of the log.
   → Записан index.html (9346 байт)
 ```
 
+The answer of a role is the work of the step: a file that is on the disk and differs from the
+answer is written, and the old file goes to the backup. A file that the role wrote with its own
+tool is left alone — the file on the disk is the truth there. A file that could not be written
+fails the step: a step that is not on the disk is not done.
+
+The roles of a step read the project in one order: the entry point of the page (`index.html`),
+then the script of the entry point and the modules it imports, then the stylesheet and the
+partials it `@use`s. The paths come from `list_files` and `search_files`: a path that was not
+seen on the disk does not exist. The roles that write code check their work with the command
+of the project (`npm run build`, the test script) — the compiler sees the errors that the eye
+does not.
+
 ## The bridges to the sibling CLIs
 
 Three external CLIs may help a run. Each of them is a subprocess, each of them may be switched off

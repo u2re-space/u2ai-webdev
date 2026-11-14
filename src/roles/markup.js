@@ -82,6 +82,8 @@ ${INPUTS_IN_CONTEXT}
 - The page is wired: the head carries the \`<link rel="stylesheet">\` of the stylesheet of the
   project, and the body carries the \`<script type="module">\` of the script of the project. A
   page without them opens unstyled.
+- Every path the page points at has to be on the disk: find it with \`list_files\` and
+  \`search_files\` before you link it. A path you have not seen is a path that does not exist.
 - The markup is valid: the tags are closed, the attributes are quoted, the boolean attributes
   have no value.
 

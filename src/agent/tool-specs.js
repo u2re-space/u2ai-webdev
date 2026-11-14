@@ -198,7 +198,7 @@ export const TOOL_SPECS = Object.freeze({
             additionalProperties: false,
         },
         required: ['command'],
-        roles: ['installer', 'reviewer', 'auditor'],
+        roles: ['installer', 'reviewer', 'auditor', 'coder', 'styler', 'editor'],
     },
     run_script: {
         configKey: 'script',

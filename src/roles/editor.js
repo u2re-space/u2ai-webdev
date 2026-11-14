@@ -21,7 +21,7 @@ export const schema = 'code';
 /** The tools the role may call. */
 export const tools = [
     'list_files', 'read_file', 'write_file', 'replace_text', 'search_files',
-    'generate_svg', 'call_ai_image', 'read_skill', 'web_guidance',
+    'generate_svg', 'call_ai_image', 'run_command', 'read_skill', 'web_guidance',
 ];
 
 /** How many turns the role may spend. */

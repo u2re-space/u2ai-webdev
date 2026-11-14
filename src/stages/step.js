@@ -13,8 +13,8 @@
  * @depends node:path, node:fs/promises, roles/index, agent/fs-tools, agent/syntax,
  *          inputs/index, inputs/references, stages/workspace
  * @usedBy stages/markup, stages/coding, stages/styling
- * @exports STEPS_DIR, LOOKS_AT_DESIGN, stepsForRole, applyFiles, stepReportPath, writeStepReport,
- *          readStepReport, resumableStep, missingFiles, runStepStage
+ * @exports STEPS_DIR, LOOKS_AT_DESIGN, stepsForRole, applyFiles, filesByTool, stepReportPath,
+ *          writeStepReport, readStepReport, resumableStep, missingFiles, runStepStage
  * @ai.tags stages, steps, files
  * @ai.hint io
  * @ai.hint legacy-0.2
@@ -22,9 +22,10 @@
  */
 
 import path from 'node:path';
-import { stat } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { runRole, roleReason, syntaxCorrection } from '../roles/index.js';
 import { writeTextFile } from '../agent/fs-tools.js';
+import { resolveInside } from '../agent/paths.js';
 import { checkFiles } from '../agent/syntax.js';
 import { inputContext } from '../inputs/index.js';
 import { readReferences } from '../inputs/references.js';
@@ -75,26 +76,130 @@ export function stepsForRole(plan, role) {
 }
 
 /**
+ * The text of a file of the project, or null when it is not there.
+ * @param {string} root
+ * @param {string} rel
+ * @returns {Promise<string|null>}
+ * @ai.hint io
+ */
+async function currentContent(root, rel) {
+    try {
+        const { abs } = await resolveInside(root, rel);
+        const buffer = await readFile(abs);
+        return buffer.toString('utf8');
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * The files a role wrote with its own tools.
+ *
+ * The file on the disk is the truth for them: the answer of the role may be older than
+ * what the role wrote with `write_file`.
+ * @param {object} result the answer of a role
+ * @returns {string[]}
+ * @ai.hint pure
+ */
+export function filesByTool(result = {}) {
+    const calls = Array.isArray(result?.toolCalls) ? result.toolCalls : [];
+    const names = new Set(['write_file', 'replace_text', 'copy_path', 'generate_svg']);
+    const files = [];
+    for (const call of calls) {
+        if (!names.has(String(call?.name ?? ''))) continue;
+        const args = call?.arguments ?? {};
+        const file = String(args?.path ?? args?.destination ?? '').trim();
+        if (file) files.push(file);
+    }
+    return files;
+}
+
+/**
+ * The roles that check their work with a command of the project.
+ *
+ * The compiler and the bundler see the errors that the eye does not: a role that judges
+ * the syntax of the code by reading it is guessing.
+ * @type {ReadonlySet<string>}
+ * @exports
+ */
+export const VERIFIES_WITH_COMMAND = Object.freeze(new Set(['coder', 'styler', 'editor']));
+
+/**
+ * The names of the scripts of the project.
+ * @param {string} root
+ * @returns {Promise<string[]>}
+ * @ai.hint io
+ */
+export async function projectScripts(root) {
+    try {
+        const text = await readFile(path.join(root, 'package.json'), 'utf8');
+        const data = JSON.parse(text);
+        const scripts = data?.scripts && typeof data.scripts === 'object' ? data.scripts : {};
+        return Object.keys(scripts).filter((name) => name.trim());
+    } catch {
+        return [];
+    }
+}
+
+/**
+ * The order of the work of a step.
+ *
+ * The project is read in one order, so that nothing is guessed: the entry point of the
+ * page names the script and the stylesheet, the script names the modules it imports, and
+ * the stylesheet names the partials it uses. A path that was not seen on the disk does
+ * not exist.
+ * @param {string} role
+ * @param {{ scripts?: string[] }} [options]
+ * @returns {string}
+ * @exports
+ * @ai.hint pure
+ */
+export function orderOfWork(role, { scripts = [] } = {}) {
+    const check = VERIFIES_WITH_COMMAND.has(role)
+        ? '- Check your work with the command of the project (`npm run build`, the test script): the\n'
+            + '  compiler and the bundler see the errors that the eye does not. Never judge the\n'
+            + '  syntax of the code by reading it.'
+        : '- Check the paths you use: every file the page links or imports has to be on the disk.';
+    return [
+        '## The order of the work',
+        '- Look at the entry point of the page first: `index.html`. It names the script and the',
+        '  stylesheet of the page, and everything else hangs on them.',
+        '- Then read the script of the entry point, and every module it imports.',
+        '- Then read the stylesheet of the entry point, and every partial it `@use`s.',
+        '- Find the paths with `list_files` and `search_files`: a path you have not seen on the',
+        '  disk does not exist, and a file you did not read is a file you do not know.',
+        scripts.length ? `- The scripts of the project: ${scripts.join(', ')}.` : '',
+        check,
+    ].filter(Boolean).join('\n');
+}
+
+/**
  * Write the files of an answer of a role.
  *
- * A file that is already there is not overwritten: the role may have written it with its own
- * tool, and the file on the disk is the truth.
- * @param {{ root: string, files?: object[], overwrite?: boolean, maxWriteBytes?: number,
- *   skip?: string[] }} request
- * @returns {Promise<{ written: string[], skipped: string[], warnings: string[] }>}
+ * The answer of a role is the work of the step: a file that is on the disk and differs
+ * from the answer is written, and the old file goes to the backup. A file that the role
+ * wrote with its own tool is left alone — the file on the disk is the truth there. A file
+ * that is the same as the answer is not written again.
+ * @param {{ root: string, files?: object[], maxWriteBytes?: number, skip?: string[],
+ *   owned?: string[] }} request
+ * @returns {Promise<{ written: string[], skipped: string[], replaced: string[],
+ *   failed: string[], warnings: string[] }>}
  * @exports
  * @ai.hint io
  */
 export async function applyFiles({
     root,
     files = [],
-    overwrite = false,
     maxWriteBytes = 4 * 1024 * 1024,
     skip = ['package.json'],
+    owned = [],
 } = {}) {
     const written = [];
     const skipped = [];
+    const replaced = [];
+    const failed = [];
     const warnings = [];
+    const own = new Set((Array.isArray(owned) ? owned : []).map((item) => String(item ?? '').trim().toLowerCase()));
     for (const item of Array.isArray(files) ? files : []) {
         const rel = String(item?.path ?? '').trim();
         const content = typeof item?.content === 'string' ? item.content : null;
@@ -112,26 +217,35 @@ export async function applyFiles({
             warnings.push(`Файл ${rel} не тронут: это не текстовый файл.`);
             continue;
         }
+        const current = await currentContent(root, rel);
+        if (current !== null && own.has(rel.toLowerCase())) {
+            // The role wrote this file with its own tool: the disk is the truth.
+            skipped.push(rel);
+            continue;
+        }
+        if (current === content) {
+            // The same content is not written again.
+            skipped.push(rel);
+            continue;
+        }
         try {
             const result = await writeTextFile({
                 root,
                 file: rel,
                 content,
-                overwrite,
+                overwrite: true,
                 maxBytes: maxWriteBytes,
                 backupSlot: 'step',
             });
             written.push(result.rel);
+            if (current !== null) replaced.push(result.rel);
         } catch (error) {
             const message = error?.message ?? String(error);
-            if (/уже существует/i.test(message)) {
-                skipped.push(rel);
-                continue;
-            }
+            failed.push(rel);
             warnings.push(`Файл ${rel} не записан: ${message}`);
         }
     }
-    return { written, skipped, warnings };
+    return { written, skipped, replaced, failed, warnings };
 }
 
 /**
@@ -232,7 +346,7 @@ export async function resumableStep(root, config = {}, id = null, step = {}) {
  *
  * @param {{ client: object, config?: object, root?: string, task?: string, role: string,
  *   plan?: object|null, brief?: string, inputs?: object|null, runId?: string|null,
- *   overwrite?: boolean, apply?: boolean, context?: object, notify?: (event: object) => void,
+ *   apply?: boolean, context?: object, notify?: (event: object) => void,
  *   env?: object }} request
  * @returns {Promise<{ stage: string, ok: boolean, skipped: boolean, steps: object[],
  *   warnings: string[], turns: number, usage: object|null, runId: string }>}
@@ -249,7 +363,6 @@ export async function runStepStage({
     brief = '',
     inputs = null,
     runId: id = null,
-    overwrite = false,
     apply = true,
     context: extra = {},
     notify = () => {},
@@ -283,6 +396,9 @@ export async function runStepStage({
     // icons work from the numbers and the text: a picture they do not need is uploaded,
     // read and paid for on every turn of the role.
     const parts = LOOKS_AT_DESIGN.has(role) ? reference.parts : [];
+    // The order of the work is the same for every role of a step: the project is read
+    // before it is written, and the paths come from the disk.
+    const order = orderOfWork(role, { scripts: await projectScripts(root) });
     const reports = [];
     let turns = 0;
     let usage = null;
@@ -307,6 +423,7 @@ export async function runStepStage({
         ].join('\n'));
         if (brief) blocks.push(brief);
         if (design) blocks.push(design);
+        blocks.push(order);
         if (reference.names.length) {
             blocks.push([
                 '## The reference',
@@ -344,10 +461,13 @@ export async function runStepStage({
 
         const data = result.data ?? {};
         const files = Array.isArray(data.files) ? data.files : [];
-        let applied = { written: [], skipped: [], warnings: [] };
+        let applied = { written: [], skipped: [], replaced: [], failed: [], warnings: [] };
         if (apply) {
-            applied = await applyFiles({ root, files, overwrite });
+            applied = await applyFiles({ root, files, owned: filesByTool(result) });
             warnings.push(...applied.warnings);
+            for (const rel of applied.replaced) {
+                warnings.push(`Шаг ${step.id}: файл ${rel} перезаписан — ответ роли отличался от файла на диске.`);
+            }
         }
 
         // The files of the step have to compile. The compiler of the platform sees the lost
@@ -391,11 +511,13 @@ export async function runStepStage({
             // says that the broken file is still broken.
             const repaired = Array.isArray(repair.data?.files) ? repair.data.files : [];
             if (apply && repaired.length) {
-                const written = await applyFiles({ root, files: repaired, overwrite: true });
+                const written = await applyFiles({ root, files: repaired, owned: filesByTool(repair) });
                 warnings.push(...written.warnings);
                 applied = {
                     written: [...applied.written, ...written.written],
                     skipped: applied.skipped,
+                    replaced: [...applied.replaced, ...written.replaced],
+                    failed: [...applied.failed, ...written.failed],
                     warnings: applied.warnings,
                 };
             }
@@ -409,9 +531,12 @@ export async function runStepStage({
         // The step is done when its files are on the disk: an answer without them is a
         // description of the work, not the work.
         const missing = await missingFiles(root, step.files ?? []);
-        const ok = Boolean(answer.data) && !missing.length && !syntax.errors.length;
+        const ok = Boolean(answer.data) && !missing.length && !syntax.errors.length && !applied.failed.length;
         if (missing.length) {
             warnings.push(`Шаг ${step.id}: файлы не написаны: ${missing.join(', ')}.`);
+        }
+        if (applied.failed.length) {
+            warnings.push(`Шаг ${step.id}: файлы не записаны: ${applied.failed.join(', ')}.`);
         }
 
         const report = {
@@ -430,6 +555,8 @@ export async function runStepStage({
             applied: {
                 written: applied.written,
                 skipped: applied.skipped,
+                replaced: applied.replaced,
+                failed: applied.failed,
             },
             syntax: { checked: syntax.checked, errors: syntax.errors },
             turns: result.turns + (repair?.turns ?? 0),

@@ -79,7 +79,7 @@ test('the steps of the plan are filtered by the role', () => {
     assert.deepEqual(stepsForRole(null, 'coder'), []);
 });
 
-test('the files of an answer are written, the existing ones are kept', async () => {
+test('the files of an answer are written, the old ones go to the backup', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-files-'));
     await writeFile(path.join(root, 'index.html'), '<!-- mine -->\n', 'utf8');
 
@@ -92,10 +92,40 @@ test('the files of an answer are written, the existing ones are kept', async () 
         ],
     });
 
-    assert.deepEqual(applied.written, ['src/app.js']);
-    assert.deepEqual(applied.skipped.sort(), ['index.html', 'package.json']);
-    assert.equal(await readFile(path.join(root, 'index.html'), 'utf8'), '<!-- mine -->\n');
+    // The answer of the role is the work of the step: the file on the disk is replaced.
+    assert.deepEqual(applied.written.sort(), ['index.html', 'src/app.js']);
+    assert.deepEqual(applied.replaced, ['index.html']);
+    assert.deepEqual(applied.skipped, ['package.json']);
+    assert.equal(await readFile(path.join(root, 'index.html'), 'utf8'), '<main></main>\n');
     assert.match(await readFile(path.join(root, 'src', 'app.js'), 'utf8'), /export const x/);
+});
+
+test('the file the role wrote with its own tool is left alone', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-files-own-'));
+    await writeFile(path.join(root, 'index.html'), '<!-- mine -->\n', 'utf8');
+
+    const applied = await applyFiles({
+        root,
+        files: [{ path: 'index.html', content: '<main></main>\n', language: 'html' }],
+        owned: ['index.html'],
+    });
+
+    assert.deepEqual(applied.written, []);
+    assert.deepEqual(applied.skipped, ['index.html']);
+    assert.equal(await readFile(path.join(root, 'index.html'), 'utf8'), '<!-- mine -->\n');
+});
+
+test('the same content is not written again', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-files-same-'));
+    await writeFile(path.join(root, 'index.html'), '<main></main>\n', 'utf8');
+
+    const applied = await applyFiles({
+        root,
+        files: [{ path: 'index.html', content: '<main></main>\n', language: 'html' }],
+    });
+
+    assert.deepEqual(applied.written, []);
+    assert.deepEqual(applied.skipped, ['index.html']);
 });
 
 test('a file outside the project is not written', async () => {
@@ -153,6 +183,31 @@ test('a step stage runs the role over its steps and writes the reports', async (
     assert.match(stepReportPath(root, { output: { work: './.tmp' } }, 'run-1', 'code-1'), /steps[\\/]code-1\.json$/);
 });
 
+test('a file that could not be written fails the step', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-steps-fail-'));
+    const client = fakeClient([schemaAnswer('code', {
+        summary: 'The entry.',
+        files: [{ path: '../escape.js', content: 'x\n', language: 'js' }],
+        commands: [],
+        notes: '',
+    })]);
+
+    const result = await runStepStage({
+        client,
+        config: { output: { work: './.tmp' } },
+        root,
+        task: 'Make a landing.',
+        role: 'coder',
+        plan: PLAN,
+        runId: 'run-1',
+    });
+
+    // The step is not done: the file of the answer is not on the disk.
+    assert.equal(result.ok, false);
+    assert.deepEqual(result.steps[0].applied.failed, ['../escape.js']);
+    assert.ok(result.warnings.some((item) => /не записаны/.test(item)));
+});
+
 test('a step that is already done is not done again', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-steps-resume-'));
     const config = { output: { work: './.tmp' }, stages: { coder: { maxTurns: 4 } } };
@@ -203,6 +258,43 @@ test('a step that is already done is not done again', async () => {
     });
     assert.ok(asked > 0, 'the model has to be asked again for a step that is not on the disk');
     assert.equal(third.steps[0].resumed, undefined);
+});
+
+test('the request of a step tells the role the order of the work', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-steps-order-'));
+    await writeFile(path.join(root, 'package.json'), JSON.stringify({ scripts: { build: 'vite build' } }), 'utf8');
+    let seen = null;
+    const client = fakeClient([
+        (body) => {
+            seen = body;
+            return schemaAnswer('code', {
+                summary: 'The entry.',
+                files: [{ path: 'src/main.js', content: 'export const x = 1;\n', language: 'js' }],
+                commands: [],
+                notes: '',
+            });
+        },
+    ]);
+
+    const result = await runStepStage({
+        client,
+        config: { output: { work: './.tmp' } },
+        root,
+        task: 'Make a landing.',
+        role: 'coder',
+        plan: PLAN,
+        runId: 'run-1',
+    });
+
+    assert.equal(result.ok, true);
+    const text = seen.input[0].content[0].text;
+    assert.match(text, /The order of the work/);
+    assert.match(text, /index\.html/);
+    assert.match(text, /search_files/);
+    // The scripts of the project are named: the role does not have to guess them.
+    assert.match(text, /The scripts of the project: build/);
+    // The work is checked with a command, not with the eye.
+    assert.match(text, /npm run build/);
 });
 
 test('a plan without a step of the role skips the stage', async () => {

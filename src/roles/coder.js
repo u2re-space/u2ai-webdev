@@ -70,6 +70,9 @@ ${INPUTS_IN_CONTEXT}
   created.
 - Read the files you change first, and follow the style of the project: its naming, its module
   format, its import order, its lint rules.
+- The work is checked by the compiler, not by the eye: run the build or the test of the project
+  with the \`run_command\` tool and fix what it reports. Never judge the syntax of the code by
+  reading it.
 - Write the code for the browser that the project supports, and for the state the interface has:
   the long text, the empty list, the slow connection, the keyboard.
 - The names say what the thing is. The comments say why, not what.
