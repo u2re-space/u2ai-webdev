@@ -14,7 +14,7 @@ import path from 'node:path';
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 
 import { cropName, cropCandidates, cropRelative, resolveCropFile } from '../src/inputs/crops.js';
-import { pictureName, pictureCrops, picturesStage, pictureKinds } from '../src/stages/pictures.js';
+import { pictureName, pictureCrops, picturesStage, pictureSubject, pictureKinds } from '../src/stages/pictures.js';
 
 /**
  * A sheet of measurements with three crops.
@@ -51,6 +51,8 @@ function config() {
             command: 'background',
             commands: {},
             prompts: {},
+            subject: '{name}',
+            subjects: {},
             alphaMode: 'auto',
             dir: 'assets/import',
             max: 6,
@@ -118,17 +120,33 @@ test('the file of a crop is found next to the sheet and under the working direct
     assert.equal(cropRelative(root, path.join(root, 'a', 'b.png')), 'a/b.png');
 });
 
+test('the subject of the cut-out names the object of the crop', () => {
+    const crop = { name: 'bishop artwork', kind: 'image', use: 'Hero artwork reference.' };
+    assert.equal(pictureSubject(crop, { subject: '{name}' }), 'bishop');
+    assert.equal(pictureSubject(crop, { subject: '{kind}' }), 'image');
+    assert.equal(pictureSubject(crop, { subject: '{use}' }), 'Hero artwork reference.');
+
+    // The subject of a kind wins over the general one.
+    assert.equal(pictureSubject(crop, { subject: '{name}', subjects: { image: 'the chess bishop' } }), 'the chess bishop');
+
+    // Nothing to say: no subject, no flag.
+    assert.equal(pictureSubject(crop, {}), '');
+    assert.equal(pictureSubject(crop, { subject: '   ' }), '');
+});
+
 test('the stage of the pictures prepares the crops with the bridge of the images', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-pictures-'));
     await mkdir(path.join(root, 'measurements', 'crops'), { recursive: true });
     await writeFile(path.join(root, 'measurements', 'crops', '08-region-bishop-artwork.png'), 'png');
 
-    // The stand-in for `ai-image`: it writes the file the stage asked for.
+    // The stand-in for `ai-image`: it writes the file the stage asked for and remembers the call.
+    const log = path.join(root, 'call.json');
     const fake = path.join(root, 'fake-ai-image.js');
     await writeFile(fake, [
         "import { writeFile } from 'node:fs/promises';",
         "const args = process.argv.slice(2);",
         "const out = args[args.indexOf('--out') + 1];",
+        `await writeFile(${JSON.stringify(log)}, JSON.stringify(args));`,
         "await writeFile(out, 'prepared');",
         "process.stdout.write('ok');",
     ].join('\n'));
@@ -146,6 +164,12 @@ test('the stage of the pictures prepares the crops with the bridge of the images
     assert.equal(result.pictures[0].file, 'assets/import/bishop-artwork.png');
     const written = await readFile(path.join(root, 'assets', 'import', 'bishop-artwork.png'), 'utf8');
     assert.equal(written, 'prepared');
+
+    // The subject goes to the bridge: the fragments of the neighbours have to go away.
+    const call = JSON.parse(await readFile(log, 'utf8'));
+    assert.equal(call[0], 'background');
+    assert.equal(call[call.indexOf('--subject') + 1], 'black chess bishop');
+    assert.equal(call[call.indexOf('--alpha-mode') + 1], 'auto');
 });
 
 test('the stage of the pictures keeps the picture that is already there', async () => {

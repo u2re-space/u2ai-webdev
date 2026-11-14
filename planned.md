@@ -417,6 +417,9 @@ CLI `ai-webdev` (`@u2ai/webdev`) с собственным конфигом `~/.
 - [x] `src/config/defaults.js`, `constants.js`, `validate.js` — секция `pictures`, стадия в
       перечне, проверка значений
 - [x] `src/inputs/index.js` — блок подготовленных картинок в контексте ролей
+- [x] Предмет вырезания: `pictureSubject()` собирает, что оставить (`{name}`, `{use}`,
+      `{kind}`), и передаёт мосту `ai-image` флагом `--subject` — лишние детали (кусок доски
+      в пешке, кусок пешки в доске) уходят
 - [x] Проверка: `test/pictures.test.js`, тест `stopAfterStage` в `test/cli.test.js`
 
 ---

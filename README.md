@@ -101,6 +101,7 @@ the prepared picture in the context of the run.
     "kinds": ["image", "illustration", "artwork", "photo", "ornament"],
     "command": "background",
     "alphaMode": "auto",
+    "subject": "{name}",
     "dir": "assets/import",
     "max": 6
   }
@@ -109,10 +110,16 @@ the prepared picture in the context of the run.
 
 The kinds say which crops of the sheet are pictures. The command is the one of `ai-image`:
 `background`, `alpha`, `trim` or `edit`; the section `commands` names another command for a
-kind, and the section `prompts` names the prompt of the command `edit`. The stage never stops
-the run: a crop that cannot be prepared is reported, and the crop stays as it was. A picture
-that is already in the directory is not prepared again — the model is not asked for the same
-cut twice.
+kind, and the section `prompts` names the prompt of the command `edit`.
+
+The subject is what the cut-out has to keep: `{name}` is the name of the item in the sheet,
+`{use}` is its use, `{kind}` is its kind. It is passed to `ai-image` as `--subject`, so the
+model knows that the piece of the board that fell into the cut of the bishop, and the piece of
+the bishop that fell into the cut of the board, are not part of the object and go away.
+
+The stage never stops the run: a crop that cannot be prepared is reported, and the crop stays
+as it was. A picture that is already in the directory is not prepared again — the model is not
+asked for the same cut twice.
 
 ## The roles
 
@@ -209,7 +216,7 @@ The sections of the file:
 | `stages` | Every stage: `enabled` and `maxTurns`. |
 | `output` | Where the artifacts go: `dir` (`.ai/`) and `work` (`.tmp/`). |
 | `inputs` | The names of the input files. |
-| `pictures` | The crops of the reference that are prepared: the kinds, the command of `ai-image`, the directory, the limit. |
+| `pictures` | The crops of the reference that are prepared: the kinds, the command of `ai-image`, the subject, the directory, the limit. |
 | `memory` | The permanent memory: the file, the scope, the limit, the summaries of the files, the finished tasks. |
 | `components` | The local registry: the directory, the index, the vendor directory. |
 | `bridges` | The sibling CLIs: `decompose`, `measure`, `image` — each may be switched off. |

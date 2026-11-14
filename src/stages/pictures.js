@@ -17,7 +17,7 @@
  *
  * @depends node:path, node:fs/promises, inputs/crops, agent/bridges, agent/paths
  * @usedBy stages/index, pipeline
- * @exports picturesStage, pictureName, pictureKinds
+ * @exports picturesStage, pictureName, pictureCrops, pictureSubject, pictureKinds
  * @ai.tags stages, pictures, images
  * @ai.hint io
  * @changed 2026-11-14 The crops of the reference are prepared with `ai-image`.
@@ -55,6 +55,35 @@ export function pictureName(crop) {
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-+|-+$/g, '')
         || 'picture';
+}
+
+/**
+ * The subject of the cut-out: what the model has to keep.
+ *
+ * A crop of a screenshot holds more than the object: the piece of the neighbour that fell
+ * into the cut. The subject names the object, so the model knows what has to stay and what
+ * has to go.
+ *
+ * @param {{ name?: string, kind?: string, use?: string }} crop the crop of the sheet
+ * @param {object} [settings] the section `pictures` of the config
+ * @returns {string} the subject, or an empty string when there is nothing to say
+ * @exports
+ * @ai.hint pure
+ */
+export function pictureSubject(crop = {}, settings = {}) {
+    const template = String(settings.subjects?.[crop?.kind] ?? settings.subject ?? '').trim();
+    if (!template) return '';
+    // The words that name the kind of the cut describe the crop, not the object.
+    const name = String(crop?.name ?? '')
+        .replace(/\b(artwork|picture|image|photo|region|element|crop|reference|screenshot)s?\b/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    return template
+        .replace(/\{name\}/g, name)
+        .replace(/\{use\}/g, String(crop?.use ?? ''))
+        .replace(/\{kind\}/g, String(crop?.kind ?? ''))
+        .replace(/\s+/g, ' ')
+        .trim();
 }
 
 /**
@@ -165,13 +194,18 @@ export async function picturesStage({
         }
 
         const command = String(settings.commands?.[crop.kind] ?? settings.command ?? 'background');
+        // The subject tells the model what to keep: the fragments of the neighbours go away.
+        const subject = pictureSubject(crop, settings);
         const args = [command, path.relative(root, source).split(path.sep).join('/')];
         if (command === 'edit') {
-            args.push(String(settings.prompts?.[crop.kind] ?? settings.prompts?.default ?? DEFAULT_PROMPT));
+            let prompt = String(settings.prompts?.[crop.kind] ?? settings.prompts?.default ?? DEFAULT_PROMPT);
+            if (subject) prompt += ` Keep only the ${subject}; every other object disappears.`;
+            args.push(prompt);
         }
         args.push('--out', out.split(path.sep).join('/'));
         if (command === 'background' || command === 'alpha') {
             args.push('--alpha-mode', String(settings.alphaMode ?? 'auto'));
+            if (subject) args.push('--subject', subject);
         }
 
         const result = await runBridge({ name: 'ai-image', args, config, cwd: root, env });

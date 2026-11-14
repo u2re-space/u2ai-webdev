@@ -236,6 +236,10 @@ function validatePictures(pictures, fail) {
   for (const [key, value] of Object.entries(pictures.prompts ?? {})) {
     if (typeof value !== 'string') fail(`${where}.prompts.${key}: строка`);
   }
+  if (typeof pictures.subject !== 'string') fail(`${where}.subject: строка`);
+  for (const [key, value] of Object.entries(pictures.subjects ?? {})) {
+    if (typeof value !== 'string') fail(`${where}.subjects.${key}: строка`);
+  }
   if (typeof pictures.alphaMode !== 'string' || !pictures.alphaMode.trim()) fail(`${where}.alphaMode: непустая строка`);
   if (typeof pictures.dir !== 'string' || !pictures.dir.trim()) fail(`${where}.dir: непустая строка`);
   if (!(Number.isSafeInteger(pictures.max) && pictures.max > 0)) fail(`${where}.max: целое > 0`);

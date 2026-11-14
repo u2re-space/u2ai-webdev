@@ -199,6 +199,16 @@ export const defaults = {
     commands: {},
     /** The prompt of the command `edit`, by kind. */
     prompts: {},
+    /**
+     * What the cut-out has to keep: the subject of the picture.
+     *
+     * `{name}` is the name of the item in the sheet of the measurements, `{use}` is its
+     * use, `{kind}` is its kind. The words that name the kind of the cut (`artwork`,
+     * `picture`, `region`) are dropped: they describe the crop, not the object.
+     */
+    subject: '{name}',
+    /** The subject of a kind, when it differs from the subject above. */
+    subjects: {},
     /** The mode of the alpha channel: auto | mask | contour | flat | key | off. */
     alphaMode: 'auto',
     /** Where the prepared pictures land, relative to the project. */
