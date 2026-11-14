@@ -66,6 +66,9 @@ export function functionTool(name, description, parameters) {
  * @param {object[]} [params.tools] function tools
  * @param {object|null} [params.schema] JSON schema the answer must follow
  * @param {string} [params.schemaName] name of the schema tool
+ * @param {'auto'|'tool'|'format'} [params.schemaChannel] where the schema is put:
+ *   `tool` makes it a function the model calls, `format` pins the text of the answer to it,
+ *   `auto` picks `tool` when the role has other tools and `format` otherwise.
  * @param {string|null} [params.effort] reasoning effort
  * @param {string|null} [params.summary] reasoning summary mode
  * @param {string|null} [params.mode] gateway reasoning mode
@@ -85,6 +88,7 @@ export function buildResponsesBody({
     tools = null,
     schema = null,
     schemaName = 'response',
+    schemaChannel = 'auto',
     strict = true,
     effort = null,
     summary = null,
@@ -120,11 +124,22 @@ export function buildResponsesBody({
     }
 
     const toolList = Array.isArray(tools) ? tools.filter((tool) => isRecord(tool)) : [];
-    if (isRecord(schema)) {
+    const hasSchema = isRecord(schema);
+
+    // Where the schema travels. A role that has tools needs the schema to be a tool as well:
+    // with a `text.format` rule in place the model answers straight away with the skeleton of
+    // the schema instead of working, and the tools are never called.
+    const channel = !hasSchema
+        ? 'none'
+        : (schemaChannel === 'auto' ? (toolList.length ? 'tool' : 'format') : schemaChannel);
+
+    if (hasSchema && channel !== 'none') {
+        // The schema travels as a tool in every channel: a host that does not know the
+        // `text.format` rule still answers with the call of the tool.
         toolList.push({
             type: 'function',
             name: schemaName,
-            description: `Answer with the ${schemaName} JSON schema.`,
+            description: `Submit the final ${schemaName}. Call this tool exactly once, with the complete answer; do not answer in prose.`,
             parameters: schema,
             strict,
         });
@@ -133,7 +148,7 @@ export function buildResponsesBody({
     if (toolChoice) body.tool_choice = toolChoice;
     if (parallelToolCalls === true) body.parallel_tool_calls = true;
 
-    if (isRecord(schema)) {
+    if (hasSchema && channel === 'format') {
         body.text = { format: { type: 'json_schema', name: schemaName, schema, strict } };
     }
 

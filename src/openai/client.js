@@ -21,6 +21,7 @@ import {
     responsesRouteUnsupported, stripRejectedFields, toChatBody,
 } from './chat.js';
 import { buildResponsesBody } from './responses.js';
+import { getModelProfile } from '../model/profiles.js';
 
 /** Statuses worth another try on the same backend. */
 const RETRYABLE_STATUS = new Set([408, 409, 425, 429, 500, 502, 503, 504]);
@@ -367,17 +368,25 @@ export async function createClient({ config, env = process.env, signal = null, o
      */
     async function responsesCreate({
         model = null, instructions = null, input = null, parts = null, tools = null,
-        schema = null, schemaName = 'response', strict = true, effort = null, summary = null,
+        schema = null, schemaName = 'response', schemaChannel = null, strict = true,
+        effort = null, summary = null,
         mode = null, maxOutputTokens = null, temperature = null, store = false, truncation = null,
         verbosity = null, stream = false, signal: callSignal = null, onEvent: callEvent = null,
         previousResponseId = null, toolChoice = null, parallelToolCalls = null,
     } = {}) {
+        // The channel of the schema comes from the profile of the model: a model that is
+        // pinned to a JSON answer never calls a tool, and the profile knows which models
+        // need the pin and which ones have to stay free to call their tools.
+        const wanted = model ?? config?.model ?? null;
+        const profile = getModelProfile(wanted, config);
+        const channel = schemaChannel ?? profile?.schemaChannel ?? 'auto';
         const body = buildResponsesBody({
-            model, instructions, input, parts, tools, schema, schemaName, strict, effort, summary, mode,
+            model, instructions, input, parts, tools, schema, schemaName, schemaChannel: channel, strict,
+            effort, summary, mode,
             maxOutputTokens, temperature, store, truncation, verbosity, stream, previousResponseId,
             toolChoice, parallelToolCalls,
         });
-        const wantedModel = model ?? config?.model ?? null;
+        const wantedModel = wanted;
 
         try {
             const answer = await call('responses', {

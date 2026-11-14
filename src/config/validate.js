@@ -266,11 +266,12 @@ export function validateConfig(config) {
   for (const [modelId, profile] of Object.entries(c.models)) {
     if (!isRecord(profile)) fail(`models.${modelId} должен быть объектом`);
     for (const key of Object.keys(profile)) {
-      if (!['window', 'maxOutput', 'ceiling'].includes(key)) fail(`models.${modelId}.${key}: неизвестное поле`);
+      if (!['window', 'maxOutput', 'ceiling', 'schemaChannel'].includes(key)) fail(`models.${modelId}.${key}: неизвестное поле`);
     }
     if (profile.window != null && !(Number.isSafeInteger(profile.window) && profile.window > 0)) fail(`models.${modelId}.window: целое > 0`);
     if (profile.maxOutput != null && !(Number.isSafeInteger(profile.maxOutput) && profile.maxOutput > 0)) fail(`models.${modelId}.maxOutput: целое > 0`);
     if (profile.ceiling != null && !ENUMS.reasoningEfforts.includes(profile.ceiling)) fail(`models.${modelId}.ceiling: ${ENUMS.reasoningEfforts.join(' | ')}`);
+    if (profile.schemaChannel != null && !['auto', 'tool', 'format'].includes(profile.schemaChannel)) fail(`models.${modelId}.schemaChannel: auto | tool | format`);
   }
 
   if (!isRecord(c.reasoning)) fail('reasoning должен быть объектом');

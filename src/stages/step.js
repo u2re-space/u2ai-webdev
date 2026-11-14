@@ -34,6 +34,20 @@ import { runId, runFile, writeJsonFile, readJsonFile } from './workspace.js';
 export const STEPS_DIR = 'steps';
 
 /**
+ * The extensions of the files that hold bytes and not text.
+ *
+ * A model that answers with a picture in the list of the files describes it in words; writing
+ * those words into the file would break the picture. The file of a picture belongs to the
+ * stage of the pictures, not to the text of a role.
+ * @type {ReadonlySet<string>}
+ */
+const BINARY_EXTENSIONS = new Set([
+    'png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'bmp', 'ico', 'tif', 'tiff',
+    'woff', 'woff2', 'ttf', 'otf', 'eot', 'mp3', 'mp4', 'webm', 'ogg', 'wav',
+    'pdf', 'zip', 'gz', 'tar', 'exe', 'dll', 'so', 'dylib',
+]);
+
+/**
  * The steps of the plan that belong to a role.
  * @param {object} plan
  * @param {string} role
@@ -78,6 +92,12 @@ export async function applyFiles({
         }
         if (skip.includes(path.basename(rel))) {
             skipped.push(rel);
+            continue;
+        }
+        if (BINARY_EXTENSIONS.has(path.extname(rel).slice(1).toLowerCase())) {
+            // The bytes of a picture are not the text of an answer: the file is left alone.
+            skipped.push(rel);
+            warnings.push(`Файл ${rel} не тронут: это не текстовый файл.`);
             continue;
         }
         try {

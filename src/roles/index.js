@@ -137,6 +137,23 @@ export function syntaxCorrection(errors = []) {
 const WRITE_TOOLS = Object.freeze(['write_file', 'replace_text', 'copy_path', 'generate_svg']);
 
 /**
+ * Whether the answer of a write tool says that the file is on the disk.
+ *
+ * A tool that refused the write (the file is there, the path is out of the project, the tool
+ * failed) has not done the work: the role that only failed writes has to be told to try again.
+ * @param {unknown} output the answer of the tool
+ * @returns {boolean}
+ * @ai.hint pure
+ */
+function wroteSomething(output) {
+    const text = String(output ?? '').trim();
+    if (!text) return false;
+    if (/^the tool failed:/i.test(text)) return false;
+    if (/запрещена|не найден|уже существует|не удалось|ошибка|отказ/i.test(text)) return false;
+    return true;
+}
+
+/**
  * A file of an answer that holds nothing: empty, or a marker of a work that is not done.
  * @param {object} file
  * @returns {boolean}
@@ -303,6 +320,12 @@ export async function runRole({
     let correctedWork = false;
     let workCorrections = 0;
     let fallback = null;
+    // The channel of the schema: where the answer of the role travels. A model that is
+    // pinned to a JSON answer never calls a tool: it describes the work instead of doing it.
+    // The mode comes from the profile of the model, and the role moves the schema into the
+    // tool channel when it has to write and only describes the work.
+    let schemaChannel = null;
+    let withSchema = true;
     // The files the step names: the role has to write them.
     const wantedFiles = Array.isArray(context?.step?.files)
         ? context.step.files.map((item) => String(item ?? '').trim()).filter(Boolean)
@@ -310,17 +333,22 @@ export async function runRole({
 
     /**
      * One call of the model: the request, the answer and the calls it asks for.
-     * @param {{ tools?: object[] }} [options] the tools of the call; the schema is always there
+     * @param {{ tools?: object[], schema?: object|null, schemaChannel?: string|null }} [options]
      * @returns {Promise<{ parsed: object, work: object[] }>}
      * @ai.hint io
      */
-    const ask = async ({ tools: toolList = specs } = {}) => {
+    const ask = async ({
+        tools: toolList = specs,
+        schema: schemaOverride = undefined,
+        schemaChannel: channelOverride = undefined,
+    } = {}) => {
         const raw = await client.responses.create({
             model: definition.model,
             instructions,
             input: items,
             tools: toolList,
-            schema,
+            schema: schemaOverride === undefined ? (withSchema ? schema : null) : schemaOverride,
+            schemaChannel: channelOverride === undefined ? schemaChannel : channelOverride,
             schemaName,
             effort: definition.effort,
             summary: definition.summary,
@@ -337,6 +365,9 @@ export async function runRole({
         if (answerCall) parsed.data = answerCall.arguments ?? parsed.data;
         return { parsed, work };
     };
+
+    // The writes that really wrote a file.
+    const writes = [];
 
     while (turns < limit) {
         turns += 1;
@@ -355,7 +386,7 @@ export async function runRole({
 
             // The work of a step is the files it names. An answer without them is a
             // description of the work: the role is told to do it.
-            const wrote = calls.some((call) => WRITE_TOOLS.includes(call.name));
+            const wrote = writes.length > 0;
             const files = Array.isArray(answer?.data?.files) ? answer.data.files : [];
             const rest = ['dependencies', 'scripts'].reduce((sum, key) => (
                 sum + (Array.isArray(answer?.data?.[key]) ? answer.data[key].length : 0)
@@ -369,8 +400,14 @@ export async function runRole({
                 if (workCorrections === 1) {
                     correctedWork = true;
                     items.push({ role: 'user', content: [textPart(`${WORK_CORRECTION}${list}`)] });
+                    // The schema moves into the tool channel: a model that is pinned to a
+                    // JSON answer describes the work instead of doing it.
+                    schemaChannel = 'tool';
                 } else {
                     items.push({ role: 'user', content: [textPart(`${WORK_ORDER}${list}`)] });
+                    // The schema is dropped too: the only way to finish is the tool of the work.
+                    schemaChannel = 'tool';
+                    withSchema = false;
                 }
                 continue;
             }
@@ -388,6 +425,7 @@ export async function runRole({
             } catch (error) {
                 output = `The tool failed: ${error?.message ?? String(error)}`;
             }
+            if (WRITE_TOOLS.includes(call.name) && wroteSomething(output)) writes.push(call);
             const callId = call.callId ?? call.id ?? `${call.name}-${calls.length}`;
             items.push({
                 type: 'function_call',
@@ -415,7 +453,8 @@ export async function runRole({
         items.push({ role: 'user', content: [textPart(FINAL_ANSWER)] });
         let final = null;
         try {
-            ({ parsed: final } = await ask({ tools: [] }));
+            // The schema comes back for the last turn: it is the answer of the role.
+            ({ parsed: final } = await ask({ tools: [], schema, schemaChannel: 'format' }));
         } catch (error) {
             final = null;
         }

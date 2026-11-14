@@ -108,6 +108,20 @@ test('a file outside the project is not written', async () => {
     assert.ok(applied.warnings.some((item) => /вне рабочего каталога/.test(item)));
 });
 
+test('the words of a model never land in a picture', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-binary-'));
+    const applied = await applyFiles({
+        root,
+        files: [
+            { path: 'assets/picture.png', content: 'a picture in words', language: 'binary' },
+            { path: 'assets/icon.svg', content: '<svg></svg>\n', language: 'svg' },
+        ],
+    });
+    assert.deepEqual(applied.written, ['assets/icon.svg']);
+    assert.deepEqual(applied.skipped, ['assets/picture.png']);
+    assert.ok(applied.warnings.some((item) => /не текстовый файл/.test(item)));
+});
+
 test('a step stage runs the role over its steps and writes the reports', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-steps-'));
     const client = fakeClient([schemaAnswer('code', {

@@ -304,6 +304,25 @@ everything else stays on the defaults.
 The precedence is: defaults → `~/.ai-webdev/config.json` → `--config <file>` → `AI_WEBDEV_*`
 environment → the flags of the command.
 
+The `models` section holds the profile of a model: the window, the output cap, the ceiling of
+the effort and the channel of the schema.
+
+```json
+{
+  "models": {
+    "moonshotai/kimi-k3.1-pro": { "schemaChannel": "auto" }
+  }
+}
+```
+
+The channel of the schema says how the answer of a role reaches the code: `tool` makes the
+schema a function the model calls, `format` pins the text of the answer to it, `auto` picks
+`tool` when the role has other tools and `format` otherwise. The channel matters because a
+model that is pinned to a JSON answer never calls a tool: it describes the work instead of
+doing it. `auto` is the channel of a model that calls its tools well, `format` is the channel
+of a model that needs the pin. The role moves the schema into the tool channel by itself when
+the role has to write and only describes the work.
+
 The sections of the file:
 
 | Section | What it holds |

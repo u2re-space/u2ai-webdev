@@ -158,6 +158,111 @@ test('the roles that may measure the reference have the tool of the measurer', (
     assert.ok(specs.some((spec) => spec.name === 'call_ai_measure'));
 });
 
+test('a role that answers with the schema and writes nothing is told to work, and the JSON format is dropped', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-loop-work-'));
+    const home = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-home-'));
+    const env = { HOME: home, USERPROFILE: home };
+
+    const api = await mockApi([
+        // The model answers with the schema of the role and does no work.
+        textAnswer(JSON.stringify({
+            summary: '', files: [], landmarks: [], accessibility: [], notes: '',
+        })),
+        toolAnswer('write_file', { path: 'index.html', content: '<h1>Привет</h1>' }),
+        schemaAnswer('markup', {
+            summary: 'The page is written.',
+            files: [{ path: 'index.html', content: '<h1>Привет</h1>', language: 'html' }],
+            landmarks: ['main'],
+            accessibility: [],
+            notes: '',
+        }),
+    ]);
+
+    try {
+        const config = structuredClone(defaults);
+        config.model = 'minimax/minimax-m3.1-flash';
+        config.backends = [{ baseURL: api.url, apiKey: 'test-key' }];
+        config.reasoning.effort = 'low';
+        const client = await createClient({ config, env });
+
+        const answer = await runRole({
+            client,
+            config,
+            role: 'markup',
+            input: 'Make the page.',
+            context: {
+                task: 'Make the page.',
+                step: { id: 's1', title: 'Markup', files: ['index.html'], criteria: [] },
+            },
+            root,
+            env,
+            requireFiles: true,
+        });
+
+        assert.equal(answer.stopped, 'completed');
+        assert.ok(answer.toolCalls.some((call) => call.name === 'write_file'));
+        assert.equal(await readFile(path.join(root, 'index.html'), 'utf8'), '<h1>Привет</h1>');
+        // The first request pins the answer to the schema, the second one does not: a model
+        // that is pinned to a JSON answer never calls a tool.
+        assert.ok(api.requests[0].text?.format, 'the first request pins the JSON format');
+        assert.equal(api.requests[1].text?.format, undefined, 'the second request has no JSON format');
+        // The correction names the file of the step.
+        const second = api.requests[1].input.map((item) => JSON.stringify(item)).join('\n');
+        assert.match(second, /not done the work yet/);
+        assert.match(second, /index\.html/);
+    } finally {
+        api.close();
+    }
+});
+
+test('a model whose profile leaves the format free answers with its tools', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-loop-free-'));
+    const home = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-home-'));
+    const env = { HOME: home, USERPROFILE: home };
+
+    const api = await mockApi([
+        toolAnswer('write_file', { path: 'index.html', content: '<h1>Привет</h1>' }),
+        schemaAnswer('markup', {
+            summary: 'The page is written.',
+            files: [{ path: 'index.html', content: '<h1>Привет</h1>', language: 'html' }],
+            landmarks: ['main'],
+            accessibility: [],
+            notes: '',
+        }),
+    ]);
+
+    try {
+        const config = structuredClone(defaults);
+        config.model = 'moonshotai/kimi-k3.1-pro';
+        config.backends = [{ baseURL: api.url, apiKey: 'test-key' }];
+        config.reasoning.effort = 'low';
+        const client = await createClient({ config, env });
+
+        const answer = await runRole({
+            client,
+            config,
+            role: 'markup',
+            input: 'Make the page.',
+            context: {
+                task: 'Make the page.',
+                step: { id: 's1', title: 'Markup', files: ['index.html'], criteria: [] },
+            },
+            root,
+            env,
+            requireFiles: true,
+        });
+
+        assert.equal(answer.stopped, 'completed');
+        assert.equal(answer.toolCalls.length, 1);
+        // The request with tools does not pin the answer to the schema: the tools stay
+        // reachable for the model, and the schema travels as a tool of its own.
+        assert.equal(api.requests[0].text?.format, undefined);
+        assert.ok(api.requests[0].tools.some((tool) => tool.name === 'markup'));
+    } finally {
+        api.close();
+    }
+});
+
 test('the schema of a role comes from the catalogue', () => {
     assert.ok(roleSchema('planner'));
     assert.equal(roleSchema('planner').additionalProperties, false);

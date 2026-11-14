@@ -9,17 +9,18 @@
 import { ENUMS } from '../config/constants.js';
 
 /**
- * @typedef {{ window: number, maxOutput: number, ceiling: string|null, efforts: string[]|null }} ModelProfile
+ * @typedef {{ window: number, maxOutput: number, ceiling: string|null, efforts: string[]|null,
+ *   schemaChannel: string }} ModelProfile
  */
 
 /** Built-in model profiles. A ceiling of `null` means "no built-in limit". */
 export const MODEL_PROFILES = Object.freeze({
-    'minimax/minimax-m3.1-flash': { window: 8_388_608, maxOutput: 65_536, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'] },
-    'moonshotai/kimi-k3.1-pro': { window: 8_388_608, maxOutput: 65_536, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'] },
-    'openai/gpt-6.1-sol': { window: 4_194_304, maxOutput: 32_768, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'] },
-    'openai/gpt-6.1-terra': { window: 2_097_152, maxOutput: 16_384, ceiling: 'high', efforts: ['low', 'medium', 'high'] },
-    'openai/gpt-6-luna': { window: 1_048_576, maxOutput: 8_192, ceiling: 'medium', efforts: ['low', 'medium'] },
-    'openai/gpt-image-2.6-sunburst': { window: 0, maxOutput: 0, ceiling: null, efforts: [] },
+    'minimax/minimax-m3.1-flash': { window: 8_388_608, maxOutput: 65_536, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'], schemaChannel: 'format' },
+    'moonshotai/kimi-k3.1-pro': { window: 8_388_608, maxOutput: 65_536, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'], schemaChannel: 'auto' },
+    'openai/gpt-6.1-sol': { window: 4_194_304, maxOutput: 32_768, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'], schemaChannel: 'format' },
+    'openai/gpt-6.1-terra': { window: 2_097_152, maxOutput: 16_384, ceiling: 'high', efforts: ['low', 'medium', 'high'], schemaChannel: 'format' },
+    'openai/gpt-6-luna': { window: 1_048_576, maxOutput: 8_192, ceiling: 'medium', efforts: ['low', 'medium'], schemaChannel: 'format' },
+    'openai/gpt-image-2.6-sunburst': { window: 0, maxOutput: 0, ceiling: null, efforts: [], schemaChannel: 'format' },
 });
 
 /** The profile of a model that is not in the table. */
@@ -28,6 +29,7 @@ const DEFAULT_PROFILE = Object.freeze({
     maxOutput: 16_384,
     ceiling: 'medium',
     efforts: ['low', 'medium', 'high'],
+    schemaChannel: 'auto',
 });
 
 /**
@@ -46,6 +48,7 @@ export function getModelProfile(model, config = null) {
         maxOutput: Number.isSafeInteger(override.maxOutput) ? override.maxOutput : base.maxOutput,
         ceiling: override.ceiling === null ? null : (override.ceiling ?? base.ceiling),
         efforts: Array.isArray(override.efforts) ? override.efforts : base.efforts,
+        schemaChannel: typeof override.schemaChannel === 'string' ? override.schemaChannel : base.schemaChannel,
     };
     return merged;
 }
