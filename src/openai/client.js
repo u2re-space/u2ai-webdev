@@ -21,6 +21,7 @@ import {
     responsesRouteUnsupported, stripRejectedFields, toChatBody,
 } from './chat.js';
 import { buildResponsesBody } from './responses.js';
+import { createApiLogger, redactBody } from './log.js';
 import { getModelProfile, snapEffort } from '../model/profiles.js';
 
 /** Statuses worth another try on the same backend. */
@@ -184,6 +185,11 @@ export async function createClient({ config, env = process.env, signal = null, o
         ? config.limits.requestRetries
         : (Number.isSafeInteger(config?.retries) ? config.retries : defaults.retries);
     const announce = (event) => { try { onEvent?.(event); } catch { /* an observer never breaks a request */ } };
+
+    // The log of the calls: one JSON record per request, with the whole chain of hosts.
+    const logger = createApiLogger({
+        dir: config?.logging?.enabled ? (config?.logging?.dir ?? null) : null,
+    });
 
     /**
      * Build an ApiError out of a failed response.
@@ -356,22 +362,44 @@ export async function createClient({ config, env = process.env, signal = null, o
             announce({ type: 'request.wait', path, model, elapsedMs: Date.now() - waitStarted });
         }, WAIT_INTERVAL_MS);
         if (typeof waitTimer.unref === 'function') waitTimer.unref();
+        // The record of the call: the chain of hosts, the answers and the times.
+        const record = {
+            path,
+            model: model ?? null,
+            kind,
+            stream: !!stream,
+            request: redactBody(body),
+            attempts: [],
+        };
         let lastError = null;
         try {
             for (const backend of chain) {
                 if (supports && backend.supports?.[supports] === false) {
                     announce({ type: 'request.skip', backend: backend.baseURL, reason: `no ${supports} route` });
+                    record.attempts.push({ backend: backend.baseURL, skipped: true, reason: `no ${supports} route` });
                     continue;
                 }
+                const attemptStarted = Date.now();
                 try {
                     const answer = await callBackend(backend, path, {
                         method, body, rawBody, contentType, signal: callSignal, stream, onEvent: callEvent, model,
                     });
+                    record.attempts.push({ backend: backend.baseURL, ok: true, durationMs: Date.now() - attemptStarted });
+                    record.response = redactBody(answer);
+                    record.durationMs = Date.now() - waitStarted;
+                    await writeRecord(record);
                     return answer;
                 } catch (error) {
                     lastError = error;
                     const status = error?.status;
                     announce({ type: 'request.error', backend: backend.baseURL, status: status ?? null, error: error.message });
+                    record.attempts.push({
+                        backend: backend.baseURL,
+                        ok: false,
+                        status: status ?? null,
+                        error: error.message,
+                        durationMs: Date.now() - attemptStarted,
+                    });
                     if (error?.name === 'AbortError' || error?.code === 'ABORTED') throw error;
                     // A host without the route is not a host to retry: the caller picks another transport.
                     if (supports === 'responses' && responsesRouteUnsupported(error)) break;
@@ -381,7 +409,27 @@ export async function createClient({ config, env = process.env, signal = null, o
         } finally {
             clearInterval(waitTimer);
         }
+        record.durationMs = Date.now() - waitStarted;
+        record.error = lastError?.message ?? 'No backend answered the request.';
+        await writeRecord(record);
         throw lastError ?? new ApiError('No backend answered the request.', { code: 'NO_BACKEND' });
+    }
+
+    /**
+     * Write the record of a call to the log.
+     *
+     * The log is a witness, not a judge: a broken log must never break a request.
+     * @param {object} record the record of the call
+     * @returns {Promise<void>}
+     * @ai.hint io
+     */
+    async function writeRecord(record) {
+        if (!logger) return;
+        try {
+            await logger.write(record);
+        } catch (error) {
+            announce({ type: 'warning', message: `The log of the API was not written: ${error?.message ?? error}` });
+        }
     }
 
     /**

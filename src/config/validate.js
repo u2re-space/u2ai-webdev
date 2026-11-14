@@ -306,6 +306,11 @@ export function validateConfig(config) {
     if (!(Number.isSafeInteger(value) && value > 0)) fail(`limits.${key}: положительное целое`);
   }
 
+  if (!isRecord(c.logging)) fail('logging должен быть объектом');
+  for (const key of Object.keys(c.logging)) if (!(key in defaults.logging)) fail(`logging.${key}: неизвестное поле`);
+  if (typeof c.logging.enabled !== 'boolean') fail('logging.enabled: true | false');
+  if (typeof c.logging.dir !== 'string' || !c.logging.dir.trim()) fail('logging.dir: непустая строка');
+
   for (const [key, value] of Object.entries(c.tools)) {
     if (!(key in defaults.tools) || typeof value !== 'boolean') fail(`tools.${key}: true | false (известные: ${Object.keys(defaults.tools).join(', ')})`);
   }

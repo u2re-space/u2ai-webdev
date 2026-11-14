@@ -92,6 +92,20 @@ export const defaults = {
   modelsBackends: {},
   fallback: { enabled: true, models: {} },
 
+  // --- logging ---------------------------------------------------------------
+  /**
+   * The log of the API calls: one JSON record per request.
+   *
+   * Off by default — the records are big, and a run that works does not need them. When a
+   * chain misbehaves, they are the only witness: which host was asked, what went out, what
+   * came back and where it broke.
+   */
+  logging: {
+    enabled: false,
+    /** Where the records are written, relative to the working directory. */
+    dir: '.tmp/api',
+  },
+
   // --- limits ---------------------------------------------------------------
   limits: {
     /** Wall-clock budget per stage. */

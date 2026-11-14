@@ -79,6 +79,14 @@ export function fromEnv(env = process.env) {
   const backends = backendList(env.AI_WEBDEV_BACKENDS);
   if (backends) set(['backends'], backends);
 
+  // --- logging --------------------------------------------------------------
+  // A directory turns the log of the API calls on: the records are the witness of a chain
+  // that misbehaves.
+  if (typeof env.AI_WEBDEV_LOG_DIR === 'string' && env.AI_WEBDEV_LOG_DIR.trim()) {
+    set(['logging', 'enabled'], true);
+    set(['logging', 'dir'], env.AI_WEBDEV_LOG_DIR.trim());
+  }
+
   // --- the stack ------------------------------------------------------------
   if (ENUMS.frontendFrameworks.includes(env.AI_WEBDEV_FRAMEWORK)) set(['stack', 'frontendFramework'], env.AI_WEBDEV_FRAMEWORK);
   if (ENUMS.markupLanguages.includes(env.AI_WEBDEV_MARKUP)) set(['stack', 'markupLanguage'], env.AI_WEBDEV_MARKUP);

@@ -431,9 +431,39 @@ The home directory holds:
 | `AI_WEBDEV_STAGE_<STAGE>` | `0` or `false` switches one stage off. |
 | `AI_WEBDEV_BRIDGE_<BRIDGE>` | `0` or `false` switches one bridge off. |
 | `AI_WEBDEV_RETRIES`, `AI_WEBDEV_TIMEOUT_MS`, `AI_WEBDEV_MAX_TURNS` | The limits of one request. |
+| `AI_WEBDEV_LOG_DIR` | The directory of the log of the API calls; the name of the directory turns the log on. |
 
 The messages of the configuration validator are in Russian, as in the sibling packages
 `@u2ai/images` and `@u2ai/decomposer`; every other message of the CLI is in English.
+
+### The log of the API calls
+
+A run that fails says only "failed" — unless the log is on. The log is a witness: one JSON file
+per request, with the body that went out, the chain of the hosts, the time of every attempt, the
+answer that came back and the error that broke it.
+
+```json
+{
+  "at": "2026-11-15T03:41:02.113Z",
+  "path": "responses",
+  "model": "moonshotai/kimi-k3.1-pro",
+  "attempts": [
+    { "backend": "https://routerai.ru/api/v1", "ok": true, "durationMs": 181_233 }
+  ],
+  "durationMs": 181_233,
+  "response": { "output": [ … ] }
+}
+```
+
+The pictures are not written into the record: the body of an image is megabytes of base64, and it
+is the same picture every time. The record says how big it was. The log is off by default — turn it
+on with the directory:
+
+```json
+{ "logging": { "enabled": true, "dir": ".tmp/api" } }
+```
+
+or with `AI_WEBDEV_LOG_DIR=.tmp/api`.
 
 ## The write policy
 
