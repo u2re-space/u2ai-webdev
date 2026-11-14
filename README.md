@@ -595,6 +595,26 @@ text.
 · search_files "main" inContent=0 glob=*.scss
 ```
 
+## The icons
+
+The icons come from the sets of the CDN: Phosphor and Lucide. The sets are big — Lucide has
+more than a thousand icons, Phosphor has more than a thousand five hundred — so a role that
+picks the icons by memory picks the wrong ones. The catalogue of a set is read from the CDN and
+cached: the role searches the names with `search_icons` and takes the ones that are really
+there.
+
+```
+· search_icons lucide "scan square"
+  → Иконки набора lucide: scan-square, scan, square, scan-barcode, …
+· download_icons lucide icons=["scan-square","earth","mail"] path=assets/icons
+  → Скачано иконок: 3. Пути: assets/icons/scan-square.svg, assets/icons/earth.svg, assets/icons/mail.svg
+```
+
+The icons of a step are taken in one call: a role that picks ten icons of one interface should
+not pay for ten turns. A name the set does not have is reported back instead of thrown — the
+role then picks another one, and the stage of the icons checks that every icon the answer names
+is on the disk.
+
 ## The bridges to the sibling CLIs
 
 Three external CLIs may help a run. Each of them is a subprocess, each of them may be switched off

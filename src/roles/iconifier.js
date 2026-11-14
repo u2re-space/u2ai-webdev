@@ -21,7 +21,7 @@ export const schema = 'icon';
 /** The tools the role may call. */
 export const tools = [
     'list_files', 'read_file', 'write_file', 'replace_text', 'search_files',
-    'download_icons', 'generate_svg', 'read_skill',
+    'download_icons', 'search_icons', 'generate_svg', 'read_skill',
 ];
 
 /** How many turns the role may spend. */
@@ -70,8 +70,12 @@ Rules:
 - The stroke follows the grid of the set: 2 on the 24×24 grid of Lucide, the weight of the
   style on the grid of Phosphor.
 - The colour is \`currentColor\`, so the icon follows the text.
-- Download the icons you picked with the \`download_icons\` tool, into the directory of the
-  project, and say in the report which names were taken.
+- Find the names with the \`search_icons\` tool: the sets have more than a thousand icons, and
+  a name the set does not have is a broken icon. Search by the word of the thing: "mail",
+  "camera", "share".
+- Download the icons you picked with the \`download_icons\` tool, all of them in one call (the
+  list of the names), into the directory of the project, and say in the report which names
+  were taken. A name the set does not have is reported back by the tool: pick another one.
 - When a picture of the design cannot be replaced by an icon, say so and make it an SVG:
   this package edits vector graphics as code.
 

@@ -22,6 +22,7 @@ import { toolSpecs as buildSpecs } from './tool-specs.js';
 import { listFiles, readTextFile, searchFiles, writeTextFile, replaceInFile, deleteFile, makeDirectory, copyPath } from './fs-tools.js';
 import { listProjectBackups, restoreProjectBackup } from './project-backup.js';
 import { generateSvg, downloadFont, downloadIcons } from './assets.js';
+import { searchIcons } from './icon-sets.js';
 import { runBridge } from './bridges.js';
 import { readSkill } from './skills.js';
 import { guidanceSearchText, guidanceRetrieveText, GUIDANCE_SOURCE } from './guidance.js';
@@ -49,6 +50,31 @@ export const BLOCKING_COMMANDS = /(?:python[0-9.]*\s+-m\s+http\.server|\bhttp-se
  */
 function token(value) {
     return String(value ?? '').replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
+/**
+ * The names of a tool argument that carries a list.
+ *
+ * The list may come as an array or as a JSON string: a model writes both, and a name that is
+ * lost is a call that has to be repeated.
+ * @param {unknown} value
+ * @returns {string[]}
+ * @ai.hint pure
+ */
+function parseNames(value) {
+    if (value === undefined || value === null) return [];
+    if (Array.isArray(value)) return value.map((item) => String(item));
+    const text = String(value).trim();
+    if (!text) return [];
+    if (text.startsWith('[')) {
+        try {
+            const parsed = JSON.parse(text);
+            if (Array.isArray(parsed)) return parsed.map((item) => String(item));
+        } catch {
+            // Not a JSON list: the text is split by the commas.
+        }
+    }
+    return text.split(',').map((item) => item.trim()).filter(Boolean);
 }
 
 /**
@@ -479,11 +505,24 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                 const result = await downloadIcons({
                     name: String(args.name ?? ''),
                     icon: args.icon ? String(args.icon) : null,
+                    icons: parseNames(args.icons),
                     variant: String(args.variant ?? 'regular'),
                     output,
                     cwd: root,
                 });
-                return `Скачано иконок: ${result.count}. Пути: ${result.paths.slice(0, 20).join(', ')}${result.paths.length > 20 ? ', …' : ''}`;
+                const parts = [
+                    `Скачано иконок: ${result.count}. Пути: ${result.paths.slice(0, 20).join(', ')}${result.paths.length > 20 ? ', …' : ''}`,
+                ];
+                if (result.missing.length) parts.push(`Нет в наборе: ${result.missing.join(', ')}.`);
+                if (result.failed.length) parts.push(`Не скачаны: ${result.failed.join(', ')}.`);
+                return parts.join(' ');
+            }
+            case 'search_icons': {
+                const names = await searchIcons(String(args.name ?? ''), String(args.query ?? ''), {
+                    limit: Number(args.limit) || 40,
+                });
+                if (!names.length) return `В наборе ${args.name} нет иконок по слову "${args.query ?? ''}".`;
+                return `Иконки набора ${args.name}: ${names.join(', ')}.`;
             }
             case 'call_ai_decompose':
                 return await callBridge('ai-decompose', args);

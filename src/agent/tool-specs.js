@@ -324,14 +324,34 @@ export const TOOL_SPECS = Object.freeze({
     download_icons: {
         configKey: 'icons',
         description: 'Download icons of a set (phosphor or lucide) into the project. '
-            + 'One icon may be named, or the common set of the collection is taken.',
+            + 'The names may be given one by one or all at once in "icons"; a name the set '
+            + 'does not have is reported back.',
         parameters: {
             type: 'object',
             properties: {
                 name: str('The set: phosphor or lucide.'),
                 icon: str('Name of one icon, for example house.'),
+                icons: str('JSON array of the names of the icons, for example ["house","x"].'),
                 variant: str('Variant of the icon: regular, bold, duotone, ... (phosphor only).'),
                 path: str('Directory the icons are written to, relative to the working directory.'),
+            },
+            required: ['name'],
+            additionalProperties: false,
+        },
+        required: ['name'],
+        roles: ['iconifier'],
+    },
+    search_icons: {
+        configKey: 'icons',
+        description: 'Search the names of the icons of a set (phosphor or lucide). The sets name '
+            + 'their icons after the thing they draw, so the word of the thing is the word of '
+            + 'the name. Use it before downloading: a name the set does not have is a broken icon.',
+        parameters: {
+            type: 'object',
+            properties: {
+                name: str('The set: phosphor or lucide.'),
+                query: str('The words to look for, for example "mail envelope".'),
+                limit: int('How many names to return. Default 40.'),
             },
             required: ['name'],
             additionalProperties: false,
