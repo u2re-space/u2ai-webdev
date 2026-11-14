@@ -20,6 +20,8 @@ import {
     htmlRefs,
     ensureHtmlWiring,
     compileStyles,
+    missingReferences,
+    verifyStyles,
     isViteProject,
     importPath,
     scriptImports,
@@ -355,4 +357,52 @@ test('the stage gives the styles of a Vite project to the bundler', async () => 
     assert.match(script, /import '\.\.\/styles\/main\.scss';/);
     const html = await readFile(path.join(root, 'index.html'), 'utf8');
     assert.doesNotMatch(html, /main\.css/);
+});
+
+test('the style that a stylesheet uses and that is not there is named', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-build-'));
+    await mkdir(path.join(root, 'scss'), { recursive: true });
+    await writeFile(path.join(root, 'scss', 'main.scss'), '@use "tokens";\n', 'utf8');
+
+    const missing = await missingReferences(root, ['scss/main.scss'], new Map());
+    const result = await buildStage({
+        root,
+        config: { output: { work: './.tmp' } },
+        runId: 'run-missing',
+    });
+
+    assert.deepEqual(missing.map((item) => item.ref), ['tokens']);
+    assert.equal(result.ok, false);
+    assert.match(result.warnings.join(' '), /Стиль не найден: scss\/main\.scss → tokens/);
+});
+
+test('the styles of a Vite project are checked even though the bundler builds them', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-vite-'));
+    await mkdir(path.join(root, 'src'), { recursive: true });
+    await mkdir(path.join(root, 'styles'), { recursive: true });
+    await writeFile(path.join(root, 'vite.config.js'), 'export default {};\n', 'utf8');
+    await writeFile(path.join(root, 'index.html'),
+        '<!doctype html><html><head></head><body><script type="module" src="/src/main.js"></script></body></html>', 'utf8');
+    await writeFile(path.join(root, 'styles', 'main.scss'), '@use "tokens";\n', 'utf8');
+    await writeFile(path.join(root, 'src', 'main.js'), "console.log('hi');\n", 'utf8');
+    // A compiler that refuses the file, the way sass does.
+    const dir = path.join(root, 'node_modules', '.bin');
+    await mkdir(dir, { recursive: true });
+    if (process.platform === 'win32') {
+        await writeFile(path.join(dir, 'sass.cmd'), '@echo off\r\necho Error: Can\'t find stylesheet to import. 1>&2\r\nexit /b 65\r\n', 'utf8');
+    } else {
+        const file = path.join(dir, 'sass');
+        await writeFile(file, '#!/bin/sh\necho "Error: Can\'t find stylesheet to import." >&2\nexit 65\n', 'utf8');
+        await chmod(file, 0o755);
+    }
+
+    const result = await buildStage({
+        root,
+        config: { output: { work: './.tmp' } },
+        runId: 'run-vite-broken',
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.build.errors.length, 1);
+    assert.match(result.build.errors[0].message, /find stylesheet/);
 });

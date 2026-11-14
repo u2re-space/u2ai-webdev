@@ -119,7 +119,16 @@ A project of Vite gets its styles the way Vite wants them: the import of the sty
 into the script of the project (`import './styles/main.scss'`), the bundler compiles the SCSS
 itself, and the link of the markup to the built CSS is removed — that file is an artifact of
 the bundler, and a link to it breaks the build. The stage does this by the code as well: the
-import is added when it is missing, and the report names the specifier of the import.
+import is added when it is missing, and the report names the specifier of the import. The
+styles are still checked: the compiler of the project compiles the entry point into a
+temporary file, so a stylesheet that does not compile is named in the report instead of
+breaking the build of the user later.
+
+The files that a stylesheet uses are checked too, and the check does not need the compiler:
+a model that writes an entry point with `@use "tokens"` and writes no `tokens` leaves a page
+without styles. The stage names the missing file (`Стиль не найден: scss/main.scss → tokens
+(scss/tokens.scss)`) and the run fails — the same check runs in the stage of the step, so the
+role is told about the missing file and writes it.
 
 `--route <stages>` chooses the stages the run goes through (the stages they need are added
 automatically), `--stop-after <stage>` (or `--stop-after=<stage>`) pauses the run on the
@@ -214,7 +223,9 @@ stylesheets of the compiled CSS. A file with a lost quote, a stray backslash or 
 not closed is found by the compiler, not by the reader of the code — and the role is told what
 the compiler said, so it can repair the file. A step whose files still do not compile is not
 called done. A project without `sass` in `node_modules` has its stylesheets unchecked, and the
-report says so.
+report says so. The names of the files that a stylesheet uses are checked without the
+compiler: a stylesheet that `@use`s a file that was never written is broken even when there is
+no `sass` on the machine, and the role is told the name of the missing file.
 
 The plan of the planner has to hold the work itself: a plan without steps is a plan of
 intentions ("first I will study the project"), and the stages of the run have nothing to do. The

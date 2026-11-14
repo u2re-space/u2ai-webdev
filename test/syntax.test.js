@@ -12,7 +12,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { chmod, mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 
-import { checkFile, checkFiles, checkableFile, findSass } from '../src/agent/syntax.js';
+import { checkFile, checkFiles, checkableFile, findSass, styleImportCandidates, missingStyleReferences } from '../src/agent/syntax.js';
 
 /**
  * A compiler of the stylesheets that always refuses the file: the test does not need sass.
@@ -104,4 +104,51 @@ test('the check of the files of a step names the file and the error', async () =
     assert.deepEqual(result.checked, ['src/main.js', 'src/other.js']);
     assert.equal(result.errors.length, 1);
     assert.equal(result.errors[0].file, 'src/main.js');
+});
+
+test('the files that a stylesheet may point to are the files of Sass', () => {
+    const candidates = styleImportCandidates('scss/main.scss', 'tokens');
+
+    assert.ok(candidates.includes('scss/tokens.scss'));
+    assert.ok(candidates.includes('scss/_tokens.scss'));
+    assert.ok(candidates.includes('scss/tokens/_index.scss'));
+});
+
+test('the stylesheet that uses a file that is not there does not pass', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-syntax-'));
+    await mkdir(path.join(root, 'scss'), { recursive: true });
+    await writeFile(path.join(root, 'scss', 'main.scss'), '@use "tokens";\n', 'utf8');
+
+    const missing = await missingStyleReferences(root, 'scss/main.scss');
+    const result = await checkFile(root, 'scss/main.scss');
+
+    assert.deepEqual(missing.map((item) => item.ref), ['tokens']);
+    assert.equal(result.ok, false);
+    assert.match(result.errors.join(' '), /Файл стилей не найден: tokens \(scss\/tokens\.scss\)/);
+});
+
+test('the stylesheet that uses a file that is there passes', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-syntax-'));
+    await mkdir(path.join(root, 'scss'), { recursive: true });
+    await writeFile(path.join(root, 'scss', 'main.scss'), '@use "tokens";\n', 'utf8');
+    await writeFile(path.join(root, 'scss', '_tokens.scss'), ':root { --a: 1; }\n', 'utf8');
+    const empty = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-empty-'));
+
+    const result = await checkFile(root, 'scss/main.scss', { env: { PATH: empty } });
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.errors, []);
+});
+
+test('the built-in module of Sass is not a missing file', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-syntax-'));
+    await mkdir(path.join(root, 'scss'), { recursive: true });
+    await writeFile(path.join(root, 'scss', 'main.scss'), '@use "sass:math";\n@import "other.css";\n', 'utf8');
+    const empty = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-empty-'));
+
+    const missing = await missingStyleReferences(root, 'scss/main.scss');
+    const result = await checkFile(root, 'scss/main.scss', { env: { PATH: empty } });
+
+    assert.deepEqual(missing, []);
+    assert.equal(result.ok, true);
 });

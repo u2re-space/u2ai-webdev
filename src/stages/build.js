@@ -13,6 +13,7 @@
  *   * it finds the entry point of the styles (the stylesheet that is not a partial and that
  *     nobody uses);
  *   * it adds the missing `@use` for a partial that nobody uses;
+ *   * it names the files that a stylesheet uses and that were never written;
  *   * it compiles the entry with the `sass` of the project;
  *   * it makes sure that the markup points at the CSS that exists and at the script that runs.
  *
@@ -22,20 +23,23 @@
  * @usedBy stages/index, pipeline
  * @exports BUILD_FILE, STYLE_EXTENSIONS, listStyleFiles, styleReferences, partitionStyles,
  *          primaryEntry, insertUses, ensureUses, htmlRefs, resolveRef, hrefFor,
- *          ensureHtmlWiring, compileStyles, scratchStyles, isViteProject, importPath,
- *          scriptImports, ensureStyleImport, insertImport, removeStyleLink, buildPath,
- *          writeBuild, readBuild, buildStage
+ *          ensureHtmlWiring, compileStyles, missingReferences, verifyStyles, scratchStyles,
+ *          isViteProject, importPath, scriptImports, ensureStyleImport, insertImport,
+ *          removeStyleLink, buildPath, writeBuild, readBuild, buildStage
  * @ai.tags stages, build, styles, sass
  * @ai.hint io
  * @changed 2026-11-14 Первая версия: стили собираются и подключаются кодом.
  */
 
 import path from 'node:path';
+import os from 'node:os';
 import { mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 
 import { runProgram } from '../agent/programs.js';
-import { findSass, firstError } from '../agent/syntax.js';
+import { findSass, firstError, styleReferences, missingStyleReferences } from '../agent/syntax.js';
 import { runId, runFile, writeJsonFile, readJsonFile } from './workspace.js';
+
+export { styleReferences };
 
 /** The name of the file of the build inside the directory of the run. */
 export const BUILD_FILE = 'build.json';
@@ -90,30 +94,6 @@ export async function listStyleFiles(root, { limit = 200, depth = 6 } = {}) {
     }
     await walk([], 0);
     return found.sort();
-}
-
-/**
- * The stylesheets that a stylesheet uses.
- *
- * Sass names the files of the other stylesheets in `@use`, `@forward` and `@import`. The name
- * may be written in any of the forms the language allows: with the extension, without it, or
- * with the underscore of a partial.
- * @param {string} content
- * @returns {string[]} the names, as they are written
- * @exports
- * @ai.hint pure
- */
-export function styleReferences(content) {
-    const text = String(content ?? '');
-    const out = [];
-    const pattern = /@(?:use|forward|import)\s+(?:url\(\s*)?['"]([^'"]+)['"]/gi;
-    let match = pattern.exec(text);
-    while (match) {
-        const name = match[1].trim();
-        if (name && !out.includes(name)) out.push(name);
-        match = pattern.exec(text);
-    }
-    return out;
 }
 
 /**
@@ -386,6 +366,70 @@ export async function compileStyles(root, targets = [], { env = process.env, tim
         errors.push({ file: source, message: firstError(result.stderr || result.stdout) });
     }
     return { compiled, errors, note: null };
+}
+
+/**
+ * The stylesheets that use a file that is not on the disk.
+ *
+ * A model writes an entry point that `@use`s five files and writes none of them: the page
+ * has no styles, and the project of Vite breaks with "Can't find stylesheet to import".
+ * The names of the missing files are found here, before the compiler is asked.
+ * @param {string} root
+ * @param {string[]} files the paths of the stylesheets
+ * @param {Map<string, string>} contents the text of every stylesheet
+ * @returns {Promise<{ file: string, ref: string, expected: string }[]>}
+ * @exports
+ * @ai.hint io
+ */
+export async function missingReferences(root, files = [], contents = new Map()) {
+    const out = [];
+    for (const file of Array.isArray(files) ? files : []) {
+        const content = contents?.get?.(file) ?? await readFile(path.join(root, file), 'utf8').catch(() => null);
+        if (content === null) continue;
+        const missing = await missingStyleReferences(root, file, { content });
+        for (const item of missing) out.push({ file, ref: item.ref, expected: item.expected });
+    }
+    return out;
+}
+
+/**
+ * Check that the stylesheets compile, without writing the result into the project.
+ *
+ * The bundler of Vite compiles the styles itself, so the stage does not build them. But the
+ * stage still checks them: a stylesheet that does not compile breaks the build of the user,
+ * and the run has to say so instead of leaving a broken project behind.
+ * @param {string} root
+ * @param {string[]} sources the paths of the stylesheets
+ * @param {{ env?: object, timeoutMs?: number }} [options]
+ * @returns {Promise<{ checked: string[], errors: { file: string, message: string }[], note: string|null }>}
+ * @exports
+ * @ai.hint io
+ */
+export async function verifyStyles(root, sources = [], { env = process.env, timeoutMs = 120_000 } = {}) {
+    const list = (Array.isArray(sources) ? sources : []).map((item) => String(item ?? '').trim()).filter(Boolean);
+    const sass = await findSass(root, env);
+    if (!sass) {
+        return { checked: [], errors: [], note: 'sass не найден: стили не проверены.' };
+    }
+    const checked = [];
+    const errors = [];
+    const out = path.join(os.tmpdir(), `ai-webdev-check-${process.pid}-${Date.now()}`);
+    await mkdir(out, { recursive: true }).catch(() => null);
+    for (const source of list) {
+        checked.push(source);
+        const result = await runProgram({
+            command: sass,
+            args: ['--no-source-map', source, path.join(out, 'check.css')],
+            cwd: root,
+            env,
+            timeoutMs,
+        });
+        if (!result.ok) {
+            errors.push({ file: source, message: firstError(result.stderr || result.stdout) });
+        }
+    }
+    await rm(out, { recursive: true, force: true }).catch(() => null);
+    return { checked, errors, note: null };
 }
 
 /**
@@ -780,6 +824,13 @@ export async function buildStage({
     // The partials that nobody uses: their rules never reach the page.
     const uses = await ensureUses(root, { entries, orphans: styles.orphans }, { contents, apply });
 
+    // The stylesheets that use a file that was never written: the page has no styles, and
+    // the build of the user breaks with "Can't find stylesheet to import".
+    const missing = await missingReferences(root, files, contents);
+    for (const item of missing) {
+        warnings.push(`Стиль не найден: ${item.file} → ${item.ref} (${item.expected}).`);
+    }
+
     // The markup and the script of the project.
     const named = (Array.isArray(plan?.steps) ? plan.steps : []).flatMap((step) => step?.files ?? []);
     const htmlRel = await findMarkup(root, named);
@@ -825,10 +876,13 @@ export async function buildStage({
         if (primary?.output && htmlRel) {
             unlinked = await removeStyleLink(root, htmlRel, primary.output, { apply });
         }
+        // The bundler compiles the styles itself, but the stage still checks them: a
+        // stylesheet that does not compile breaks the build of the user.
+        const checked = await verifyStyles(root, [entry], { env });
         compiled = {
             compiled: [],
-            errors: [],
-            note: `Стили подключены импортом в ${scriptRel}: сборщик Vite компилирует SCSS сам.`,
+            errors: checked.errors,
+            note: checked.note ?? `Стили подключены импортом в ${scriptRel}: сборщик Vite компилирует SCSS сам.`,
         };
     } else {
         if (vite) {
@@ -889,6 +943,7 @@ export async function buildStage({
         vite,
         compiled: compiled.compiled,
         errors: compiled.errors,
+        missing,
         import: imported ? { script: scriptRel, specifier: imported.specifier, changed: imported.changed, already: imported.already } : null,
         removedLink: unlinked?.removed ? primary?.output ?? null : null,
         markup: htmlRel,
@@ -901,7 +956,7 @@ export async function buildStage({
 
     const file = await writeBuild(root, config, run, build);
 
-    const ok = compiled.errors.length === 0;
+    const ok = compiled.errors.length === 0 && missing.length === 0;
     return {
         stage: 'build',
         ok,

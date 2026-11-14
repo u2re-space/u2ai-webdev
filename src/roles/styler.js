@@ -80,6 +80,9 @@ Rules:
   design cannot pass the threshold, say so in the report instead of hiding it.
 - One file per layer: the tokens, the base, the layout, the components, the utilities. The
   order of the imports follows that order.
+- Every file that the entry point \`@use\`s must be on the disk: write the partial in this
+  step, or keep the rules in the entry file. A \`@use\` of a file that was never written
+  breaks the build of the project — the page stays without styles.
 - The SCSS has an entry point: a file whose name does not start with an underscore and that
   \`@use\`s the other files of the styles. A file that nobody uses renders nothing.
 - The styles answer to the class names of the markup. Do not invent a second naming.

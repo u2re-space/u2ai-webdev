@@ -11,17 +11,22 @@
  *   are not checked, and a file of a partial that misses a variable of another file is not
  *   a syntax error — it is checked again through the stylesheet that imports it.
  *
+ *   The names of the files that a stylesheet uses are checked before the compiler is asked:
+ *   a stylesheet that `@use`s a file that was never written is broken whatever the compiler
+ *   says, and the name of the missing file is more useful than the error of the compiler.
+ *
  * @depends node:path, node:os, node:fs/promises, agent/programs
- * @usedBy stages/step
+ * @usedBy stages/step, stages/build
  * @exports SCRIPT_EXTENSIONS, STYLE_EXTENSIONS, CHECKED_EXTENSIONS, checkableFile,
- *          findSass, firstError, checkScript, checkStyle, checkFile, checkFiles
+ *          findSass, firstError, styleReferences, styleImportCandidates,
+ *          missingStyleReferences, checkScript, checkStyle, checkFile, checkFiles
  * @ai.tags tools, agent, syntax
  * @ai.hint io
  */
 
 import path from 'node:path';
 import os from 'node:os';
-import { readFile, rm, writeFile } from 'node:fs/promises';
+import { readFile, rm, stat, writeFile } from 'node:fs/promises';
 
 import { findProgram, runProgram } from './programs.js';
 
@@ -88,6 +93,131 @@ export function firstError(text) {
 }
 
 /**
+ * The stylesheets that a stylesheet uses.
+ *
+ * Sass names the files of the other stylesheets in `@use`, `@forward` and `@import`. The name
+ * may be written in any of the forms the language allows: with the extension, without it, or
+ * with the underscore of a partial.
+ * @param {string} content
+ * @returns {string[]} the names, as they are written
+ * @exports
+ * @ai.hint pure
+ */
+export function styleReferences(content) {
+    const text = String(content ?? '');
+    const out = [];
+    const pattern = /@(?:use|forward|import)\s+(?:url\(\s*)?['"]([^'"]+)['"]/gi;
+    let match = pattern.exec(text);
+    while (match) {
+        const name = match[1].trim();
+        if (name && !out.includes(name)) out.push(name);
+        match = pattern.exec(text);
+    }
+    return out;
+}
+
+/**
+ * True when the name of a stylesheet is a file of the project.
+ *
+ * The built-in modules of Sass (`sass:math`), the addresses of the web and the files of CSS
+ * are not files of the project: nobody has to write them, and nobody may look for them.
+ * @param {string} ref
+ * @returns {boolean}
+ * @exports
+ * @ai.hint pure
+ */
+function isFileReference(ref) {
+    const name = String(ref ?? '').trim();
+    if (!name) return false;
+    if (/^[a-z][a-z0-9-]*:/i.test(name)) return false;
+    if (name.startsWith('~')) return false;
+    if (/^(?:https?:)?\/\//i.test(name) || name.startsWith('data:')) return false;
+    if (/\.css$/i.test(name)) return false;
+    return true;
+}
+
+/**
+ * The files of the project that a name of a stylesheet may point to.
+ *
+ * The rules are the rules of Sass: the name may be written with the extension, without it,
+ * with the underscore of a partial or with the folder that holds the entry of a folder.
+ * @param {string} rel the path of the stylesheet that names it
+ * @param {string} ref the name as it is written
+ * @returns {string[]} the paths, relative to the root, in posix form
+ * @exports
+ * @ai.hint pure
+ */
+export function styleImportCandidates(rel, ref) {
+    const file = String(rel ?? '').replace(/\\/g, '/');
+    const dir = path.posix.dirname(file);
+    const parent = dir === '.' ? '' : `${dir}/`;
+    const name = String(ref ?? '').trim().replace(/\\/g, '/').replace(/^\.\//, '');
+    if (!name) return [];
+    const base = path.posix.basename(name);
+    const folder = path.posix.dirname(name);
+    const head = `${parent}${folder === '.' ? '' : `${folder}/`}`;
+    const ext = path.posix.extname(base);
+    const stem = ext ? base.slice(0, -ext.length) : base;
+    const out = [];
+    /**
+     * Add a candidate once.
+     * @param {string} item
+     * @returns {void}
+     * @ai.hint pure
+     */
+    const add = (item) => {
+        if (item && !out.includes(item)) out.push(item);
+    };
+    if (ext) {
+        add(`${head}${base}`);
+        add(`${head}_${stem}${ext}`);
+        return out;
+    }
+    add(`${head}${stem}.scss`);
+    add(`${head}_${stem}.scss`);
+    add(`${head}${stem}.sass`);
+    add(`${head}_${stem}.sass`);
+    add(`${head}${stem}/_index.scss`);
+    add(`${head}${stem}/index.scss`);
+    return out;
+}
+
+/**
+ * The stylesheets that a stylesheet uses and that are not on the disk.
+ *
+ * A model writes an entry point that `@use`s five files and writes none of them: the page
+ * has no styles, and the compiler says only that it cannot find a stylesheet to import.
+ * The name of the missing file is found here, without the compiler.
+ * @param {string} root
+ * @param {string} rel the path of the stylesheet
+ * @param {{ content?: string|null }} [options]
+ * @returns {Promise<{ ref: string, expected: string }[]>}
+ * @exports
+ * @ai.hint io
+ */
+export async function missingStyleReferences(root, rel, { content = null } = {}) {
+    const file = String(rel ?? '').trim();
+    if (!file) return [];
+    const text = content ?? await readFile(path.join(root, file), 'utf8').catch(() => null);
+    if (text === null) return [];
+    const out = [];
+    for (const ref of styleReferences(text)) {
+        if (!isFileReference(ref)) continue;
+        const candidates = styleImportCandidates(file, ref);
+        let found = false;
+        for (const candidate of candidates) {
+            const exists = await stat(path.join(root, candidate)).then((info) => info.isFile()).catch(() => false);
+            if (exists) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) out.push({ ref, expected: candidates[0] ?? ref });
+    }
+    return out;
+}
+
+/**
  * Check the syntax of a script.
  *
  * The script is checked by the node of the machine: `node --check` parses the file and says
@@ -135,6 +265,10 @@ export async function checkScript(root, rel, { env = process.env, timeoutMs = 30
 /**
  * Check the syntax of a stylesheet.
  *
+ * The names of the files that the stylesheet uses are checked first: a stylesheet that
+ * `@use`s a file that was never written is broken whatever the compiler says, and the name
+ * of the missing file is more useful than the error of the compiler.
+ *
  * The stylesheet is compiled by the `sass` of the project. A partial that misses a variable
  * of another file is not a syntax error: it is a file that stands alone, and the error is
  * named as a note, not as a failure.
@@ -146,6 +280,11 @@ export async function checkScript(root, rel, { env = process.env, timeoutMs = 30
  * @ai.hint io
  */
 export async function checkStyle(root, rel, { env = process.env, timeoutMs = 30_000 } = {}) {
+    const missing = await missingStyleReferences(root, rel);
+    if (missing.length) {
+        const errors = missing.map((item) => `Файл стилей не найден: ${item.ref} (${item.expected})`);
+        return { file: rel, ok: false, errors, note: null };
+    }
     const sass = await findSass(root, env);
     if (!sass) {
         return {

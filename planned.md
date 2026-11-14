@@ -582,6 +582,27 @@ CLI `ai-webdev` (`@u2ai/webdev`) с собственным конфигом `~/.
 - [x] README (EN), planned.md (RU)
 - [x] Проверка: `npm test` — 316 тестов, все проходят
 
+### step-35 — Стили не ссылаются на ненаписанные файлы
+- [x] Проблема: модель написала `scss/main.scss` с `@use "tokens"`, `base`, `layout`,
+      `components`, `utilities` и не написала ни одного из этих файлов — страница без
+      стилей, а проект Vite падает с `Can't find stylesheet to import`
+- [x] `src/agent/syntax.js` — `styleReferences()`, `styleImportCandidates()`,
+      `missingStyleReferences()`: файлы, на которые указывает таблица стилей, ищутся по
+      правилам Sass (`tokens`, `_tokens.scss`, `tokens/_index.scss`); модули `sass:math` и
+      импорты CSS не считаются файлами проекта
+- [x] `src/agent/syntax.js` — `checkStyle()`: недостающий файл — ошибка, а не заметка;
+      проверка работает без компилятора, поэтому роль получает точный адрес файла
+- [x] `src/stages/build.js` — `missingReferences()`: стадия называет недостающие файлы
+      (`Стиль не найден: scss/main.scss → tokens (scss/tokens.scss)`) и проваливает прогон
+- [x] `src/stages/build.js` — `verifyStyles()`: стили проекта Vite тоже проверяются
+      компилятором (во временный файл, без артефакта в проекте), хотя собирает их сборщик
+- [x] `src/roles/styler.js` — правило: каждый файл, который `@use` точка входа, должен быть
+      на диске
+- [x] README (EN), planned.md (RU)
+- [x] Проверка: `test/syntax.test.js` (недостающий файл, правила Sass, `sass:math`),
+      `test/build.test.js` (стадия называет недостающий файл, Vite проверяет стили),
+      `npm test` — 322 теста, все проходят
+
 ---
 
 ## 2. Порядок работы и зависимости шагов
