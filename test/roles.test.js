@@ -83,6 +83,40 @@ function textAnswer(text) {
     };
 }
 
+/**
+ * A response with the call of the schema of a role: the answer of the role.
+ * @param {string} name the name of the schema
+ * @param {object} args the data of the answer
+ * @returns {object}
+ */
+function schemaAnswer(name, args) {
+    return {
+        id: 'resp_3',
+        status: 'completed',
+        model: 'test-model',
+        output: [{
+            type: 'function_call',
+            call_id: `call_${name}`,
+            name,
+            arguments: JSON.stringify(args),
+        }],
+        usage: { input_tokens: 12, output_tokens: 6, total_tokens: 18 },
+    };
+}
+
+/**
+ * The data of the answer of the coder.
+ * @returns {object}
+ */
+function codeData() {
+    return {
+        summary: 'The page is written.',
+        files: [{ path: 'index.html', content: '<h1>Привет</h1>', language: 'html' }],
+        commands: [],
+        notes: 'Nothing else.',
+    };
+}
+
 test('every built-in role is in the registry', () => {
     for (const name of [
         'planner', 'architect', 'director', 'coder', 'markup', 'styler',
@@ -228,8 +262,89 @@ test('the loop stops when the turns run out', async () => {
     }
 });
 
-test('the reason of an answer without data is named', () => {
-    assert.match(roleReason({ refusal: 'I cannot do that.' }), /отказ модели/);
+test('a role that answers with a text instead of the schema is asked once more', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-loop-schema-'));
+    const home = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-home-'));
+    const env = { HOME: home, USERPROFILE: home };
+
+    const api = await mockApi([
+        textAnswer('Сначала изучу проект.'),
+        schemaAnswer('code', codeData()),
+    ]);
+
+    try {
+        const config = structuredClone(defaults);
+        config.model = 'test-model';
+        config.backends = [{ baseURL: api.url, apiKey: 'test-key' }];
+        config.reasoning.effort = 'low';
+        const client = await createClient({ config, env });
+
+        const answer = await runRole({
+            client,
+            config,
+            role: 'coder',
+            input: 'Make the page.',
+            root,
+            env,
+        });
+
+        assert.equal(answer.stopped, 'completed');
+        assert.equal(answer.turns, 2);
+        assert.equal(answer.data.summary, 'The page is written.');
+        // The second request carries the correction of the role.
+        const second = api.requests[1].input.map((item) => JSON.stringify(item)).join('\n');
+        assert.match(second, /carried no data of the schema/);
+    } finally {
+        api.close();
+    }
+});
+
+test('a role whose turns ran out still gives the schema of the answer', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-loop-final-'));
+    const home = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-home-'));
+    const env = { HOME: home, USERPROFILE: home };
+
+    // The first two requests ask for a tool, the third one is the final answer of the role.
+    const api = await mockApi([
+        toolAnswer('list_files', { path: '.' }),
+        toolAnswer('list_files', { path: '.' }),
+        schemaAnswer('code', codeData()),
+    ]);
+
+    try {
+        const config = structuredClone(defaults);
+        config.model = 'test-model';
+        config.backends = [{ baseURL: api.url, apiKey: 'test-key' }];
+        config.reasoning.effort = 'low';
+        const client = await createClient({ config, env });
+
+        const answer = await runRole({
+            client,
+            config,
+            role: 'coder',
+            input: 'Make the page.',
+            root,
+            env,
+            maxTurns: 2,
+        });
+
+        assert.equal(answer.stopped, 'completed');
+        assert.equal(answer.turns, 2);
+        assert.equal(answer.data.summary, 'The page is written.');
+        assert.equal(answer.toolCalls.length, 2);
+
+        // The final call asks for the answer alone: the only tool left is the schema.
+        const last = api.requests[2];
+        assert.equal(last.tools.length, 1);
+        assert.equal(last.tools[0].name, 'code');
+        const conversation = last.input.map((item) => JSON.stringify(item)).join('\n');
+        assert.match(conversation, /The turns of the role are over/);
+    } finally {
+        api.close();
+    }
+});
+
+test('the reason of an answer without data is named', () => {    assert.match(roleReason({ refusal: 'I cannot do that.' }), /отказ модели/);
     assert.match(roleReason({ error: { message: 'the model is down' } }), /ошибка ответа/);
     assert.match(roleReason({ text: 'Сначала изучу проект.' }), /ответ без данных/);
     assert.match(roleReason({}), /ответ пуст/);

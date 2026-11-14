@@ -21,7 +21,7 @@
  */
 
 import path from 'node:path';
-import { runRole } from '../roles/index.js';
+import { runRole, roleReason } from '../roles/index.js';
 import { writeTextFile } from '../agent/fs-tools.js';
 import { inputContext } from '../inputs/index.js';
 import { runId, runFile, writeJsonFile, readJsonFile } from './workspace.js';
@@ -253,7 +253,9 @@ export async function runStepStage({
             turns: result.turns,
             stopped: result.stopped,
         };
-        if (!result.data) warnings.push(`Шаг ${step.id}: роль ${role} не вернула ответ.`);
+        if (!result.data) {
+            warnings.push(`Шаг ${step.id}: роль ${role} не вернула ответ (${roleReason(result)}).`);
+        }
         await writeStepReport(root, config, run, step.id, report);
         reports.push(report);
     }

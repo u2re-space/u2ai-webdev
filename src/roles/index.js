@@ -11,9 +11,15 @@
  *   are executed, their answers go back into the same conversation, and the loop ends when the
  *   model answers without asking for a tool, or when the turns run out.
  *
+ *   A role that answers with a text instead of the data of its schema is asked once more, and
+ *   the last turn belongs to the answer: when the turns run out, the role is asked to give its
+ *   answer without any tool, so the stage gets the data of the schema even after a long run of
+ *   tool calls.
+ *
  * @depends openai/responses, agent/schemas, agent/skills, agent/docs, agent/tools, agent/pace
  * @usedBy stages/index, cli
- * @exports ROLES, ROLE_NAMES, resolveRole, buildInstructions, runRole, roleSchema, roleReason
+ * @exports ROLES, ROLE_NAMES, resolveRole, buildInstructions, runRole, roleSchema, roleReason,
+ *          SCHEMA_CORRECTION, FINAL_ANSWER
  * @ai.tags roles, agent
  * @ai.hint keep
  */
@@ -60,6 +66,28 @@ export const ROLES = Object.freeze({
 
 /** The names of the built-in roles. */
 export const ROLE_NAMES = Object.freeze(Object.keys(ROLES));
+
+/**
+ * The correction of a role that answered with a text instead of the data of its schema.
+ *
+ * The role is asked once more: the answer of the schema is a call like any other, and a model
+ * that missed it usually missed it because nobody told it.
+ * @type {string}
+ * @exports
+ * @ai.hint pure
+ */
+export const SCHEMA_CORRECTION = 'Your answer carried no data of the schema. Answer once more with the schema of the role — the call that carries it — and with nothing else.';
+
+/**
+ * The last call of a role whose turns have run out.
+ *
+ * The tools are over, and the model is asked for the answer alone: with the tools in hand it
+ * knows what it has done, and the stage gets the data of the schema.
+ * @type {string}
+ * @exports
+ * @ai.hint pure
+ */
+export const FINAL_ANSWER = 'The turns of the role are over. Do not call any tool any more: give the final answer of the role in the schema of the role now, with what you have.';
 
 /**
  * The schema of the answer of a role.
@@ -211,14 +239,21 @@ export async function runRole({
     let turns = 0;
     let stopped = 'completed';
     let answer = null;
+    let corrected = false;
+    let fallback = null;
 
-    while (turns < limit) {
-        turns += 1;
+    /**
+     * One call of the model: the request, the answer and the calls it asks for.
+     * @param {{ tools?: object[] }} [options] the tools of the call; the schema is always there
+     * @returns {Promise<{ parsed: object, work: object[] }>}
+     * @ai.hint io
+     */
+    const ask = async ({ tools: toolList = specs } = {}) => {
         const raw = await client.responses.create({
             model: definition.model,
             instructions,
             input: items,
-            tools: specs,
+            tools: toolList,
             schema,
             schemaName,
             effort: definition.effort,
@@ -233,10 +268,24 @@ export async function runRole({
         // The call of the schema is the answer, not a tool to run.
         const answerCall = schema ? toolCalls.find((call) => call.name === schemaName) : null;
         const work = toolCalls.filter((call) => call.name !== schemaName);
+        if (answerCall) parsed.data = answerCall.arguments ?? parsed.data;
+        return { parsed, work };
+    };
+
+    while (turns < limit) {
+        turns += 1;
+        const { parsed, work } = await ask();
 
         if (!work.length) {
             answer = parsed;
-            if (answerCall) answer.data = answerCall.arguments ?? parsed.data;
+            const withoutData = Boolean(schema) && !answer.data;
+            if (withoutData && !corrected && turns < limit) {
+                // The model answered with a text instead of the schema: it is asked once more.
+                corrected = true;
+                fallback = parsed;
+                items.push({ role: 'user', content: [textPart(SCHEMA_CORRECTION)] });
+                continue;
+            }
             stopped = 'completed';
             break;
         }
@@ -263,6 +312,29 @@ export async function runRole({
         if (turns >= limit) {
             stopped = 'maxTurns';
             answer = parsed;
+        }
+    }
+
+    // The text of the answer before the correction is better than an empty answer.
+    if (answer && !answer.text && fallback?.text) {
+        answer = { ...answer, text: fallback.text };
+    }
+
+    // The last turn belongs to the answer: the role is asked to give it without any tool, so a
+    // long run of tool calls still ends with the data of the schema.
+    if (schema && !answer?.data && !answer?.refusal && !answer?.error) {
+        items.push({ role: 'user', content: [textPart(FINAL_ANSWER)] });
+        let final = null;
+        try {
+            ({ parsed: final } = await ask({ tools: [] }));
+        } catch (error) {
+            final = null;
+        }
+        if (final?.data) {
+            answer = final;
+            stopped = 'completed';
+        } else if (final?.text && !answer?.text) {
+            answer = { ...answer, text: final.text };
         }
     }
 

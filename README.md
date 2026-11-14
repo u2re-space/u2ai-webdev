@@ -150,6 +150,12 @@ turns.
 given many times. The config may override the model, the effort, the instructions and the tools of
 any role, and may add roles of its own.
 
+The answer of a role has a schema, and the loop watches it: a role that answers with a text
+instead of the data of its schema is asked once more, and the last turn belongs to the answer —
+when the turns of the role run out, it is asked to give the answer alone, without any tool. A
+role that returns no data at all is reported with the reason: a refusal of the model, an error of
+the answer or the text it gave instead of the schema.
+
 The plan of the planner has to hold the work itself: a plan without steps is a plan of
 intentions ("first I will study the project"), and the stages of the run have nothing to do. The
 planner is asked once more when its answer holds no steps, and the stage fails when the second
