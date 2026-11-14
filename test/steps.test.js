@@ -258,6 +258,65 @@ test('the stage of the styles reports the tokens it declares', async () => {
     assert.match(await readFile(path.join(root, 'src', 'styles', 'main.css'), 'utf8'), /var\(--color-text\)/);
 });
 
+test('a broken file of a step is found and the role is asked to fix it', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-steps-broken-'));
+    const client = fakeClient([
+        // The first answer writes a file with a lost quote.
+        schemaAnswer('code', {
+            summary: 'The entry.',
+            files: [{ path: 'src/main.js', content: "const s = 'abc\n", language: 'js' }],
+            commands: [],
+            notes: '',
+        }),
+        // The second answer is the repair.
+        schemaAnswer('code', {
+            summary: 'The entry, fixed.',
+            files: [{ path: 'src/main.js', content: "const s = 'abc';\n", language: 'js' }],
+            commands: [],
+            notes: '',
+        }),
+    ]);
+
+    const result = await runStepStage({
+        client,
+        config: { output: { work: './.tmp' }, stages: { coder: { maxTurns: 4 } } },
+        root,
+        task: 'Make a landing.',
+        role: 'coder',
+        plan: PLAN,
+        runId: 'run-1',
+    });
+
+    assert.equal(result.ok, true);
+    assert.match(await readFile(path.join(root, 'src', 'main.js'), 'utf8'), /const s = 'abc';/);
+    assert.deepEqual(result.steps[0].syntax.errors, []);
+});
+
+test('a broken file that stays broken is an error of the step', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-steps-broken2-'));
+    const broken = schemaAnswer('code', {
+        summary: 'The entry.',
+        files: [{ path: 'src/main.js', content: "const s = 'abc\n", language: 'js' }],
+        commands: [],
+        notes: '',
+    });
+    const client = fakeClient([broken, broken]);
+
+    const result = await runStepStage({
+        client,
+        config: { output: { work: './.tmp' }, stages: { coder: { maxTurns: 4 } } },
+        root,
+        task: 'Make a landing.',
+        role: 'coder',
+        plan: PLAN,
+        runId: 'run-1',
+    });
+
+    assert.equal(result.ok, false);
+    assert.ok(result.warnings.some((item) => /ошибка синтаксиса/.test(item)));
+    assert.equal(result.steps[0].syntax.errors.length, 1);
+});
+
 test('the tokens are printed as a block of custom properties', () => {
     const block = styleTokensText([{ name: '--color-text', value: '#101828' }, { name: 'space-2', value: '8px' }]);
     assert.match(block, /:root \{/);

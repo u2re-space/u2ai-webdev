@@ -22,7 +22,7 @@
  * @depends openai/responses, agent/schemas, agent/skills, agent/docs, agent/tools, agent/pace
  * @usedBy stages/index, cli
  * @exports ROLES, ROLE_NAMES, resolveRole, buildInstructions, runRole, roleSchema, roleReason,
- *          SCHEMA_CORRECTION, FINAL_ANSWER, WORK_CORRECTION
+ *          SCHEMA_CORRECTION, FINAL_ANSWER, WORK_CORRECTION, WORK_ORDER, syntaxCorrection
  * @ai.tags roles, agent
  * @ai.hint keep
  */
@@ -114,6 +114,24 @@ export const WORK_CORRECTION = 'You have not done the work yet: your answer name
  * @ai.hint pure
  */
 export const WORK_ORDER = 'Still nothing is written. Stop describing the work: make the calls. For every file of the step call the tool `write_file` with its path and its full content — one call per file, no exceptions. Do not answer until the files are on the disk. If you cannot write a file, say why in the notes of the answer.';
+
+/**
+ * The correction of a role whose files do not compile.
+ *
+ * The files of the step are on the disk, but the compiler refused them: a lost quote, a
+ * stray backslash, a rule that is not closed. The role is told what the compiler said and
+ * has to fix the files with its tools.
+ * @param {Array<{ file: string, message: string }>} errors
+ * @returns {string}
+ * @exports
+ * @ai.hint pure
+ */
+export function syntaxCorrection(errors = []) {
+    const list = (Array.isArray(errors) ? errors : [])
+        .map((item) => `- ${item?.file ?? 'файл'}: ${item?.message ?? 'ошибка'}`)
+        .join('\n');
+    return `The files of the step are on the disk, but they do not compile. Fix them now with the tools: read the file, repair the broken line, write the file again. The compiler said:\n${list}\n\nA file that is written as text with "\\n" inside a string, or with a backslash at the end of a line, is broken — write the real line breaks and the real escapes. Do not answer until the files are fixed.`;
+}
 
 /** The tools that write into the project. */
 const WRITE_TOOLS = Object.freeze(['write_file', 'replace_text', 'copy_path', 'generate_svg']);

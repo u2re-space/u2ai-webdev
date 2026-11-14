@@ -10,7 +10,8 @@
  *   The files of the answer are written by the code, not only reported: a role that says what
  *   it wrote but writes nothing leaves the project as it was.
  *
- * @depends node:path, node:fs/promises, roles/index, agent/fs-tools, stages/workspace
+ * @depends node:path, node:fs/promises, roles/index, agent/fs-tools, agent/syntax,
+ *          inputs/index, stages/workspace
  * @usedBy stages/markup, stages/coding, stages/styling
  * @exports STEPS_DIR, stepsForRole, applyFiles, stepReportPath, writeStepReport,
  *          readStepReport, missingFiles, runStepStage
@@ -22,8 +23,9 @@
 
 import path from 'node:path';
 import { stat } from 'node:fs/promises';
-import { runRole, roleReason } from '../roles/index.js';
+import { runRole, roleReason, syntaxCorrection } from '../roles/index.js';
 import { writeTextFile } from '../agent/fs-tools.js';
+import { checkFiles } from '../agent/syntax.js';
 import { inputContext } from '../inputs/index.js';
 import { runId, runFile, writeJsonFile, readJsonFile } from './workspace.js';
 
@@ -259,10 +261,57 @@ export async function runStepStage({
             warnings.push(...applied.warnings);
         }
 
+        // The files of the step have to compile. The compiler of the platform sees the lost
+        // quote and the stray backslash that the reader of the code does not see.
+        let syntax = await checkFiles(root, step.files ?? [], { env });
+        let answer = result;
+        let repair = null;
+        if (syntax.errors.length) {
+            // The role is told what the compiler said and has to fix the files.
+            repair = await runRole({
+                client,
+                config,
+                role,
+                input: `${blocks.join('\n\n')}\n\n${syntaxCorrection(syntax.errors)}`,
+                context: {
+                    task: String(task ?? ''),
+                    step,
+                    brief,
+                    design: Boolean(design),
+                    ...extra,
+                },
+                root,
+                env,
+                maxTurns: config?.stages?.[role]?.maxTurns ?? null,
+                requireFiles: Boolean(step.files?.length),
+                notify,
+            });
+            turns += repair.turns;
+            usage = usage ?? repair.usage;
+            if (repair.data) answer = repair;
+            const broken = new Set(syntax.errors.map((item) => item.file));
+            const repaired = (Array.isArray(repair.data?.files) ? repair.data.files : [])
+                .filter((file) => broken.has(String(file?.path ?? '').trim()));
+            if (apply && repaired.length) {
+                const written = await applyFiles({ root, files: repaired, overwrite: true });
+                warnings.push(...written.warnings);
+                applied = {
+                    written: [...applied.written, ...written.written],
+                    skipped: applied.skipped,
+                    warnings: applied.warnings,
+                };
+            }
+            syntax = await checkFiles(root, step.files ?? [], { env });
+        }
+        for (const note of syntax.notes) warnings.push(`Шаг ${step.id}: ${note}`);
+        for (const error of syntax.errors) {
+            warnings.push(`Шаг ${step.id}: ошибка синтаксиса в ${error.file}: ${error.message}`);
+        }
+
         // The step is done when its files are on the disk: an answer without them is a
         // description of the work, not the work.
         const missing = await missingFiles(root, step.files ?? []);
-        const ok = Boolean(result.data) && !missing.length;
+        const ok = Boolean(answer.data) && !missing.length && !syntax.errors.length;
         if (missing.length) {
             warnings.push(`Шаг ${step.id}: файлы не написаны: ${missing.join(', ')}.`);
         }
@@ -271,24 +320,25 @@ export async function runStepStage({
             stage: role,
             step: { id: step.id, title: step.title, files: step.files, criteria: step.criteria },
             ok,
-            summary: String(data.summary ?? result.text ?? '').trim(),
-            files,
-            commands: Array.isArray(data.commands) ? data.commands : [],
-            notes: String(data.notes ?? '').trim(),
-            landmarks: Array.isArray(data.landmarks) ? data.landmarks : [],
-            accessibility: Array.isArray(data.accessibility) ? data.accessibility : [],
-            tokens: Array.isArray(data.tokens) ? data.tokens : [],
-            set: String(data.set ?? '').trim(),
-            icons: Array.isArray(data.icons) ? data.icons : [],
+            summary: String(answer.data?.summary ?? answer.text ?? '').trim(),
+            files: Array.isArray(answer.data?.files) ? answer.data.files : files,
+            commands: Array.isArray(answer.data?.commands) ? answer.data.commands : [],
+            notes: String(answer.data?.notes ?? '').trim(),
+            landmarks: Array.isArray(answer.data?.landmarks) ? answer.data.landmarks : [],
+            accessibility: Array.isArray(answer.data?.accessibility) ? answer.data.accessibility : [],
+            tokens: Array.isArray(answer.data?.tokens) ? answer.data.tokens : [],
+            set: String(answer.data?.set ?? '').trim(),
+            icons: Array.isArray(answer.data?.icons) ? answer.data.icons : [],
             applied: {
                 written: applied.written,
                 skipped: applied.skipped,
             },
-            turns: result.turns,
-            stopped: result.stopped,
+            syntax: { checked: syntax.checked, errors: syntax.errors },
+            turns: result.turns + (repair?.turns ?? 0),
+            stopped: answer.stopped,
         };
-        if (!result.data) {
-            warnings.push(`Шаг ${step.id}: роль ${role} не вернула ответ (${roleReason(result)}).`);
+        if (!answer.data) {
+            warnings.push(`Шаг ${step.id}: роль ${role} не вернула ответ (${roleReason(answer)}).`);
         }
         await writeStepReport(root, config, run, step.id, report);
         reports.push(report);

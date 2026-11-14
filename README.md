@@ -183,6 +183,14 @@ The command that does not finish on its own is refused: a server, a watcher or a
 hold the run until the timeout. The default time of a command is 60 seconds, and the model may
 ask for more.
 
+The files of a step have to compile. After the role has written them, the code checks them:
+`node --check` for the scripts, the `sass` of the project for the stylesheets and the
+stylesheets of the compiled CSS. A file with a lost quote, a stray backslash or a rule that is
+not closed is found by the compiler, not by the reader of the code — and the role is told what
+the compiler said, so it can repair the file. A step whose files still do not compile is not
+called done. A project without `sass` in `node_modules` has its stylesheets unchecked, and the
+report says so.
+
 The plan of the planner has to hold the work itself: a plan without steps is a plan of
 intentions ("first I will study the project"), and the stages of the run have nothing to do. The
 planner is asked once more when its answer holds no steps, and the stage fails when the second

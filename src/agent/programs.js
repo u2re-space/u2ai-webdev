@@ -65,9 +65,12 @@ export function quoteWindowsArg(value) {
 export async function findProgram(name, env = process.env) {
     const command = String(name ?? '').trim();
     if (!command) return null;
-    // A path is a path: it is used as it is.
+    // A path is a path: it is used as it is. A shim of Windows is a batch file, and a batch
+    // file is started through the shell of the system.
     if (command.includes('/') || command.includes('\\')) {
-        return { file: command, shell: false };
+        const found = await stat(command).then((info) => info.isFile()).catch(() => false);
+        if (!found) return null;
+        return { file: command, shell: /\.(cmd|bat)$/i.test(command) };
     }
     const names = process.platform === 'win32'
         ? [...WINDOWS_EXTENSIONS.map((ext) => `${command}${ext}`), command]
