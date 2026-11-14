@@ -11,13 +11,15 @@
  *   A part that cannot be read is skipped and reported: a missing `DESIGN.md` is not a reason
  *   to stop the run.
  *
- * @depends node:path, inputs/index, agent/map, agent/skills, registry
+ * @depends node:path, inputs/index, agent/map, agent/skills, registry, stages/workspace
  * @usedBy stages/index, stages/plan, stages/architect, pipeline
- * @exports collectStage, collectText, componentCards, projectCards
+ * @exports collectStage, collectText, componentCards, projectCards, INPUTS_FILE,
+ *          inputsPath, writeInputs, readInputs
  * @ai.tags stages, context, collect
  * @ai.hint io
  * @ai.hint legacy-0.2
  * @changed 2026-11-13 Ported from the monolith: the context of a run is collected in one place.
+ * @changed 2026-11-14 The collected inputs are written to the run: a resumed run needs them.
  */
 
 import path from 'node:path';
@@ -26,6 +28,54 @@ import { ensureProjectMap, projectMapFile } from '../agent/map.js';
 import { discoverSkills, loadSkillPacks, skillDirectories } from '../agent/skills.js';
 import { openRegistry } from '../registry.js';
 import { memoryContext } from '../memory.js';
+import { runFile, writeJsonFile, readJsonFile } from './workspace.js';
+
+/** The file of the run that holds the collected inputs. */
+export const INPUTS_FILE = 'inputs.json';
+
+/**
+ * The path of the file of the collected inputs.
+ * @param {string} root
+ * @param {object} config
+ * @param {string} [id]
+ * @returns {string}
+ * @exports
+ * @ai.hint pure
+ */
+export function inputsPath(root, config = {}, id = null) {
+    return runFile(root, config, id, INPUTS_FILE);
+}
+
+/**
+ * Write the collected inputs into the directory of the run.
+ *
+ * A resumed run skips the stage of the collection, so the inputs of the earlier run are
+ * read back from here: without them the roles of the later stages would work with nothing.
+ *
+ * @param {string} root
+ * @param {object} config
+ * @param {string} [id]
+ * @param {object} inputs
+ * @returns {Promise<string>} the path of the file
+ * @exports
+ * @ai.hint io
+ */
+export async function writeInputs(root, config = {}, id = null, inputs = {}) {
+    return await writeJsonFile(inputsPath(root, config, id), inputs);
+}
+
+/**
+ * Read the collected inputs of a run. A missing file gives null.
+ * @param {string} root
+ * @param {object} config
+ * @param {string} [id]
+ * @returns {Promise<object|null>}
+ * @exports
+ * @ai.hint io
+ */
+export async function readInputs(root, config = {}, id = null) {
+    return await readJsonFile(inputsPath(root, config, id));
+}
 
 /**
  * The files of the project as short lines: the path and the size.
@@ -100,10 +150,11 @@ export function collectText(collected = {}) {
 /**
  * The stage of the collection: the inputs, the project, the registry and the skills.
  *
- * @param {{ root?: string, config?: object, task?: string, env?: object, memory?: object|null }} request
+ * @param {{ root?: string, config?: object, task?: string, env?: object, memory?: object|null,
+ *   runId?: string|null }} request
  * @returns {Promise<{ stage: string, ok: boolean, inputs: object, summary: object,
  *   project: object, components: object[], skills: object, memory: string, warnings: string[],
- *   text: string }>}
+ *   text: string, file: string|null }>}
  * @exports
  * @ai.hint io
  */
@@ -113,6 +164,7 @@ export async function collectStage({
     task = '',
     env = process.env,
     memory = null,
+    runId: id = null,
 } = {}) {
     const warnings = [];
 
@@ -188,7 +240,13 @@ export async function collectStage({
         memory: memoryText,
         warnings,
         text: '',
+        file: null,
     };
+    // The inputs go to the disk: a resumed run skips this stage and needs them.
+    collected.file = await writeInputs(root, config, id, inputs).catch((error) => {
+        warnings.push(`Входные данные не записаны: ${error?.message ?? error}`);
+        return null;
+    });
     collected.text = collectText(collected);
     return collected;
 }

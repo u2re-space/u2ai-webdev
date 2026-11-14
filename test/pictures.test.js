@@ -14,7 +14,7 @@ import path from 'node:path';
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 
 import { cropName, cropCandidates, cropRelative, resolveCropFile } from '../src/inputs/crops.js';
-import { pictureName, pictureCrops, picturesStage, pictureSubject, pictureKinds } from '../src/stages/pictures.js';
+import { pictureName, pictureCrops, picturesStage, pictureSubject, pictureKinds, writePictures, readPictures } from '../src/stages/pictures.js';
 
 /**
  * A sheet of measurements with three crops.
@@ -170,6 +170,49 @@ test('the stage of the pictures prepares the crops with the bridge of the images
     assert.equal(call[0], 'background');
     assert.equal(call[call.indexOf('--subject') + 1], 'black chess bishop');
     assert.equal(call[call.indexOf('--alpha-mode') + 1], 'auto');
+    // No model of its own: the model of the configuration of `ai-image` is used.
+    assert.equal(call.includes('--image-model'), false);
+});
+
+test('the model of the pictures goes to the bridge when the config names it', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-pictures-model-'));
+    await mkdir(path.join(root, 'measurements', 'crops'), { recursive: true });
+    await writeFile(path.join(root, 'measurements', 'crops', '08-region-bishop-artwork.png'), 'png');
+
+    const log = path.join(root, 'call.json');
+    const fake = path.join(root, 'fake-ai-image.js');
+    await writeFile(fake, [
+        "import { writeFile } from 'node:fs/promises';",
+        "const args = process.argv.slice(2);",
+        "const out = args[args.indexOf('--out') + 1];",
+        `await writeFile(${JSON.stringify(log)}, JSON.stringify(args));`,
+        "await writeFile(out, 'prepared');",
+    ].join('\n'));
+
+    const settings = config();
+    settings.pictures.model = 'bytedance-seed/seedream-5-5';
+    const result = await picturesStage({
+        root,
+        config: settings,
+        inputs: { measurements: sheet() },
+        env: { ...process.env, AI_IMAGE_BIN: fake },
+    });
+
+    assert.equal(result.ok, true);
+    const call = JSON.parse(await readFile(log, 'utf8'));
+    assert.equal(call[call.indexOf('--image-model') + 1], 'bytedance-seed/seedream-5-5');
+});
+
+test('the prepared pictures are written to the run and read back', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-pictures-file-'));
+    const settings = config();
+    const file = await writePictures(root, settings, 'run-1', [{ name: 'bishop artwork', file: 'assets/import/bishop-artwork.png' }]);
+    assert.match(file, /\.tmp[\\/]run-1[\\/]pictures\.json$/);
+    const back = await readPictures(root, settings, 'run-1');
+    assert.equal(back.length, 1);
+    assert.equal(back[0].file, 'assets/import/bishop-artwork.png');
+    // A run without the file has no pictures.
+    assert.deepEqual(await readPictures(root, settings, 'run-2'), []);
 });
 
 test('the stage of the pictures keeps the picture that is already there', async () => {

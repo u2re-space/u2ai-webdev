@@ -104,7 +104,7 @@ export const SCHEMAS = Object.freeze({
             dependsOn: arr(str('The id of a step that must be done before this one.'), 'The ids of the steps this one waits for.'),
             files: arr(str('The path of a file the step touches.'), 'The files the step touches.'),
             criteria: arr(str('A criterion of readiness, written so that it can be checked.'), 'How one knows that the step is done.'),
-        })),
+        }), 'The steps of the work. At least two steps: the work to do, not the intentions.'),
         risks: arr(str('A risk of the plan and what to do about it.'), 'The risks of the plan.'),
         questions: arr(str('A question the plan cannot answer without the user.'), 'The questions for the user.'),
     }),

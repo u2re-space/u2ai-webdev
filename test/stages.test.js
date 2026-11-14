@@ -15,7 +15,7 @@ import path from 'node:path';
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 
 import { normalizePlan, orderSteps, planText, planStage, writePlan, readPlan } from '../src/stages/plan.js';
-import { collectStage, collectText, componentCards } from '../src/stages/collect.js';
+import { collectStage, collectText, componentCards, readInputs } from '../src/stages/collect.js';
 import { normalizeArchitecture, architectureText, architectStage } from '../src/stages/architect.js';
 import { detectPackageManager, applySetup, setupReadiness, setupStage } from '../src/stages/setup.js';
 import { runId, runDirectory, sanitizeId } from '../src/stages/workspace.js';
@@ -170,6 +170,75 @@ test('the stage of the plan reports an answer without a plan', async () => {
     });
     assert.equal(result.ok, false);
     assert.ok(result.warnings.length);
+    // The warning names the reason: an answer without data is not a plan.
+    assert.match(result.warnings.join(' '), /ответ без данных|no plan here/);
+});
+
+test('the stage of the plan asks again when the plan has no steps', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-plan4-'));
+    const asked = [];
+    const client = fakeClient([
+        // The first answer is a plan of intentions: the steps are empty.
+        schemaAnswer('plan', { summary: 'Сначала изучу проект.', steps: [], risks: [], questions: [] }),
+        // The second one is the work itself.
+        schemaAnswer('plan', {
+            summary: 'A landing page.',
+            steps: [{ id: 'a', title: 'Markup', role: 'markup', dependsOn: [], files: ['index.html'], criteria: ['opens'] }],
+            risks: [],
+            questions: [],
+        }),
+    ]);
+
+    const result = await planStage({
+        client,
+        config: { output: { work: './.tmp' } },
+        root,
+        task: 'Make a landing.',
+        runId: 'run-1',
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.plan.steps.length, 1);
+    assert.match(result.plan.warnings.join(' '), /пустой план/);
+    assert.equal(asked.length, 0);
+});
+
+test('the stage of the plan fails when there are no steps at all', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-plan5-'));
+    const empty = schemaAnswer('plan', { summary: 'Сначала изучу проект.', steps: [], risks: [], questions: [] });
+    const result = await planStage({
+        client: fakeClient([empty, empty]),
+        config: { output: { work: './.tmp' } },
+        root,
+        task: 'Make a landing.',
+        runId: 'run-1',
+    });
+    assert.equal(result.ok, false);
+    assert.match(result.warnings.join(' '), /ни одного шага/);
+});
+
+test('the collected inputs are written to the run and read back', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-inputs-'));
+    const config = {
+        inputs: { designMd: 'DESIGN.md', measurements: null, palette: null, tokens: null },
+        output: { dir: './.ai', work: './.tmp' },
+    };
+    await writeFile(path.join(root, 'DESIGN.md'), '# Design\n\n- color: #101828\n', 'utf8');
+
+    const collected = await collectStage({
+        root,
+        config,
+        task: 'Make a landing.',
+        env: {},
+        runId: 'run-1',
+    });
+
+    assert.ok(collected.file, 'the inputs are written');
+    assert.match(collected.file, /\.tmp[\\/]run-1[\\/]inputs\.json$/);
+    const back = await readInputs(root, config, 'run-1');
+    assert.equal(back.task, 'Make a landing.');
+    assert.equal(back.design.present, true);
+    assert.equal(await readInputs(root, config, 'run-2'), null);
 });
 
 test('the collection gathers the inputs, the project and the registry', async () => {

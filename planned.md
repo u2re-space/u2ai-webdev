@@ -422,6 +422,28 @@ CLI `ai-webdev` (`@u2ai/webdev`) с собственным конфигом `~/.
       в пешке, кусок пешки в доске) уходят
 - [x] Проверка: `test/pictures.test.js`, тест `stopAfterStage` в `test/cli.test.js`
 
+### step-26 — Состояние прогона и план без шагов
+- [x] `src/stages/collect.js` — собранные входные данные пишутся в каталог прогона
+      (`inputs.json`): `INPUTS_FILE`, `inputsPath()`, `writeInputs()`, `readInputs()`
+- [x] `src/stages/pictures.js` — список подготовленных картинок пишется в каталог прогона
+      (`pictures.json`): `PICTURES_FILE`, `picturesPath()`, `writePictures()`, `readPictures()`
+- [x] `src/pipeline.js` — продолжение читает `inputs.json` и `pictures.json` обратно: иначе
+      пропущенные стадии оставляли следующие без контекста
+- [x] `src/pipeline.js` — задача принадлежит прогону: `--resume <id>` без своей задачи
+      работает над задачей прежнего прогона; прогон без `inputs.json` собирает входные заново
+- [x] `src/roles/index.js` — `roleReason()`: отказ, ошибка и текст без данных называют причину
+- [x] `src/stages/plan.js` — план без шагов — это план намерений; планировщик спрашивается
+      ещё раз (`PLAN_CORRECTION`), и стадия падает, если шагов нет и после повтора
+- [x] `src/roles/planner.js`, `src/agent/schemas.js` — контракт плана: ответ — это работа,
+      а не описание того, что модель собирается сделать; шагов не меньше двух
+- [x] `src/config/defaults.js`, `validate.js`, `src/stages/pictures.js` — `pictures.model`:
+      модель картинок передаётся мосту `ai-image` флагом `--image-model` (по умолчанию —
+      модель конфигурации `ai-image`, то есть seedream)
+- [x] README (EN): состояние прогона, модель картинок, план без шагов
+- [x] Проверка: `test/process.test.js` (чтение входных и картинок при продолжении, повтор
+      сбора), `test/stages.test.js` (план без шагов, запись входных), `test/pictures.test.js`
+      (модель, запись картинок), `test/roles.test.js` (`roleReason`)
+
 ---
 
 ## 2. Порядок работы и зависимости шагов

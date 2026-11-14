@@ -12,7 +12,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 
 import {
     createProgress,
@@ -309,6 +309,90 @@ test('a stage that fails stops the run and is written to the progress', async ()
     const progress = JSON.parse(await readFile(result.file, 'utf8'));
     assert.equal(progress.stages[0].status, 'failed');
     assert.equal(progress.stages[1].status, 'pending');
+});
+
+test('a resumed run reads the inputs and the pictures back', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-resume-'));
+    const dir = path.join(root, '.tmp', 'run-1');
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, 'inputs.json'), JSON.stringify({
+        task: 'Make a landing.',
+        design: { present: true },
+    }));
+    await writeFile(path.join(dir, 'pictures.json'), JSON.stringify({
+        pictures: [{ name: 'bishop artwork', file: 'assets/import/bishop-artwork.png' }],
+    }));
+    await writeFile(path.join(dir, 'progress.json'), JSON.stringify({
+        id: 'run-1',
+        task: 'Make a landing.',
+        status: 'paused',
+        cursor: 1,
+        stages: [
+            { name: 'collect', status: 'completed', index: 1 },
+            { name: 'plan', status: 'pending', index: 2 },
+        ],
+    }));
+
+    let seen = null;
+    const stages = [
+        { name: 'collect', title: 'Collect', dependsOn: [], run: async () => ({ ok: true }) },
+        {
+            name: 'plan',
+            title: 'Plan',
+            dependsOn: ['collect'],
+            run: async (args) => { seen = args; return { ok: true }; },
+        },
+    ];
+
+    const result = await resumePipeline({
+        client: { responses: { create: async () => ({ output: [] }) } },
+        config: { ...CONFIG, memory: { enabled: false } },
+        root,
+        runId: 'run-1',
+        stages,
+    });
+
+    assert.equal(result.status, 'completed');
+    // The task of the run belongs to the run: the continuation had none of its own.
+    assert.equal(seen.task, 'Make a landing.');
+    // The collected inputs and the prepared pictures are read back from the run.
+    assert.equal(seen.inputs.design.present, true);
+    assert.equal(seen.inputs.pictures.length, 1);
+    assert.equal(seen.inputs.pictures[0].file, 'assets/import/bishop-artwork.png');
+});
+
+test('a resumed run without the inputs collects them again', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-resume-collect-'));
+    const dir = path.join(root, '.tmp', 'run-1');
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, 'progress.json'), JSON.stringify({
+        id: 'run-1',
+        task: 'Make a landing.',
+        status: 'paused',
+        cursor: 1,
+        stages: [
+            { name: 'collect', status: 'completed', index: 1 },
+            { name: 'plan', status: 'pending', index: 2 },
+        ],
+    }));
+
+    const done = [];
+    const stages = [
+        { name: 'collect', title: 'Collect', dependsOn: [], run: async () => { done.push('collect'); return { ok: true }; } },
+        { name: 'plan', title: 'Plan', dependsOn: ['collect'], run: async () => { done.push('plan'); return { ok: true }; } },
+    ];
+
+    const result = await resumePipeline({
+        client: { responses: { create: async () => ({ output: [] }) } },
+        config: { ...CONFIG, memory: { enabled: false } },
+        root,
+        runId: 'run-1',
+        stages,
+    });
+
+    assert.equal(result.status, 'completed');
+    // The collection is deterministic, and the later stages need what it finds.
+    assert.deepEqual(done, ['collect', 'plan']);
 });
 
 test('the files of the stages are collected', () => {

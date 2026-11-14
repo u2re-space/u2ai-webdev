@@ -19,12 +19,27 @@
  * @changed 2026-11-13 Ported from the monolith: the plan is a file of the run, not a chat.
  */
 
-import { runRole, ROLE_NAMES } from '../roles/index.js';
+import { runRole, ROLE_NAMES, roleReason } from '../roles/index.js';
 import { inputContext } from '../inputs/index.js';
 import { runId, runFile, writeJsonFile, readJsonFile } from './workspace.js';
 
-/** The name of the file of the plan inside the directory of the run. */
+/**
+ * The name of the file of the plan inside the directory of the run. */
 export const PLAN_FILE = 'plan.json';
+
+/**
+ * The correction the planner gets when its answer holds no steps.
+ *
+ * A plan without steps is a plan of intentions ("first I will study the project"), and the
+ * stages of the run have nothing to do. The model is asked once more, and the answer has to
+ * be the work itself.
+ */
+export const PLAN_CORRECTION = [
+    'The previous answer was not a plan: its list of steps was empty.',
+    'Answer with the plan itself: at least two concrete steps, each with an id, a title, the role',
+    'that does it, the files it touches and the criteria that can be checked without a human.',
+    'Do not describe what you are going to do later — the steps are the work.',
+].join('\n');
 
 /**
  * The text of a list, one item per line.
@@ -247,7 +262,7 @@ export async function planStage({
     const prompt = [String(task ?? '').trim(), context].filter(Boolean).join('\n\n');
     const stack = config?.stack ?? {};
 
-    const result = await runRole({
+    const request = {
         client,
         config,
         role: 'planner',
@@ -263,7 +278,24 @@ export async function planStage({
         env,
         maxTurns: config?.stages?.plan?.maxTurns ?? null,
         notify,
-    });
+    };
+
+    let result = await runRole(request);
+    let plan = result.data ? normalizePlan(result.data) : null;
+
+    // A plan without steps is a plan of intentions. The planner is asked once more, and the
+    // second answer has to hold the work itself.
+    if (plan && !plan.steps.length) {
+        const retry = await runRole({ ...request, input: `${prompt}\n\n${PLAN_CORRECTION}` });
+        if (retry.data) {
+            const second = normalizePlan(retry.data);
+            if (second.steps.length) {
+                second.warnings.push('Планировщик вернул пустой план и был спрошен ещё раз.');
+                plan = second;
+                result = retry;
+            }
+        }
+    }
 
     if (!result.data) {
         return {
@@ -272,14 +304,27 @@ export async function planStage({
             plan: null,
             file: null,
             text: result.text ?? '',
-            warnings: ['Планировщик не вернул план.'],
+            warnings: [`Планировщик не вернул план (${roleReason(result)}).`],
             turns: result.turns,
             usage: result.usage,
             runId: run,
         };
     }
 
-    const plan = normalizePlan(result.data);
+    if (!plan?.steps?.length) {
+        return {
+            stage: 'plan',
+            ok: false,
+            plan: null,
+            file: null,
+            text: result.text ?? '',
+            warnings: ['Планировщик не вернул ни одного шага.'],
+            turns: result.turns,
+            usage: result.usage,
+            runId: run,
+        };
+    }
+
     const file = await writePlan(root, config, run, plan);
     return {
         stage: 'plan',

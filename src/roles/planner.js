@@ -46,6 +46,11 @@ ${stack}
 ${design}
 
 Rules:
+- The answer is the plan itself, not a description of your work. A step is a piece of work to do
+  now, with its files and its criteria. Never answer with a plan like "first I will study the
+  project" or "then I will decide the structure": that is a plan of intentions, and it is wrong.
+- The plan has at least two steps. If the task needs one step, it is still a plan — say what the
+  step is and how it is checked.
 - Read the project first: the files that already exist decide what the plan may assume.
 - One step is one role's work. The steps are small enough to be done in one sitting and large
   enough to be worth a step. A step that needs two roles is two steps.

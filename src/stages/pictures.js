@@ -17,7 +17,8 @@
  *
  * @depends node:path, node:fs/promises, inputs/crops, agent/bridges, agent/paths
  * @usedBy stages/index, pipeline
- * @exports picturesStage, pictureName, pictureCrops, pictureSubject, pictureKinds
+ * @exports picturesStage, pictureName, pictureCrops, pictureSubject, pictureKinds,
+ *          PICTURES_FILE, picturesPath, writePictures, readPictures
  * @ai.tags stages, pictures, images
  * @ai.hint io
  * @changed 2026-11-14 The crops of the reference are prepared with `ai-image`.
@@ -27,6 +28,55 @@ import path from 'node:path';
 import { mkdir, stat } from 'node:fs/promises';
 import { resolveCropFile, cropRelative } from '../inputs/crops.js';
 import { runBridge, bridgeEnabled } from '../agent/bridges.js';
+import { runFile, writeJsonFile, readJsonFile } from './workspace.js';
+
+/** The file of the run that holds the prepared pictures. */
+export const PICTURES_FILE = 'pictures.json';
+
+/**
+ * The path of the file of the prepared pictures.
+ * @param {string} root
+ * @param {object} config
+ * @param {string} [id]
+ * @returns {string}
+ * @exports
+ * @ai.hint pure
+ */
+export function picturesPath(root, config = {}, id = null) {
+    return runFile(root, config, id, PICTURES_FILE);
+}
+
+/**
+ * Write the prepared pictures into the directory of the run.
+ *
+ * A resumed run skips the stage of the pictures, so the list of them is read back from
+ * here: the roles of the later stages have to know where the pictures are.
+ *
+ * @param {string} root
+ * @param {object} config
+ * @param {string} [id]
+ * @param {object[]} pictures
+ * @returns {Promise<string>} the path of the file
+ * @exports
+ * @ai.hint io
+ */
+export async function writePictures(root, config = {}, id = null, pictures = []) {
+    return await writeJsonFile(picturesPath(root, config, id), { pictures });
+}
+
+/**
+ * Read the prepared pictures of a run. A missing file gives an empty list.
+ * @param {string} root
+ * @param {object} config
+ * @param {string} [id]
+ * @returns {Promise<object[]>}
+ * @exports
+ * @ai.hint io
+ */
+export async function readPictures(root, config = {}, id = null) {
+    const stored = await readJsonFile(picturesPath(root, config, id));
+    return Array.isArray(stored?.pictures) ? stored.pictures : [];
+}
 
 /** The kinds of the crops that are pictures, when the config says nothing else. */
 export const pictureKinds = Object.freeze(['image', 'illustration', 'artwork', 'photo', 'ornament']);
@@ -127,9 +177,9 @@ export function pictureCrops(sheet, kinds = pictureKinds) {
  * The stage of the pictures: the crops are prepared with `ai-image`.
  *
  * @param {{ root?: string, config?: object, inputs?: object|null, env?: object,
- *   notify?: (event: object) => void, apply?: boolean }} request
+ *   notify?: (event: object) => void, apply?: boolean, runId?: string|null }} request
  * @returns {Promise<{ stage: string, ok: boolean, skipped: boolean, pictures: object[],
- *   warnings: string[], text: string }>}
+ *   warnings: string[], text: string, file: string|null }>}
  * @exports
  * @ai.hint io
  */
@@ -140,6 +190,7 @@ export async function picturesStage({
     env = process.env,
     notify = () => {},
     apply = true,
+    runId: id = null,
 } = {}) {
     const settings = config?.pictures ?? {};
     const warnings = [];
@@ -207,6 +258,9 @@ export async function picturesStage({
             args.push('--alpha-mode', String(settings.alphaMode ?? 'auto'));
             if (subject) args.push('--subject', subject);
         }
+        // The model of the pictures: null keeps the model of the configuration of `ai-image`.
+        const model = String(settings.model ?? '').trim();
+        if (model) args.push('--image-model', model);
 
         const result = await runBridge({ name: 'ai-image', args, config, cwd: root, env });
         if (result.skipped) {
@@ -238,6 +292,12 @@ export async function picturesStage({
         ? pictures.map((item) => `- ${item.name} (${item.kind}) → ${item.file}`).join('\n')
         : 'Картинки не подготовлены.';
 
+    // The pictures go to the disk: a resumed run skips this stage and needs them.
+    const file = await writePictures(root, config, id, pictures).catch((error) => {
+        warnings.push(`Картинки не записаны: ${error?.message ?? error}`);
+        return null;
+    });
+
     return {
         stage: 'pictures',
         ok: true,
@@ -245,6 +305,7 @@ export async function picturesStage({
         pictures,
         warnings: all,
         text,
+        file,
     };
 }
 

@@ -14,7 +14,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 
-import { ROLES, ROLE_NAMES, resolveRole, roleSchema, buildInstructions, runRole } from '../src/roles/index.js';
+import { ROLES, ROLE_NAMES, resolveRole, roleSchema, buildInstructions, runRole, roleReason } from '../src/roles/index.js';
 import { createClient } from '../src/openai/client.js';
 import { defaults } from '../src/config.js';
 
@@ -228,8 +228,15 @@ test('the loop stops when the turns run out', async () => {
     }
 });
 
-test('a tool that fails does not break the loop', async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-loop3-'));
+test('the reason of an answer without data is named', () => {
+    assert.match(roleReason({ refusal: 'I cannot do that.' }), /отказ модели/);
+    assert.match(roleReason({ error: { message: 'the model is down' } }), /ошибка ответа/);
+    assert.match(roleReason({ text: 'Сначала изучу проект.' }), /ответ без данных/);
+    assert.match(roleReason({}), /ответ пуст/);
+    assert.match(roleReason(), /ответ пуст/);
+});
+
+test('a tool that fails does not break the loop', async () => {    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-loop3-'));
     const home = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-home-'));
     const env = { HOME: home, USERPROFILE: home };
 

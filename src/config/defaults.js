@@ -211,6 +211,13 @@ export const defaults = {
     subjects: {},
     /** The mode of the alpha channel: auto | mask | contour | flat | key | off. */
     alphaMode: 'auto',
+    /**
+     * The model that prepares the pictures.
+     *
+     * `null` keeps the model of the configuration of `ai-image` — the seedream of ByteDance
+     * by default. A name here is passed to the CLI as `--image-model`.
+     */
+    model: null,
     /** Where the prepared pictures land, relative to the project. */
     dir: 'assets/import',
     /** How many pictures one run prepares. */

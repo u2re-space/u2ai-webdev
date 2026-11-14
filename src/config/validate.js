@@ -241,6 +241,9 @@ function validatePictures(pictures, fail) {
     if (typeof value !== 'string') fail(`${where}.subjects.${key}: строка`);
   }
   if (typeof pictures.alphaMode !== 'string' || !pictures.alphaMode.trim()) fail(`${where}.alphaMode: непустая строка`);
+  if (pictures.model !== null && (typeof pictures.model !== 'string' || !pictures.model.trim())) {
+    fail(`${where}.model: непустая строка или null`);
+  }
   if (typeof pictures.dir !== 'string' || !pictures.dir.trim()) fail(`${where}.dir: непустая строка`);
   if (!(Number.isSafeInteger(pictures.max) && pictures.max > 0)) fail(`${where}.max: целое > 0`);
 }

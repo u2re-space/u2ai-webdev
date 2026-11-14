@@ -13,7 +13,7 @@
  *
  * @depends openai/responses, agent/schemas, agent/skills, agent/docs, agent/tools, agent/pace
  * @usedBy stages/index, cli
- * @exports ROLES, ROLE_NAMES, resolveRole, buildInstructions, runRole, roleSchema
+ * @exports ROLES, ROLE_NAMES, resolveRole, buildInstructions, runRole, roleSchema, roleReason
  * @ai.tags roles, agent
  * @ai.hint keep
  */
@@ -276,12 +276,38 @@ export async function runRole({
         role: key,
         text: answer.text ?? '',
         data: answer.data ?? null,
+        refusal: answer.refusal ?? '',
+        error: answer.error ?? null,
         toolCalls: calls,
         turns,
         usage: answer.usage ?? null,
         model: answer.model ?? definition.model,
         stopped,
     };
+}
+
+/**
+ * Why a role answered without the data of its schema.
+ *
+ * A role that says nothing but a text is not a failure without a reason: the refusal of the
+ * model, the error of the answer or the text itself say what happened.
+ *
+ * @param {object} result the answer of a role
+ * @returns {string} a short reason, in Russian
+ * @exports
+ * @ai.hint pure
+ */
+export function roleReason(result = {}) {
+    const refusal = String(result?.refusal ?? '').trim();
+    if (refusal) return `отказ модели: ${refusal}`;
+    const error = result?.error;
+    if (error) {
+        const message = typeof error === 'string' ? error : (error?.message ?? JSON.stringify(error));
+        return `ошибка ответа: ${String(message).slice(0, 300)}`;
+    }
+    const text = String(result?.text ?? '').trim();
+    if (text) return `ответ без данных: ${text.slice(0, 300)}`;
+    return 'ответ пуст';
 }
 
 export { untrusted };

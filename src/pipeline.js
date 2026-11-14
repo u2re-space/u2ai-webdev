@@ -13,7 +13,7 @@
  *   progress of the run stays on the disk and the run may be continued later.
  *
  * @depends stages/index, stages/workspace, stages/plan, stages/architect, stages/setup,
- *          stages/review, agent/work-plan
+ *          stages/collect, stages/pictures, stages/review, agent/work-plan
  * @usedBy cli, jobs/manager
  * @exports runPipeline, resumePipeline, pipelineFiles, filesAllowed
  * @ai.tags pipeline, orchestration, resume
@@ -21,6 +21,7 @@
  * @ai.hint legacy-0.2
  * @changed 2026-11-13 Ported from the monolith: оркестратор стадий и продолжение прогона.
  * @changed 2026-11-14 The stage of the pictures; the name of the stage to stop at is not case sensitive.
+ * @changed 2026-11-14 A resumed run reads the collected inputs and the prepared pictures back.
  */
 
 import { runId as makeRunId } from './stages/workspace.js';
@@ -29,6 +30,8 @@ import { readPlan } from './stages/plan.js';
 import { readArchitecture } from './stages/architect.js';
 import { readSetup } from './stages/setup.js';
 import { readReview } from './stages/review.js';
+import { readInputs } from './stages/collect.js';
+import { readPictures } from './stages/pictures.js';
 import { createProgress, recordStep, readProgress, writeProgress } from './agent/work-plan.js';
 import { openMemory, memoryContext, memoryFile } from './memory.js';
 import { defaultHome } from './config/paths.js';
@@ -159,20 +162,39 @@ export async function runPipeline({
     }
 
     let progress = createProgress({ id: run, task, stages: list });
+    const done = new Map((progress.stages ?? []).map((stage) => [stage.name, stage]));
 
     if (resume) {
         const stored = await readProgress(root, config, run);
-        if (stored) progress = stored;
+        if (stored) {
+            progress = stored;
+            for (const stage of progress.stages ?? []) done.set(stage.name, stage);
+        }
+        // The task of the run belongs to the run: a continuation without a task of its own
+        // works on the task of the earlier run.
+        ctx.task = String(task ?? '').trim() || String(progress.task ?? '').trim();
         // The artifacts of the finished stages are read back, so the run continues with
         // the same plan and the same structure.
         ctx.plan = await readPlan(root, config, run);
         ctx.architecture = await readArchitecture(root, config, run);
         ctx.setup = await readSetup(root, config, run);
+        // The collected inputs and the prepared pictures too: the stages that are skipped
+        // would otherwise leave the later stages with nothing.
+        ctx.inputs = await readInputs(root, config, run);
+        ctx.pictures = await readPictures(root, config, run);
+        if (ctx.pictures.length && ctx.inputs) {
+            ctx.inputs = { ...ctx.inputs, pictures: ctx.pictures };
+        }
+        // A run that was started before the inputs were written collects them again: the
+        // collection is deterministic, and the later stages need what it finds.
+        if (!ctx.inputs) {
+            const record = done.get('collect');
+            if (record) done.set('collect', { ...record, status: 'pending' });
+        }
         const review = await readReview(root, config, run);
         if (review) ctx.review = review;
     }
 
-    const done = new Map((progress.stages ?? []).map((stage) => [stage.name, stage]));
     const reports = [];
     let status = 'completed';
     let error = null;

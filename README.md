@@ -112,6 +112,11 @@ The kinds say which crops of the sheet are pictures. The command is the one of `
 `background`, `alpha`, `trim` or `edit`; the section `commands` names another command for a
 kind, and the section `prompts` names the prompt of the command `edit`.
 
+The section `model` names the model that prepares the pictures: it is passed to `ai-image` as
+`--image-model`. Without it the model of the configuration of `ai-image` is used — the seedream
+of ByteDance by default, which cuts the subject out with a native alpha and keeps the frame of
+the crop.
+
 The subject is what the cut-out has to keep: `{name}` is the name of the item in the sheet,
 `{use}` is its use, `{kind}` is its kind. It is passed to `ai-image` as `--subject`, so the
 model knows that the piece of the board that fell into the cut of the bishop, and the piece of
@@ -144,6 +149,11 @@ turns.
 `--role <role>=<model>[:<effort>[:<max-effort>]]` gives a role its own model; the flag may be
 given many times. The config may override the model, the effort, the instructions and the tools of
 any role, and may add roles of its own.
+
+The plan of the planner has to hold the work itself: a plan without steps is a plan of
+intentions ("first I will study the project"), and the stages of the run have nothing to do. The
+planner is asked once more when its answer holds no steps, and the stage fails when the second
+answer holds none either.
 
 ## The inputs of a run
 
@@ -216,7 +226,7 @@ The sections of the file:
 | `stages` | Every stage: `enabled` and `maxTurns`. |
 | `output` | Where the artifacts go: `dir` (`.ai/`) and `work` (`.tmp/`). |
 | `inputs` | The names of the input files. |
-| `pictures` | The crops of the reference that are prepared: the kinds, the command of `ai-image`, the subject, the directory, the limit. |
+| `pictures` | The crops of the reference that are prepared: the kinds, the command of `ai-image`, the subject, the model, the directory, the limit. |
 | `memory` | The permanent memory: the file, the scope, the limit, the summaries of the files, the finished tasks. |
 | `components` | The local registry: the directory, the index, the vendor directory. |
 | `bridges` | The sibling CLIs: `decompose`, `measure`, `image` — each may be switched off. |
@@ -350,6 +360,21 @@ ai-webdev jobs list
 
 A run that was interrupted keeps its progress: the next run with `--resume <id>` continues at the
 stage it has not finished.
+
+The state of the run lives on the disk with it:
+
+| File | What it holds |
+|---|---|
+| `progress.json` | The stages of the run, their state and the task of the run. |
+| `inputs.json` | The collected inputs: the design, the measurements, the palette, the tokens. |
+| `pictures.json` | The prepared pictures and their paths. |
+| `plan.json` | The plan of the work. |
+| `architecture.json`, `setup.json` | The structure of the project and the environment of it. |
+
+A continued run reads those files back: the stages that are skipped would otherwise leave the
+later ones with nothing. The task belongs to the run, so `--resume <id>` without a task of its
+own works on the task of the earlier run. A run whose `inputs.json` is missing collects the
+inputs again — the collection is deterministic, and the later stages need what it finds.
 
 ## The bridges to the sibling CLIs
 
