@@ -83,8 +83,18 @@ report into the directory of the run and hands the result to the next one.
 
 The skeleton of the project is written by the code, not by the model: a project without a
 manifest gets `package.json`, the config of the bundler and the rules of the stack, with the
-stack of the architect. The installer then adds what is missing — the dependencies, the scripts,
-the files — and the stage checks the readiness of the project and says what is not there.
+stack of the architect. The versions of the tools of the stack are pinned there (`vite ^7.0.0`,
+`sass ^1.80.0`), so the install of the project is repeatable. The installer then adds what is
+missing — the dependencies, the scripts, the files — and the stage checks the readiness of the
+project and says what is not there.
+
+The dependencies go on the disk by the code of the stage, not by the model: the stage reads the
+manifest and runs the package manager of the project (`npm install --no-audit --no-fund`), so a
+run that leaves the setup stage has a `node_modules` and not only a promise of one. The runner
+of the programs (`src/agent/programs.js`) looks a program up in the PATH the way the shell looks
+it up: the name itself, then the shims of Windows (`npm.cmd`, `npx.cmd`). A shim is a batch
+file, and a batch file is started through the shell of the system. A missing program, a non-zero
+exit code and a timeout come back as an answer, never as an exception.
 
 `--route <stages>` chooses the stages the run goes through (the stages they need are added
 automatically), `--stop-after <stage>` (or `--stop-after=<stage>`) pauses the run on the
@@ -163,8 +173,11 @@ the answer or the text it gave instead of the schema.
 
 A role of a step has to write the files of the step. An answer that names no file, that writes
 nothing, or that holds nothing but a placeholder is a description of the work, not the work:
-the role is told to do it, with the tools. The stage checks the files of the step on the disk
-afterwards, and a step whose files are missing is not called done.
+the role is told to do it, with the tools. The first correction asks, the second one orders and
+names the tool to call (`write_file`, one call per file of the step). The stage checks the files
+of the step on the disk afterwards, and a step whose files are missing is not called done. The
+title of a step does not change the kind of the work: a step that says "describe the behaviour"
+still means the files of the behaviour.
 
 The command that does not finish on its own is refused: a server, a watcher or a tail would
 hold the run until the timeout. The default time of a command is 60 seconds, and the model may

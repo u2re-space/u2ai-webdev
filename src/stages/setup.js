@@ -15,7 +15,8 @@
  *          agent/fs-tools, agent/paths, cli/install
  * @usedBy stages/index, stages/markup, stages/coding, pipeline
  * @exports SETUP_FILE, detectPackageManager, ensureScaffold, hasEnvironment, applySetup,
- *          setupReadiness, writeSetup, readSetup, setupStage, INSTALL_CORRECTION
+ *          installDependencies, setupReadiness, writeSetup, readSetup, setupStage,
+ *          INSTALL_CORRECTION
  * @ai.tags stages, setup, dependencies
  * @ai.hint io
  * @ai.hint legacy-0.2
@@ -28,6 +29,7 @@ import { runRole } from '../roles/index.js';
 import { writeTextFile } from '../agent/fs-tools.js';
 import { saveDependency } from '../cli/install.js';
 import { preparedScaffoldFiles, writePreparedScaffold } from '../generate/scaffold.js';
+import { runProgram } from '../agent/programs.js';
 import { architectureText } from './architect.js';
 import { runId, runFile, writeJsonFile, readJsonFile } from './workspace.js';
 
@@ -232,6 +234,40 @@ export async function applySetup({ root, data = {}, overwrite = false, maxWriteB
 }
 
 /**
+ * Install the dependencies of the project.
+ *
+ * The installation is not a matter of the model: the manifest says what the project needs,
+ * and the package manager of the project puts it on the disk. The code runs it, so a
+ * project without `node_modules` never leaves the setup stage.
+ * @param {{ root: string, manager?: string, env?: object, timeoutMs?: number, force?: boolean }} request
+ * @returns {Promise<{ ran: boolean, ok: boolean, manager: string, text: string, reason: string|null }>}
+ * @exports
+ * @ai.hint io
+ */
+export async function installDependencies({ root, manager = 'npm', env = process.env, timeoutMs = 600_000, force = false } = {}) {
+    const managerName = String(manager ?? '').trim() || 'npm';
+    const modules = await stat(path.join(root, 'node_modules')).then((info) => info.isDirectory()).catch(() => false);
+    if (modules && !force) {
+        return { ran: false, ok: true, manager: managerName, text: 'node_modules есть: установка не нужна.', reason: null };
+    }
+    const commands = {
+        npm: ['install', '--no-audit', '--no-fund'],
+        pnpm: ['install'],
+        yarn: ['install'],
+        bun: ['install'],
+    };
+    const args = commands[managerName] ?? commands.npm;
+    const result = await runProgram({ command: managerName, args, cwd: root, env, timeoutMs });
+    return {
+        ran: true,
+        ok: result.ok,
+        manager: managerName,
+        text: result.text,
+        reason: result.reason,
+    };
+}
+
+/**
  * Check whether the project is ready to work.
  *
  * @param {string} root
@@ -433,6 +469,18 @@ export async function setupStage({
 
     const data = result.data;
     const applied = await applySetup({ root, data, overwrite });
+
+    // The dependencies go on the disk: the manifest says what the project needs, and the
+    // package manager puts it there. The model does not install anything.
+    const install = await installDependencies({
+        root,
+        manager: String(data.packageManager ?? manager).trim() || manager,
+        env,
+    });
+    if (install.ran && !install.ok) {
+        applied.warnings.push(`Зависимости не установлены: ${install.reason ?? 'неизвестная причина'}.`);
+    }
+
     const readiness = await setupReadiness(root, config);
 
     const setup = {
@@ -443,6 +491,7 @@ export async function setupStage({
         commands: Array.isArray(data.commands) ? data.commands : [],
         notes: String(data.notes ?? '').trim(),
         scaffold: { written: scaffold.written, skipped: scaffold.skipped },
+        install: { ran: install.ran, ok: install.ok, manager: install.manager },
         applied: {
             dependencies: applied.dependencies,
             scripts: applied.scripts,

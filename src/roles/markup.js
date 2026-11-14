@@ -69,6 +69,9 @@ Rules:
   \`aria-expanded\` on a disclosure, \`aria-current\` on the active item of a menu.
 - The class names follow the naming of the project: one pattern, one way of writing it, and
   the names say what the part is (\`card__title\`, not \`blue-text\`).
+- The title of the step is not the kind of work: a step whose title says "describe" or
+  "specify" still means writing the markup of the files the step names. Your answer is the
+  markup on the disk, never a description of it.
 - Write the markup of the files the step names. The styles and the scripts are other roles'
   work: leave the hooks they need (\`id\`, \`data-*\`, the class names), do not write their rules.
 - The markup is valid: the tags are closed, the attributes are quoted, the boolean attributes

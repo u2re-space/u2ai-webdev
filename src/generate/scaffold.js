@@ -11,8 +11,9 @@
  * @depends node:path, node:fs/promises, config/constants
  * @usedBy generate/brief, stages/setup
  * @exports GENERATION_KINDS, FRAMEWORKS, filesForKind, filesForStack, npmPackageName,
- *          buildPackageManifest, stackText, recommendStack, kindRules, renderGenerationTask,
- *          preparedScaffoldFiles, writePreparedScaffold, planScaffoldMerge
+ *          buildPackageManifest, SCAFFOLD_VERSIONS, scaffoldVersion, stackText, recommendStack,
+ *          kindRules, renderGenerationTask, preparedScaffoldFiles, writePreparedScaffold,
+ *          planScaffoldMerge
  * @ai.tags generate, scaffold, stack
  * @ai.hint pure
  * @ai.hint legacy-0.2
@@ -127,9 +128,52 @@ export function npmPackageName(basename) {
 }
 
 /**
+ * The versions the scaffold puts into the manifest.
+ *
+ * A version of `*` is not a version: npm would take the newest one of the registry, and the
+ * newest one changes under the feet of the project. The versions of the tools of the stack
+ * are pinned to a known-good range, so the install of the project is repeatable.
+ * @type {Record<string, string>}
+ * @exports
+ * @ai.hint pure
+ */
+export const SCAFFOLD_VERSIONS = Object.freeze({
+    vite: '^7.0.0',
+    sass: '^1.80.0',
+    less: '^4.2.0',
+    typescript: '^5.6.0',
+    react: '^19.0.0',
+    'react-dom': '^19.0.0',
+    vue: '^3.5.0',
+    svelte: '^5.0.0',
+    next: '^15.0.0',
+    astro: '^5.0.0',
+    '@vitejs/plugin-react': '^4.3.0',
+    '@vitejs/plugin-vue': '^5.2.0',
+    '@vitejs/plugin-svelte': '^5.0.0',
+    '@sveltejs/vite-plugin-svelte': '^5.0.0',
+});
+
+/**
+ * The version of a package of the scaffold.
+ *
+ * A package the catalogue does not know keeps the version of the manifest: an unknown
+ * package is pinned by the one who asked for it.
+ * @param {string} name
+ * @param {string} fallback
+ * @returns {string}
+ * @exports
+ * @ai.hint pure
+ */
+export function scaffoldVersion(name, fallback = '*') {
+    return SCAFFOLD_VERSIONS[String(name ?? '')] ?? fallback;
+}
+
+/**
  * The `package.json` of a new project.
  *
- * The versions are `*`: the installer of the project decides the real ones and pins them.
+ * The versions are the pinned ones of the stack: the installer of the project decides the
+ * real ones and pins them.
  * @param {{ kind: string|null, name: string, framework?: string|null, styleLanguage?: string|null,
  *   scriptLanguage?: string|null, libraries?: object[] }} request
  * @returns {object}
@@ -159,18 +203,20 @@ export function buildPackageManifest({
 
     const definition = FRAMEWORKS[fw];
     if (definition) {
-        for (const lib of definition.libs) dependencies[lib] = '*';
-        for (const plugin of definition.plugins) devDependencies[plugin] = '*';
+        for (const lib of definition.libs) dependencies[lib] = scaffoldVersion(lib);
+        for (const plugin of definition.plugins) devDependencies[plugin] = scaffoldVersion(plugin);
     }
-    if (web) devDependencies.vite = '*';
-    if (web && style === 'scss') devDependencies.sass = '*';
-    if (web && style === 'less') devDependencies.less = '*';
-    if (script === 'typescript') devDependencies.typescript = '*';
+    if (web) devDependencies.vite = scaffoldVersion('vite');
+    if (web && style === 'scss') devDependencies.sass = scaffoldVersion('sass');
+    if (web && style === 'less') devDependencies.less = scaffoldVersion('less');
+    if (script === 'typescript') devDependencies.typescript = scaffoldVersion('typescript');
 
     for (const library of libraries) {
         if (!library?.include || !library?.name) continue;
         const bucket = library.kind === 'tool' || library.kind === 'css' ? devDependencies : dependencies;
-        if (!(library.name in dependencies) && !(library.name in devDependencies)) bucket[library.name] = '*';
+        if (!(library.name in dependencies) && !(library.name in devDependencies)) {
+            bucket[library.name] = scaffoldVersion(library.name);
+        }
     }
 
     const manifest = {

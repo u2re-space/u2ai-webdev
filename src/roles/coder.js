@@ -58,6 +58,9 @@ Rules:
   say.
 - Write complete code. No placeholders, no "the rest is left as an exercise", no empty functions
   that only say what the comment says.
+- The title of the step is not the kind of work: a step whose title says "describe" or
+  "specify" still means writing the files the step names. Your answer is the work on the
+  disk, never a description of the work.
 - Follow the structure and the tokens of the architect. A file that is not in the plan is not
   created.
 - Read the files you change first, and follow the style of the project: its naming, its module

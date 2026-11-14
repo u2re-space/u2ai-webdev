@@ -103,6 +103,18 @@ export const FINAL_ANSWER = 'The turns of the role are over. Do not call any too
  */
 export const WORK_CORRECTION = 'You have not done the work yet: your answer names no file, and nothing was written. Do the work now with the tools — read what you need, write the files of the step, and answer with their contents. Do not describe what you are going to do: the answer is the result of the work.';
 
+/**
+ * The second correction of a role that still only described its work.
+ *
+ * The first correction is a request; the second one is an order with the tools named. A role
+ * that answers with a plan twice is not going to work on the plan: it has to be told, in
+ * plain words, which call to make.
+ * @type {string}
+ * @exports
+ * @ai.hint pure
+ */
+export const WORK_ORDER = 'Still nothing is written. Stop describing the work: make the calls. For every file of the step call the tool `write_file` with its path and its full content — one call per file, no exceptions. Do not answer until the files are on the disk. If you cannot write a file, say why in the notes of the answer.';
+
 /** The tools that write into the project. */
 const WRITE_TOOLS = Object.freeze(['write_file', 'replace_text', 'copy_path', 'generate_svg']);
 
@@ -271,6 +283,7 @@ export async function runRole({
     let answer = null;
     let corrected = false;
     let correctedWork = false;
+    let workCorrections = 0;
     let fallback = null;
     // The files the step names: the role has to write them.
     const wantedFiles = Array.isArray(context?.step?.files)
@@ -331,10 +344,16 @@ export async function runRole({
             ), 0);
             const useful = files.filter((file) => !isEmptyFile(file)).length + rest;
             const withoutWork = requireFiles && !wrote && useful === 0;
-            if (withoutWork && !correctedWork && turns < limit) {
-                correctedWork = true;
+            if (withoutWork && turns < limit && workCorrections < 2) {
+                // The first correction asks, the second one orders and names the tools.
                 const list = wantedFiles.length ? ` The step names: ${wantedFiles.join(', ')}.` : '';
-                items.push({ role: 'user', content: [textPart(`${WORK_CORRECTION}${list}`)] });
+                workCorrections += 1;
+                if (workCorrections === 1) {
+                    correctedWork = true;
+                    items.push({ role: 'user', content: [textPart(`${WORK_CORRECTION}${list}`)] });
+                } else {
+                    items.push({ role: 'user', content: [textPart(`${WORK_ORDER}${list}`)] });
+                }
                 continue;
             }
 

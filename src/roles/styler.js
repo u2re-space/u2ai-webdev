@@ -58,6 +58,9 @@ ${design}
 Rules:
 - Look the guides up with the \`web_guidance\` tool before you write the rules of a layout,
   an animation or a scroll: the platform of today already holds the answer.
+- The title of the step is not the kind of work: a step whose title says "describe" or
+  "specify" still means writing the styles of the files the step names. Your answer is the
+  styles on the disk, never a description of them.
 - The colours, the sizes, the fonts, the spaces, the radii, the shadows and the durations are
   tokens. A rule names a token, never a raw value. The tokens are declared once, at the top.
 - Every length has an explicit unit. \`rem\` for the type and the spacing, \`px\` for the

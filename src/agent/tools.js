@@ -10,13 +10,13 @@
  *
  * @depends node:path, node:child_process, agent/fs-tools, agent/project-backup, agent/assets,
  *          agent/bridges, agent/tool-specs, agent/paths
- * @exports createToolset, toolSpecs, enabledToolNames, mcpToolEntries, htmlToText, BLOCKING_COMMANDS
+ * @exports createToolset, toolSpecs, enabledToolNames, mcpToolEntries, htmlToText,
+ *          BLOCKING_COMMANDS, WINDOWS_EXTENSIONS, quoteWindowsArg, findProgram, killTree
  * @ai.tags tools, agent
  * @ai.hint keep
  */
 
 import path from 'node:path';
-import { spawn } from 'node:child_process';
 import { toolSpecs as buildSpecs } from './tool-specs.js';
 import { listFiles, readTextFile, searchFiles, writeTextFile, replaceInFile, deleteFile, makeDirectory, copyPath } from './fs-tools.js';
 import { listProjectBackups, restoreProjectBackup } from './project-backup.js';
@@ -24,9 +24,11 @@ import { generateSvg, downloadFont, downloadIcons } from './assets.js';
 import { runBridge } from './bridges.js';
 import { readSkill } from './skills.js';
 import { guidanceSearchText, guidanceRetrieveText, GUIDANCE_SOURCE } from './guidance.js';
+import { runProgram as runProgramIn } from './programs.js';
 import { isInside, resolveInside } from './paths.js';
 
 export { toolSpecs, enabledToolNames } from './tool-specs.js';
+export { WINDOWS_EXTENSIONS, quoteWindowsArg, findProgram, killTree } from './programs.js';
 
 /**
  * The commands that do not finish on their own: a server, a watcher, a tail.
@@ -212,23 +214,16 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
      * @param {string[]} args
      * @param {number} timeoutMs
      * @returns {Promise<string>}
-     */    async function runProgram(command, args, timeoutMs) {
-        return await new Promise((resolve, reject) => {
-            const child = spawn(command, args, { cwd: root, env, shell: false, windowsHide: true });
-            let stdout = '';
-            let stderr = '';
-            let timedOut = false;
-            const timer = setTimeout(() => { timedOut = true; child.kill(); }, timeoutMs);
-            child.stdout?.on('data', (chunk) => { stdout += String(chunk); });
-            child.stderr?.on('data', (chunk) => { stderr += String(chunk); });
-            child.on('error', (error) => { clearTimeout(timer); reject(error); });
-            child.on('close', (code) => {
-                clearTimeout(timer);
-                const head = `${command} ${args.join(' ')} → код ${code ?? 0}${timedOut ? ' (превышено время)' : ''}`;
-                const body = [stdout.trim(), stderr.trim()].filter(Boolean).join('\n');
-                resolve(body ? `${head}\n${body}` : head);
-            });
+     */
+    async function runProgram(command, args, timeoutMs) {
+        const result = await runProgramIn({
+            command,
+            args,
+            cwd: root,
+            env,
+            timeoutMs,
         });
+        return result.text;
     }
 
     /**

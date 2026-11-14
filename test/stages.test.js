@@ -17,7 +17,7 @@ import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { normalizePlan, orderSteps, planText, planStage, writePlan, readPlan } from '../src/stages/plan.js';
 import { collectStage, collectText, componentCards, readInputs } from '../src/stages/collect.js';
 import { normalizeArchitecture, architectureText, architectStage } from '../src/stages/architect.js';
-import { detectPackageManager, applySetup, setupReadiness, setupStage } from '../src/stages/setup.js';
+import { detectPackageManager, applySetup, setupReadiness, setupStage, installDependencies } from '../src/stages/setup.js';
 import { runId, runDirectory, sanitizeId } from '../src/stages/workspace.js';
 import { openRegistry } from '../src/registry.js';
 
@@ -404,6 +404,34 @@ test('the stage of the setup writes the skeleton of the project', async () => {
     const vite = await readFile(path.join(root, 'vite.config.js'), 'utf8');
     assert.match(vite, /defineConfig/);
     assert.deepEqual(result.setup.scaffold.written.sort(), ['.rules/files.md', '.rules/stack.md', 'package.json', 'vite.config.js']);
+});
+
+test('the setup installs the dependencies of the project', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-install-'));
+    // A project with a manifest and no packages: the manager of the project is `npm`, and
+    // the installation is done by the code.
+    await writeFile(path.join(root, 'package.json'), JSON.stringify({
+        name: 'demo',
+        private: true,
+        devDependencies: {},
+    }, null, 2), 'utf8');
+
+    const result = await installDependencies({ root, manager: 'npm', timeoutMs: 120_000 });
+
+    // The project has no dependencies, so the manager has nothing to install: the answer is
+    // still an answer, and the stage does not break.
+    assert.equal(typeof result.ran, 'boolean');
+    assert.equal(result.manager, 'npm');
+});
+
+test('the setup does not install twice', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-install-'));
+    await mkdir(path.join(root, 'node_modules'), { recursive: true });
+
+    const result = await installDependencies({ root, manager: 'npm' });
+
+    assert.equal(result.ran, false);
+    assert.equal(result.ok, true);
 });
 
 test('the stage of the setup applies the environment and writes the file', async () => {
