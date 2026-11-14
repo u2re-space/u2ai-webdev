@@ -208,6 +208,44 @@ test('a file that could not be written fails the step', async () => {
     assert.ok(result.warnings.some((item) => /не записаны/.test(item)));
 });
 
+test('a step whose answer was lost is done again', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-steps-lost-'));
+    const config = { output: { work: './.tmp' }, stages: { coder: { maxTurns: 4 } } };
+    const client = fakeClient([schemaAnswer('code', {
+        summary: 'The entry.',
+        files: [{ path: 'src/main.js', content: 'export const x = 1;\n', language: 'js' }],
+        commands: [],
+        notes: '',
+    })]);
+
+    const first = await runStepStage({
+        client,
+        config,
+        root,
+        task: 'Make a landing.',
+        role: 'coder',
+        plan: PLAN,
+        runId: 'run-1',
+    });
+    assert.equal(first.ok, true);
+
+    // The file on the disk is the file of the earlier stage: the answer of the role was
+    // never applied, and the step is not done.
+    await writeFile(path.join(root, 'src', 'main.js'), '// the old file\n', 'utf8');
+    let asked = 0;
+    const second = await runStepStage({
+        client: { responses: { async create() { asked += 1; return { output: [], output_text: '' }; } } },
+        config,
+        root,
+        task: 'Make a landing.',
+        role: 'coder',
+        plan: PLAN,
+        runId: 'run-1',
+    });
+    assert.ok(asked > 0, 'the step has to be done again');
+    assert.equal(second.steps[0].resumed, undefined);
+});
+
 test('a step that is already done is not done again', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-steps-resume-'));
     const config = { output: { work: './.tmp' }, stages: { coder: { maxTurns: 4 } } };

@@ -338,6 +338,18 @@ export async function resumableStep(root, config = {}, id = null, step = {}) {
     const names = written.length ? written : (Array.isArray(step.files) ? step.files : []);
     const missing = await missingFiles(root, names);
     if (missing.length) return null;
+    // The answer of the role has to be on the disk: a file that is still the file of the
+    // earlier stage means the answer was lost, and the step is done again.
+    const own = new Set((Array.isArray(report.applied?.own) ? report.applied.own : []).map((item) => String(item)));
+    for (const file of Array.isArray(report.files) ? report.files : []) {
+        const rel = String(file?.path ?? '').trim();
+        const content = typeof file?.content === 'string' ? file.content : null;
+        if (!rel || content === null) continue;
+        // The role wrote this file with its own tool: the file on the disk is the truth.
+        if (own.has(rel)) continue;
+        const disk = await currentContent(root, rel);
+        if (disk === null || disk !== content) return null;
+    }
     return { ...report, resumed: true };
 }
 
@@ -461,9 +473,10 @@ export async function runStepStage({
 
         const data = result.data ?? {};
         const files = Array.isArray(data.files) ? data.files : [];
-        let applied = { written: [], skipped: [], replaced: [], failed: [], warnings: [] };
+        const own = filesByTool(result);
+        let applied = { written: [], skipped: [], replaced: [], failed: [], own, warnings: [] };
         if (apply) {
-            applied = await applyFiles({ root, files, owned: filesByTool(result) });
+            applied = { ...await applyFiles({ root, files, owned: own }), own };
             warnings.push(...applied.warnings);
             for (const rel of applied.replaced) {
                 warnings.push(`Шаг ${step.id}: файл ${rel} перезаписан — ответ роли отличался от файла на диске.`);
@@ -518,6 +531,7 @@ export async function runStepStage({
                     skipped: applied.skipped,
                     replaced: [...applied.replaced, ...written.replaced],
                     failed: [...applied.failed, ...written.failed],
+                    own: [...new Set([...applied.own, ...filesByTool(repair)])],
                     warnings: applied.warnings,
                 };
             }
@@ -557,6 +571,7 @@ export async function runStepStage({
                 skipped: applied.skipped,
                 replaced: applied.replaced,
                 failed: applied.failed,
+                own: applied.own,
             },
             syntax: { checked: syntax.checked, errors: syntax.errors },
             turns: result.turns + (repair?.turns ?? 0),
