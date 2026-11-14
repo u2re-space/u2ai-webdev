@@ -20,6 +20,7 @@ import { parsePalette, contrastRatio, paletteTokens } from '../src/inputs/palett
 import { parseTokensCss, tokenValue } from '../src/inputs/tokens.js';
 import { detectImageMime, listImages, readProjectInstructions } from '../src/inputs/assets.js';
 import { collectInputs, inputContext, inputSummary } from '../src/inputs/index.js';
+import { findReferences, readReferences } from '../src/inputs/references.js';
 import { defaults } from '../src/config.js';
 
 const DESIGN_MD = `# Design tokens
@@ -224,4 +225,64 @@ test('a missing input is a warning, not an error', async () => {
     const summary = inputSummary(collected);
     assert.equal(summary.design, false);
     assert.ok(summary.warnings.some((line) => line.includes('DESIGN.md')));
+});
+
+test('the reference of the design is found by its name', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-refs-'));
+    // The same picture in two formats is one picture.
+    await writeFile(path.join(root, 'landing.png'), 'png');
+    await writeFile(path.join(root, 'landing.jpg'), 'jpg');
+    await writeFile(path.join(root, 'logo.svg'), '<svg></svg>');
+    const config = structuredClone(defaults);
+
+    const found = await findReferences({ root, config, task: 'Make the landing.' });
+
+    assert.equal(found.length, 1);
+    assert.equal(found[0].path, 'landing.png');
+});
+
+test('the file that the task names is the reference', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-refs2-'));
+    await writeFile(path.join(root, 'screen.png'), 'png');
+    const config = structuredClone(defaults);
+
+    const found = await findReferences({ root, config, task: 'Repeat the screen.png exactly.' });
+
+    assert.equal(found.length, 1);
+    assert.equal(found[0].path, 'screen.png');
+});
+
+test('the config names the reference outright', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-refs3-'));
+    await writeFile(path.join(root, 'picture.png'), 'png');
+    const config = structuredClone(defaults);
+    config.inputs.reference = 'picture.png';
+
+    const found = await findReferences({ root, config, task: 'Make the page.' });
+
+    assert.equal(found.length, 1);
+    assert.equal(found[0].path, 'picture.png');
+});
+
+test('the reference goes into the request as a picture', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-refs4-'));
+    await writeFile(path.join(root, 'landing.png'), 'png');
+
+    const read = await readReferences(root, [{ path: 'landing.png', mime: 'image/png' }]);
+
+    assert.equal(read.parts.length, 1);
+    assert.equal(read.parts[0].type, 'input_image');
+    assert.match(read.parts[0].image_url, /^data:image\/png;base64,/);
+    assert.deepEqual(read.names, ['landing.png']);
+});
+
+test('the collected inputs carry the reference', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-refs5-'));
+    await writeFile(path.join(root, 'landing.png'), 'png');
+    const config = structuredClone(defaults);
+
+    const collected = await collectInputs({ root, config, task: 'Make the landing.' });
+
+    assert.equal(inputSummary(collected).references, 1);
+    assert.match(inputContext(collected), /The reference of the design/);
 });

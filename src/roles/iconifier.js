@@ -10,6 +10,7 @@
  */
 
 import { UNTRUSTED } from './untrusted.js';
+import { referenceNote } from './reference.js';
 
 /** The name of the role. */
 export const name = 'iconifier';
@@ -46,6 +47,7 @@ export function instructions(context = {}) {
     const design = context.design
         ? 'The design direction is in the task context. The icons have to match its weight, its radius and its stroke.'
         : '';
+    const reference = referenceNote(context);
     return `You are the iconifier of a web project. You choose the icons, you bring the set into
 the project and you put the icons into the markup.
 
@@ -54,6 +56,7 @@ ${step}
 ${brief}
 ${set}
 ${design}
+${reference}
 
 Rules:
 - One set for the whole project: phosphor or lucide. Never two sets in one interface, and

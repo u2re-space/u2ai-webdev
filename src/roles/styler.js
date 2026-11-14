@@ -10,6 +10,7 @@
  */
 
 import { UNTRUSTED } from './untrusted.js';
+import { referenceNote } from './reference.js';
 
 /** The name of the role. */
 export const name = 'styler';
@@ -46,6 +47,7 @@ export function instructions(context = {}) {
     const design = context.design
         ? 'The design direction, the palette and the measurements are in the task context. The styles have to match them: the colours, the type scale, the spacing and the sizes of the blocks.'
         : '';
+    const reference = referenceNote(context);
     return `You are the styler of a web project. You write the CSS (or SCSS) of one step and you
 make the result look the way the design direction says.
 
@@ -54,6 +56,7 @@ ${step}
 ${brief}
 ${style}
 ${design}
+${reference}
 
 Rules:
 - Look the guides up with the \`web_guidance\` tool before you write the rules of a layout,

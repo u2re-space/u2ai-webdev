@@ -317,6 +317,39 @@ test('a broken file that stays broken is an error of the step', async () => {
     assert.equal(result.steps[0].syntax.errors.length, 1);
 });
 
+test('the reference of the design goes into the request of the role', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-steps-ref-'));
+    await writeFile(path.join(root, 'landing.png'), 'png');
+    let seen = null;
+    const client = fakeClient([
+        (body) => {
+            seen = body;
+            return schemaAnswer('code', {
+                summary: 'The entry.',
+                files: [{ path: 'src/main.js', content: 'export const x = 1;\n', language: 'js' }],
+                commands: [],
+                notes: '',
+            });
+        },
+    ]);
+
+    const result = await runStepStage({
+        client,
+        config: { output: { work: './.tmp' } },
+        root,
+        task: 'Make a landing.',
+        role: 'coder',
+        plan: PLAN,
+        inputs: { references: [{ path: 'landing.png', mime: 'image/png' }] },
+        runId: 'run-1',
+    });
+
+    assert.equal(result.ok, true);
+    const parts = seen.input[0].content;
+    assert.ok(parts.some((part) => part.type === 'input_image'), 'the picture is attached');
+    assert.match(parts[0].text, /The reference/);
+});
+
 test('the tokens are printed as a block of custom properties', () => {
     const block = styleTokensText([{ name: '--color-text', value: '#101828' }, { name: 'space-2', value: '8px' }]);
     assert.match(block, /:root \{/);

@@ -10,6 +10,7 @@
  */
 
 import { UNTRUSTED } from './untrusted.js';
+import { referenceNote } from './reference.js';
 
 /** The name of the role. */
 export const name = 'markup';
@@ -45,6 +46,7 @@ export function instructions(context = {}) {
     const design = context.design
         ? 'The design direction, the measurements and the assets are in the task context. The markup has to match them: the regions, the order of the blocks and the names of the parts.'
         : '';
+    const reference = referenceNote(context);
     return `You are the markup specialist of a web project. You write the structure of the
 page: the elements, the order, the names and the attributes that give the page its meaning.
 
@@ -53,6 +55,7 @@ ${step}
 ${brief}
 ${markup}
 ${design}
+${reference}
 
 Rules:
 - The platform of today comes before the habit of yesterday: look the guides up with the

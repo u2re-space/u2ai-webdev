@@ -514,6 +514,33 @@ CLI `ai-webdev` (`@u2ai/webdev`) с собственным конфигом `~/.
       подделка `sass`), `test/steps.test.js` (сломанный файл чинится ролью, незачёнённый сломанный
       файл — ошибка шага)
 
+### step-31 — Референс дизайна видят роли
+- [x] `src/inputs/references.js` — поиск референса: файл из задачи, файл с именем `landing`,
+      `reference`, `screenshot`, `mockup`, `design`, любой файл `.ai/refs/`; одна картинка в двух
+      форматах — одна (лучший формат)
+- [x] `src/config/defaults.js`, `src/config/validate.js` — `inputs.reference`: `null` (искать по
+      имени) или путь/список путей (референс назван прямо)
+- [x] `src/inputs/index.js` — собранные входы несут `references`, контекст роли говорит о референсе
+- [x] `src/inputs/references.js` — картинка читается и уходит в запрос как `input_image`
+- [x] `src/stages/step.js`, `src/stages/review.js`, `src/stages/architect.js` — референс прикреплён
+      к запросу роли
+- [x] `src/roles/reference.js` — `referenceNote()`: роли сказано, что картинка приложена
+- [x] README (EN): референс дизайна во входах
+- [x] Проверка: `test/inputs.test.js` (поиск по имени, файл из задачи, файл из конфига, картинка
+      в запросе), `test/steps.test.js` (референс в запросе роли)
+
+### step-32 — Стили подключены: сборка и разметка
+- [ ] `src/stages/build.js` — точка входа стилей: файлы `scss`/`sass`, не партиалы и не
+      используемые другими файлами
+- [ ] `src/stages/build.js` — недостающий `@use` для партиала, который никто не использует
+- [ ] `src/stages/build.js` — компиляция `sass` проекта: `styles/main.scss` → `styles/main.css`
+- [ ] `src/stages/build.js` — `index.html`: `<link rel="stylesheet">` на собранный CSS и
+      `<script type="module">` на скрипт, если их нет
+- [ ] `src/stages/index.js`, `src/config/constants.js`, `src/config/defaults.js` — стадия `build`
+      после `styling`
+- [ ] README (EN), planned.md (RU)
+- [ ] Проверка: `test/build.test.js`
+
 ---
 
 ## 2. Порядок работы и зависимости шагов

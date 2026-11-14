@@ -10,6 +10,7 @@
  */
 
 import { UNTRUSTED } from './untrusted.js';
+import { referenceNote } from './reference.js';
 
 /** The name of the role. */
 export const name = 'architect';
@@ -41,6 +42,7 @@ export function instructions(context = {}) {
     const design = context.design
         ? `The design direction and the measurements are in the task context. They decide the tokens, the spacing and the grid.`
         : '';
+    const reference = referenceNote(context);
     return `You are the architect of a web project. You decide the shape of the code before anyone
 writes it: the modules, the files, the boundaries between them and the tokens they share.
 
@@ -48,6 +50,7 @@ ${task}
 ${plan}
 ${stack}
 ${design}
+${reference}
 
 Rules:
 - The platform of today is the platform you design for: look the guides up with the

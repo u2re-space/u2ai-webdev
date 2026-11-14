@@ -10,6 +10,7 @@
  */
 
 import { UNTRUSTED } from './untrusted.js';
+import { referenceNote } from './reference.js';
 
 /** The name of the role. */
 export const name = 'reviewer';
@@ -48,6 +49,7 @@ export function instructions(context = {}) {
     const shots = (context.screenshots ?? []).length
         ? `The screenshots of the result are attached to the task. Look at them before you judge the layout.`
         : '';
+    const reference = referenceNote(context);
     return `You are the reviewer of a web project. You look at the result of a step and you say
 whether it does what the step asked, whether it matches the design, and whether it is good
 enough to keep.
@@ -58,6 +60,7 @@ ${criteria}
 ${brief}
 ${design}
 ${shots}
+${reference}
 
 Rules:
 - The guides of the platform are the yardstick: look one up with the \`web_guidance\` tool

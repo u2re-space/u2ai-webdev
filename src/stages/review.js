@@ -24,6 +24,7 @@ import { readFile } from 'node:fs/promises';
 import { runRole } from '../roles/index.js';
 import { imagePart } from '../openai/responses.js';
 import { resolveInside } from '../agent/paths.js';
+import { readReferences } from '../inputs/references.js';
 import { architectureText } from './architect.js';
 import { runId, runFile, writeJsonFile, readJsonFile } from './workspace.js';
 
@@ -181,7 +182,8 @@ export async function reviewStage({
     }
 
     const shots = await readScreenshots(root, screenshots);
-    const warnings = [...shots.warnings];
+    const reference = await readReferences(root, inputs?.references ?? []);
+    const warnings = [...shots.warnings, ...reference.warnings];
     const reviews = [];
     const issues = [];
 
@@ -207,13 +209,14 @@ export async function reviewStage({
                 brief,
                 criteria: step.criteria ?? [],
                 screenshots: shots.names,
+                reference: reference.names,
                 design: Boolean(inputs),
             },
             root,
             env,
             maxTurns: config?.stages?.review?.maxTurns ?? null,
             notify,
-            parts: shots.parts,
+            parts: [...reference.parts, ...shots.parts],
         });
 
         const data = result.data ?? {};

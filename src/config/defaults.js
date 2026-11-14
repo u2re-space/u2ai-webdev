@@ -236,6 +236,14 @@ export const defaults = {
     tokens: 'tokens.css',
     /** Read the project instructions (AGENTS.md, CLAUDE.md). */
     projectInstructions: true,
+    /**
+     * The reference of the design: the screenshot the roles have to look at.
+     *
+     * `null` → the reference is found by the name: a file the task names, a file that says
+     * that it is a reference (`landing`, `reference`, `screenshot`, `mockup`, `design`), or a
+     * file of `.ai/refs/`. A path (or a list of paths) names the reference outright.
+     */
+    reference: null,
   },
 
   // --- memory ------------------------------------------------------------------

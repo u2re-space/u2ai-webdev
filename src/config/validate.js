@@ -323,6 +323,13 @@ export function validateConfig(config) {
     if (typeof c.inputs[key] !== 'string' || !c.inputs[key].trim()) fail(`inputs.${key}: непустая строка`);
   }
   if (typeof c.inputs.projectInstructions !== 'boolean') fail('inputs.projectInstructions: true | false');
+  const reference = c.inputs.reference ?? null;
+  if (reference !== null && typeof reference !== 'string' && !Array.isArray(reference)) {
+    fail('inputs.reference: null | строка | список строк');
+  }
+  if (Array.isArray(reference) && reference.some((item) => typeof item !== 'string' || !item.trim())) {
+    fail('inputs.reference: список непустых строк');
+  }
 
   validateMemory(c.memory, fail);
   validateComponents(c.components, fail);

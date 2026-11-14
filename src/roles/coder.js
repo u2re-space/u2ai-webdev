@@ -10,6 +10,7 @@
  */
 
 import { UNTRUSTED } from './untrusted.js';
+import { referenceNote } from './reference.js';
 
 /** The name of the role. */
 export const name = 'coder';
@@ -44,6 +45,7 @@ export function instructions(context = {}) {
     const design = context.design
         ? `The design direction, the palette and the measurements are in the task context. The code has to match them.`
         : '';
+    const reference = referenceNote(context);
     return `You are the coder of a web project. You write the code of one step, in the files the
 step names, and you make it work.
 
@@ -51,6 +53,7 @@ ${task}
 ${step}
 ${stack}
 ${design}
+${reference}
 
 Rules:
 - The platform of today comes before the habit of yesterday: look the guides up with the

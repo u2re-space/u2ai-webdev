@@ -208,9 +208,17 @@ A run reads the direction of the design from the project itself:
 | `tokens.css` | The tokens of the design: the variables of the stylesheet. |
 | `AGENTS.md`, `CLAUDE.md` | The instructions of the project. |
 | `.ai/refs/`, `.ai/assets/` | The pictures: the references, the crops, the assets. |
+| the reference itself | The screenshot of the design, attached to the request of the roles. |
 
 The values of `tokens.css` win over the document and over the palette. A conflict between the
 sources is reported, never resolved silently.
+
+The reference of the design is found by the name: a picture the task names (`landing.png`), a
+picture whose name says that it is a reference (`landing`, `reference`, `screenshot`, `mockup`,
+`design`), or a picture of `.ai/refs/`. `inputs.reference` in the config names it outright — a
+path or a list of paths. The same picture in two formats is one picture: the better format
+wins. The architect, the roles of the steps and the reviewer see that picture, so the markup
+and the styles follow the image and not only the numbers of the measurements.
 
 The bridges to the sibling CLIs add more: `ai-decompose` splits a reference into screens,
 `ai-measure` measures a reference, and `ai-image` makes the pictures that the project needs.

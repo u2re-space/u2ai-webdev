@@ -22,6 +22,7 @@
 
 import { runRole } from '../roles/index.js';
 import { inputContext } from '../inputs/index.js';
+import { readReferences } from '../inputs/references.js';
 import { ENUMS } from '../config/constants.js';
 import { planText } from './plan.js';
 import { runId, runFile, writeJsonFile, readJsonFile } from './workspace.js';
@@ -219,6 +220,8 @@ export async function architectStage({
     if (planBlock) blocks.push(planBlock);
     const inputBlock = inputs ? inputContext(inputs) : '';
     if (inputBlock) blocks.push(inputBlock);
+    // The reference of the design: the architect sees the picture it has to structure.
+    const reference = await readReferences(root, inputs?.references ?? []);
 
     const result = await runRole({
         client,
@@ -230,11 +233,13 @@ export async function architectStage({
             plan,
             stack: config?.stack ?? {},
             design: Boolean(inputBlock),
+            reference: reference.names,
         },
         root,
         env,
         maxTurns: config?.stages?.architect?.maxTurns ?? null,
         notify,
+        parts: reference.parts,
     });
 
     if (!result.data) {

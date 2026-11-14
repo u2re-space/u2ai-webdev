@@ -9,7 +9,7 @@
  *   silently — except the tokens of the stylesheet, which win over the document.
  *
  * @depends node:path, node:fs/promises, inputs/design-md, inputs/measurements, inputs/palette,
- *          inputs/tokens, inputs/assets, config/paths
+ *          inputs/tokens, inputs/assets, inputs/references, config/paths
  * @usedBy stages/collect, stages/index
  * @exports collectInputs, inputContext, inputSummary
  * @ai.tags inputs, context
@@ -23,6 +23,7 @@ import { parseMeasurements, summarizeMeasurements } from './measurements.js';
 import { parsePalette, paletteTokens } from './palette.js';
 import { parseTokensCss, cssConflicts } from './tokens.js';
 import { collectAssetFiles, readProjectInstructions } from './assets.js';
+import { findReferences } from './references.js';
 
 /**
  * Read a file of the project, when it is there.
@@ -90,6 +91,9 @@ export async function collectInputs({ root, config = {}, task = '' } = {}) {
         ],
     });
 
+    // The reference of the design: the screenshot the roles have to look at.
+    const references = await findReferences({ root, config, task });
+
     return {
         task: String(task ?? ''),
         design,
@@ -99,6 +103,7 @@ export async function collectInputs({ root, config = {}, task = '' } = {}) {
         conflicts,
         instructions,
         assets,
+        references,
         warnings,
     };
 }
@@ -173,6 +178,17 @@ export function inputContext(collected = {}) {
         blocks.push(lines.join('\n'));
     }
 
+    const references = Array.isArray(collected.references) ? collected.references : [];
+    if (references.length) {
+        const lines = [
+            '# The reference of the design',
+            'The screenshot of the reference is attached to the request. It is the picture the',
+            'result has to look like: the regions, the proportions, the colours and the spaces.',
+        ];
+        for (const item of references) lines.push(`- ${item.path}`);
+        blocks.push(lines.join('\n'));
+    }
+
     const pictures = Array.isArray(collected.pictures) ? collected.pictures : [];
     if (pictures.length) {
         const lines = [
@@ -224,7 +240,8 @@ export function inputContext(collected = {}) {
  * A short report of the inputs: what was found and what was not.
  * @param {object} collected
  * @returns {{ design: boolean, measurements: boolean, palette: boolean, tokens: boolean,
- *   assets: number, instructions: number, conflicts: number, warnings: string[] }}
+ *   assets: number, references: number, instructions: number, conflicts: number,
+ *   warnings: string[] }}
  * @exports
  * @ai.hint pure
  */
@@ -235,6 +252,7 @@ export function inputSummary(collected = {}) {
         palette: Boolean(collected.palette?.present),
         tokens: Boolean(collected.tokens?.present),
         assets: collected.assets?.length ?? 0,
+        references: collected.references?.length ?? 0,
         instructions: collected.instructions?.files?.length ?? 0,
         conflicts: collected.conflicts?.length ?? 0,
         warnings: collected.warnings ?? [],

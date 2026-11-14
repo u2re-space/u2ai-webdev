@@ -11,7 +11,7 @@
  *   it wrote but writes nothing leaves the project as it was.
  *
  * @depends node:path, node:fs/promises, roles/index, agent/fs-tools, agent/syntax,
- *          inputs/index, stages/workspace
+ *          inputs/index, inputs/references, stages/workspace
  * @usedBy stages/markup, stages/coding, stages/styling
  * @exports STEPS_DIR, stepsForRole, applyFiles, stepReportPath, writeStepReport,
  *          readStepReport, missingFiles, runStepStage
@@ -27,6 +27,7 @@ import { runRole, roleReason, syntaxCorrection } from '../roles/index.js';
 import { writeTextFile } from '../agent/fs-tools.js';
 import { checkFiles } from '../agent/syntax.js';
 import { inputContext } from '../inputs/index.js';
+import { readReferences } from '../inputs/references.js';
 import { runId, runFile, writeJsonFile, readJsonFile } from './workspace.js';
 
 /** The directory inside the run that holds the reports of the steps. */
@@ -215,6 +216,9 @@ export async function runStepStage({
     }
 
     const design = inputs ? inputContext(inputs) : '';
+    // The reference of the design: the roles see the screenshot, not only the numbers.
+    const reference = await readReferences(root, inputs?.references ?? []);
+    warnings.push(...reference.warnings);
     const reports = [];
     let turns = 0;
     let usage = null;
@@ -231,17 +235,27 @@ export async function runStepStage({
         ].join('\n'));
         if (brief) blocks.push(brief);
         if (design) blocks.push(design);
+        if (reference.names.length) {
+            blocks.push([
+                '## The reference',
+                `The screenshot of the reference is attached to this request: ${reference.names.join(', ')}.`,
+                'Look at it before you write: the regions, the proportions, the colours and the',
+                'spacing of the result come from that picture.',
+            ].join('\n'));
+        }
 
         const result = await runRole({
             client,
             config,
             role,
             input: blocks.join('\n\n'),
+            parts: reference.parts,
             context: {
                 task: String(task ?? ''),
                 step,
                 brief,
                 design: Boolean(design),
+                reference: reference.names,
                 ...extra,
             },
             root,
@@ -278,6 +292,7 @@ export async function runStepStage({
                     step,
                     brief,
                     design: Boolean(design),
+                    reference: reference.names,
                     ...extra,
                 },
                 root,
@@ -285,6 +300,7 @@ export async function runStepStage({
                 maxTurns: config?.stages?.[role]?.maxTurns ?? null,
                 requireFiles: Boolean(step.files?.length),
                 notify,
+                parts: reference.parts,
             });
             turns += repair.turns;
             usage = usage ?? repair.usage;

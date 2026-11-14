@@ -10,6 +10,7 @@
  */
 
 import { UNTRUSTED } from './untrusted.js';
+import { referenceNote } from './reference.js';
 
 /** The name of the role. */
 export const name = 'editor';
@@ -46,6 +47,7 @@ export function instructions(context = {}) {
     const design = context.design
         ? 'The design direction and the measurements are in the task context. The result has to look like them.'
         : '';
+    const reference = referenceNote(context);
     return `You are the editor of a web project. You take the result of the other roles and you
 finish it: the details that were left, the spacing that is off, the small fixes in place.
 
@@ -54,6 +56,7 @@ ${step}
 ${brief}
 ${review}
 ${design}
+${reference}
 
 Rules:
 - The guides of the platform are the yardstick of the polish: look one up with the
