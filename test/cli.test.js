@@ -17,7 +17,7 @@ import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 import { EXIT, VALUE_FLAGS, parseArgv } from '../src/cli.js';
-import { configOverrides, parseRoleSpecs, expandRoute, routeStages, splitKind } from '../src/cli/run.js';
+import { configOverrides, parseRoleSpecs, expandRoute, routeStages, splitKind, stopAfterStage } from '../src/cli/run.js';
 import { createRenderer, detectMode } from '../src/cli/renderer.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -143,6 +143,22 @@ test('the route of the flags adds the stages the route needs', () => {
     assert.deepEqual(routeStages({ route: 'plan' }), ['collect', 'plan']);
     assert.equal(routeStages({}), null);
     assert.throws(() => expandRoute(['nowhere']), /--route: неизвестные стадии: nowhere\./);
+});
+
+test('the stage of the pause is checked against the stages of the run', () => {
+    const config = { stages: { plan: { enabled: true }, coding: { enabled: true }, audit: { enabled: false } } };
+
+    assert.equal(stopAfterStage({}, null, config), null);
+    assert.equal(stopAfterStage({ 'stop-after': 'plan' }, null, config), 'plan');
+    // The name of the stage is not case sensitive.
+    assert.equal(stopAfterStage({ 'stop-after': 'PLAN' }, null, config), 'plan');
+    assert.equal(stopAfterStage({ 'stop-after': ' Plan ' }, null, config), 'plan');
+
+    assert.throws(() => stopAfterStage({ 'stop-after': 'nowhere' }, null, config), /--stop-after: неизвестная стадия "nowhere"/);
+    // A stage that is not in the route would never be reached.
+    assert.throws(() => stopAfterStage({ 'stop-after': 'coding' }, ['plan'], config), /--stop-after: стадия "coding" не входит в этот прогон/);
+    // A stage that is switched off would never be reached either.
+    assert.throws(() => stopAfterStage({ 'stop-after': 'audit' }, null, config), /не входит в этот прогон/);
 });
 
 test('the version and the help are printed and the run ends with zero', async () => {

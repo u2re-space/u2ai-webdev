@@ -215,6 +215,33 @@ function validateBridges(bridges, fail) {
 }
 
 /**
+ * Validate the `pictures` section: the crops that are prepared and how.
+ * @param {object} pictures
+ * @param {(message: string) => never} fail
+ */
+function validatePictures(pictures, fail) {
+  const where = 'pictures';
+  if (!isRecord(pictures)) fail(`${where} должен быть объектом`);
+  for (const key of Object.keys(pictures)) {
+    if (!(key in defaults.pictures)) fail(`${where}.${key}: неизвестное поле (допустимо: ${Object.keys(defaults.pictures).join(', ')})`);
+  }
+  if (typeof pictures.enabled !== 'boolean') fail(`${where}.enabled: true | false`);
+  if (!Array.isArray(pictures.kinds) || !pictures.kinds.every((item) => typeof item === 'string')) {
+    fail(`${where}.kinds: массив строк`);
+  }
+  if (typeof pictures.command !== 'string' || !pictures.command.trim()) fail(`${where}.command: непустая строка`);
+  for (const [key, value] of Object.entries(pictures.commands ?? {})) {
+    if (typeof value !== 'string' || !value.trim()) fail(`${where}.commands.${key}: непустая строка`);
+  }
+  for (const [key, value] of Object.entries(pictures.prompts ?? {})) {
+    if (typeof value !== 'string') fail(`${where}.prompts.${key}: строка`);
+  }
+  if (typeof pictures.alphaMode !== 'string' || !pictures.alphaMode.trim()) fail(`${where}.alphaMode: непустая строка`);
+  if (typeof pictures.dir !== 'string' || !pictures.dir.trim()) fail(`${where}.dir: непустая строка`);
+  if (!(Number.isSafeInteger(pictures.max) && pictures.max > 0)) fail(`${where}.max: целое > 0`);
+}
+
+/**
  * Throw when any merged value is outside the accepted enums and ranges.
  * @param {object} config
  * @returns {void}
@@ -293,6 +320,7 @@ export function validateConfig(config) {
   validateMemory(c.memory, fail);
   validateComponents(c.components, fail);
   validateBridges(c.bridges, fail);
+  validatePictures(c.pictures, fail);
 
   if (!isRecord(c.roles)) fail('roles должен быть объектом');
   for (const [name, role] of Object.entries(c.roles)) {

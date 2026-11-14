@@ -23,6 +23,7 @@
  */
 
 import { collectStage } from './collect.js';
+import { picturesStage } from './pictures.js';
 import { planStage } from './plan.js';
 import { architectStage } from './architect.js';
 import { setupStage } from './setup.js';
@@ -51,6 +52,17 @@ export const STAGES = Object.freeze([
         run: collectStage,
         args: (ctx) => ({ memory: ctx.memory ?? null }),
         apply: (ctx, result) => { ctx.inputs = result?.inputs ?? null; },
+    },
+    {
+        name: 'pictures',
+        title: 'Prepare the pictures',
+        dependsOn: ['collect'],
+        run: picturesStage,
+        args: (ctx) => ({ apply: ctx.apply !== false }),
+        apply: (ctx, result) => {
+            ctx.pictures = result?.pictures ?? [];
+            if (ctx.inputs) ctx.inputs = { ...ctx.inputs, pictures: ctx.pictures };
+        },
     },
     {
         name: 'plan',

@@ -158,6 +158,7 @@ export const defaults = {
   stages: {
     plan: { enabled: true, maxTurns: 12 },
     collect: { enabled: true, maxTurns: 8 },
+    pictures: { enabled: true, maxTurns: 4 },
     architect: { enabled: true, maxTurns: 16 },
     setup: { enabled: true, maxTurns: 8 },
     markup: { enabled: true, maxTurns: 16 },
@@ -176,6 +177,34 @@ export const defaults = {
     dir: './.ai',
     /** The working directory of a run: .tmp/ by default. */
     work: './.tmp',
+  },
+
+  // --- pictures -----------------------------------------------------------------
+  /**
+   * The crops of the reference that are pictures: the chess piece, the board, the badge.
+   *
+   * The sheet of the measurements names the crops of the elements and of the regions. A crop
+   * is a rectangle of the reference: the page around it is still in the picture. The stage
+   * `pictures` prepares the crops that are pictures with the sibling CLI `ai-image`, so the
+   * roles get an asset instead of a screenshot.
+   */
+  pictures: {
+    /** Prepare the crops with `ai-image`. */
+    enabled: true,
+    /** The kinds of the crops that are prepared. */
+    kinds: ['image', 'illustration', 'artwork', 'photo', 'ornament'],
+    /** The command of `ai-image`: background | alpha | trim | edit. */
+    command: 'background',
+    /** The command of a kind, when it differs from the command above. */
+    commands: {},
+    /** The prompt of the command `edit`, by kind. */
+    prompts: {},
+    /** The mode of the alpha channel: auto | mask | contour | flat | key | off. */
+    alphaMode: 'auto',
+    /** Where the prepared pictures land, relative to the project. */
+    dir: 'assets/import',
+    /** How many pictures one run prepares. */
+    max: 6,
   },
 
   // --- inputs ------------------------------------------------------------------

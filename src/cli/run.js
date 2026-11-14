@@ -20,7 +20,7 @@
 
 import { createClient } from '../openai/client.js';
 import { runPipeline, resumePipeline } from '../pipeline.js';
-import { STAGES, stageDependencies } from '../stages/index.js';
+import { STAGES, STAGE_NAMES, stageByName, stageDependencies, enabledStages } from '../stages/index.js';
 import { ENUMS } from '../config/constants.js';
 import { UsageError } from './errors.js';
 
@@ -226,10 +226,39 @@ export function routeStages(flags = {}) {
 }
 
 /**
+ * The stage the run stops at.
+ *
+ * The name of the stage is checked against the stages the run really goes through: a stage
+ * that is not in the route, or that is switched off in the config, would never be reached,
+ * and the run would go on as if the flag were not there.
+ *
+ * @param {Record<string, string|boolean|string[]>} flags the flags of the command
+ * @param {string[]|null} [stages] the stages of the route, or null for all of them
+ * @param {object} [config] the config of the run
+ * @returns {string|null} the name of the stage
+ * @exports
+ * @ai.hint pure
+ */
+export function stopAfterStage(flags, stages = null, config = {}) {
+    const raw = stringFlag(flags, 'stop-after');
+    if (!raw) return null;
+    const name = raw.trim().toLowerCase();
+    if (!stageByName(name)) {
+        throw new UsageError(`--stop-after: неизвестная стадия "${raw}" (доступны: ${STAGE_NAMES.join(', ')}).`);
+    }
+    const planned = enabledStages(config, stages).stages.map((stage) => stage.name);
+    if (!planned.includes(name)) {
+        throw new UsageError(`--stop-after: стадия "${name}" не входит в этот прогон (в маршруте: ${planned.join(', ')}).`);
+    }
+    return name;
+}
+
+/**
  * The files a stage has written.
  *
  * @param {object} result
  * @returns {string[]}
+ * @exports
  * @ai.hint pure
  */
 export function stageFiles(result = {}) {
@@ -282,11 +311,8 @@ export async function runCommand(ctx) {
     }
 
     const stages = routeStages(flags);
-    const stopAfter = stringFlag(flags, 'stop-after');
+    const stopAfter = stopAfterStage(flags, stages, config);
     const runId = stringFlag(flags, 'id') ?? resumeId;
-    if (stopAfter && !STAGES.some((stage) => stage.name === stopAfter)) {
-        throw new UsageError(`--stop-after: неизвестная стадия "${stopAfter}".`);
-    }
 
     const controller = new AbortController();
     const onInterrupt = () => controller.abort();
@@ -329,6 +355,10 @@ export async function runCommand(ctx) {
         renderer?.progress?.(report.progress);
         renderer?.summary?.(report);
         if (report.status === 'failed') return 1;
+        if (report.status === 'paused') {
+            renderer?.note?.(`Прогон остановлен после стадии «${stopAfter}». Продолжить: ai-webdev run --resume ${report.runId}`);
+            return 0;
+        }
         if (controller.signal.aborted) return 130;
         return 0;
     } finally {

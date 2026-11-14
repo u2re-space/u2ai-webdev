@@ -156,7 +156,8 @@ export function inputContext(collected = {}) {
             for (const item of sheet.elements.slice(0, 60)) {
                 const box = item.box ? `${item.box.width}×${item.box.height} at ${item.box.x},${item.box.y}` : 'no box';
                 const size = item.widthRem ? ` (${item.widthRem}rem wide)` : '';
-                lines.push(`- ${item.name || item.kind} [${item.kind}] ${box}${size}`);
+                const crop = item.crop ? ` → ${item.crop}` : '';
+                lines.push(`- ${item.name || item.kind} [${item.kind}] ${box}${size}${crop}`);
             }
         }
         if (sheet.regions.length) {
@@ -168,6 +169,20 @@ export function inputContext(collected = {}) {
         if (sheet.spacing.length) {
             lines.push('Spacing scale:');
             for (const item of sheet.spacing) lines.push(`- ${item.name}: ${item.value}${item.unit} (${item.rem ?? '?'}rem)`);
+        }
+        blocks.push(lines.join('\n'));
+    }
+
+    const pictures = Array.isArray(collected.pictures) ? collected.pictures : [];
+    if (pictures.length) {
+        const lines = [
+            '# The pictures prepared from the crops',
+            'These are the objects of the reference, cut out of the screenshot. Use them as the',
+            'assets of the result, not as the screenshots they came from.',
+        ];
+        for (const item of pictures) {
+            const use = item.use ? ` — ${item.use}` : '';
+            lines.push(`- ${item.name} [${item.kind}] → ${item.file}${use}`);
         }
         blocks.push(lines.join('\n'));
     }

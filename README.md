@@ -68,6 +68,7 @@ report into the directory of the run and hands the result to the next one.
 | Stage | What it does |
 |---|---|
 | `collect` | Read the inputs of the project, the map of the project, the registry of the components, the skill packs and the memory. |
+| `pictures` | Prepare the crops of the reference that are pictures: the chess piece, the board, the badge. |
 | `plan` | Break the task into steps, each with its role, its files and its check. |
 | `architect` | Decide the structure of the project: the files, the modules and the order. |
 | `setup` | Prepare the environment: the scaffold, the dependencies and the entry points. |
@@ -82,7 +83,36 @@ report into the directory of the run and hands the result to the next one.
 
 `--route <stages>` chooses the stages the run goes through (the stages they need are added
 automatically), `--stop-after <stage>` (or `--stop-after=<stage>`) pauses the run on the
-border of a stage, and `--resume <id>` continues it later.
+border of a stage, and `--resume <id>` continues it later. The name of the stage of the pause
+is not case sensitive, and it is checked against the stages of the run: a stage that is out
+of the route or switched off is a usage error, not a pause that never comes.
+
+### The pictures of the reference
+
+The sheet of the measurements names the crops of the reference: the chess piece, the wooden
+board, the badge. A crop is a rectangle of the screenshot, so the page around the object is
+still in the picture. The stage `pictures` gives those crops to the sibling CLI `ai-image`,
+which cuts the object out, and puts the result into `assets/import/`. The roles get the path of
+the prepared picture in the context of the run.
+
+```json
+{
+  "pictures": {
+    "kinds": ["image", "illustration", "artwork", "photo", "ornament"],
+    "command": "background",
+    "alphaMode": "auto",
+    "dir": "assets/import",
+    "max": 6
+  }
+}
+```
+
+The kinds say which crops of the sheet are pictures. The command is the one of `ai-image`:
+`background`, `alpha`, `trim` or `edit`; the section `commands` names another command for a
+kind, and the section `prompts` names the prompt of the command `edit`. The stage never stops
+the run: a crop that cannot be prepared is reported, and the crop stays as it was. A picture
+that is already in the directory is not prepared again — the model is not asked for the same
+cut twice.
 
 ## The roles
 
@@ -179,6 +209,7 @@ The sections of the file:
 | `stages` | Every stage: `enabled` and `maxTurns`. |
 | `output` | Where the artifacts go: `dir` (`.ai/`) and `work` (`.tmp/`). |
 | `inputs` | The names of the input files. |
+| `pictures` | The crops of the reference that are prepared: the kinds, the command of `ai-image`, the directory, the limit. |
 | `memory` | The permanent memory: the file, the scope, the limit, the summaries of the files, the finished tasks. |
 | `components` | The local registry: the directory, the index, the vendor directory. |
 | `bridges` | The sibling CLIs: `decompose`, `measure`, `image` — each may be switched off. |

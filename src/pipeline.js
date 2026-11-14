@@ -20,6 +20,7 @@
  * @ai.hint io
  * @ai.hint legacy-0.2
  * @changed 2026-11-13 Ported from the monolith: оркестратор стадий и продолжение прогона.
+ * @changed 2026-11-14 The stage of the pictures; the name of the stage to stop at is not case sensitive.
  */
 
 import { runId as makeRunId } from './stages/workspace.js';
@@ -133,6 +134,7 @@ export async function runPipeline({
         plan: null,
         architecture: null,
         setup: null,
+        pictures: [],
         reports: [],
         review: null,
         audit: null,
@@ -230,7 +232,7 @@ export async function runPipeline({
             status = 'failed';
             break;
         }
-        if (stopAfter && stopAfter === stage.name) {
+        if (stopAfter && String(stopAfter).trim().toLowerCase() === stage.name) {
             paused = true;
             status = 'paused';
             warnings.push(`Прогон остановлен после стадии ${stage.name}.`);
