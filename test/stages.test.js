@@ -434,6 +434,33 @@ test('the setup does not install twice', async () => {
     assert.equal(result.ok, true);
 });
 
+test('the setup installs the dependencies even when the installer is silent', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-install-'));
+    await writeFile(path.join(root, 'package.json'), JSON.stringify({
+        name: 'demo',
+        private: true,
+    }, null, 2), 'utf8');
+    // The installer says nothing: the answer of the model holds no data at all.
+    const client = fakeClient([{
+        id: 'resp-1',
+        status: 'completed',
+        output: [{ type: 'message', content: [{ type: 'output_text', text: 'I did nothing.' }] }],
+    }]);
+
+    const result = await setupStage({
+        client,
+        config: { output: { work: './.tmp' } },
+        root,
+        task: 'Make a landing.',
+        runId: 'run-silent',
+    });
+
+    // The manifest of the project is the contract of the install, not the answer of the model.
+    assert.equal(result.setup.install.ran, true);
+    assert.equal(result.setup.install.manager, 'npm');
+    assert.ok(result.warnings.some((item) => /Установщик не вернул/.test(item)));
+});
+
 test('the stage of the setup applies the environment and writes the file', async () => {
     const root = await makeProject();
     const client = fakeClient([schemaAnswer('setup', {

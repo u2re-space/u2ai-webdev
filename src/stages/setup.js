@@ -435,9 +435,11 @@ export async function setupStage({
     }
 
     if (!result.data) {
-        const readiness = await setupReadiness(root, config);
         // The skeleton is written even when the installer says nothing: the manifest and the
-        // bundler are the environment of the project.
+        // bundler are the environment of the project. The dependencies of that manifest are
+        // installed by the code as well.
+        const install = await installDependencies({ root, manager, env });
+        const readiness = await setupReadiness(root, config);
         const manifest = readiness.checks.find((item) => item.id === 'manifest')?.ok ?? false;
         const empty = {
             summary: '',
@@ -447,10 +449,17 @@ export async function setupStage({
             commands: [],
             notes: '',
             scaffold: { written: scaffold.written, skipped: scaffold.skipped },
+            install: { ran: install.ran, ok: install.ok, manager: install.manager },
             applied: { dependencies: [], scripts: [], files: [], manifestChanged: false },
             readiness,
         };
         const file = await writeSetup(root, config, run, empty);
+        const warnings = manifest
+            ? ['Установщик не вернул окружение: остался только каркас проекта.']
+            : ['Установщик не вернул окружение.'];
+        if (install.ran && !install.ok) {
+            warnings.push(`Зависимости не установлены: ${install.reason ?? 'неизвестная причина'}.`);
+        }
         return {
             stage: 'setup',
             ok: manifest,
@@ -458,9 +467,7 @@ export async function setupStage({
             applied: null,
             readiness,
             file,
-            warnings: manifest
-                ? ['Установщик не вернул окружение: остался только каркас проекта.']
-                : ['Установщик не вернул окружение.'],
+            warnings,
             turns: result.turns,
             usage: result.usage,
             runId: run,
