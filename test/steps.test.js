@@ -417,8 +417,41 @@ test('the file the role wrote beside the files of the step is checked too', asyn
     assert.equal(result.steps[0].syntax.errors.length, 1);
 });
 
-test('the reference of the design goes into the request of the role', async () => {
+test('the roles that look at the design get the picture of the reference', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-steps-ref-'));
+    await writeFile(path.join(root, 'landing.png'), 'png');
+    let seen = null;
+    const client = fakeClient([
+        (body) => {
+            seen = body;
+            return schemaAnswer('markup', {
+                summary: 'The markup.',
+                files: [{ path: 'index.html', content: '<main></main>\n', language: 'html' }],
+                commands: [],
+                notes: '',
+            });
+        },
+    ]);
+
+    const result = await runStepStage({
+        client,
+        config: { output: { work: './.tmp' } },
+        root,
+        task: 'Make a landing.',
+        role: 'markup',
+        plan: PLAN,
+        inputs: { references: [{ path: 'landing.png', mime: 'image/png' }] },
+        runId: 'run-1',
+    });
+
+    assert.equal(result.ok, true);
+    const parts = seen.input[0].content;
+    assert.ok(parts.some((part) => part.type === 'input_image'), 'the picture is attached');
+    assert.match(parts[0].text, /The reference/);
+});
+
+test('the roles that do not look at the design work without the picture', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-steps-ref2-'));
     await writeFile(path.join(root, 'landing.png'), 'png');
     let seen = null;
     const client = fakeClient([
@@ -446,8 +479,11 @@ test('the reference of the design goes into the request of the role', async () =
 
     assert.equal(result.ok, true);
     const parts = seen.input[0].content;
-    assert.ok(parts.some((part) => part.type === 'input_image'), 'the picture is attached');
+    // The scripts do not copy the look: the picture is uploaded and paid for on every
+    // turn of the role for nothing.
+    assert.ok(!parts.some((part) => part.type === 'input_image'), 'the picture is not attached');
     assert.match(parts[0].text, /The reference/);
+    assert.match(parts[0].text, /not attached/);
 });
 
 test('the tokens are printed as a block of custom properties', () => {

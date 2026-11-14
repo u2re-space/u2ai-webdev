@@ -538,6 +538,11 @@ files are still there, so the run continues with the work that exists. A file th
 after the step means the work is gone, and the step is done again. The run never asks a model
 to write the same file twice.
 
+The screenshot of the reference goes to the roles that copy the look — the markup, the styles
+and the vector graphics. The scripts, the icons and the other mechanical work get the numbers,
+the palette and the tokens, and no picture: a picture they do not need is uploaded, read and
+paid for on every turn of the role.
+
 ## The bridges to the sibling CLIs
 
 Three external CLIs may help a run. Each of them is a subprocess, each of them may be switched off

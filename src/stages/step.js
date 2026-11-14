@@ -13,7 +13,7 @@
  * @depends node:path, node:fs/promises, roles/index, agent/fs-tools, agent/syntax,
  *          inputs/index, inputs/references, stages/workspace
  * @usedBy stages/markup, stages/coding, stages/styling
- * @exports STEPS_DIR, stepsForRole, applyFiles, stepReportPath, writeStepReport,
+ * @exports STEPS_DIR, LOOKS_AT_DESIGN, stepsForRole, applyFiles, stepReportPath, writeStepReport,
  *          readStepReport, resumableStep, missingFiles, runStepStage
  * @ai.tags stages, steps, files
  * @ai.hint io
@@ -32,6 +32,18 @@ import { runId, runFile, writeJsonFile, readJsonFile } from './workspace.js';
 
 /** The directory inside the run that holds the reports of the steps. */
 export const STEPS_DIR = 'steps';
+
+/**
+ * The roles that look at the picture of the reference.
+ *
+ * The markup and the styles copy the look of the reference, so they see the screenshot.
+ * The scripts, the icons and the mechanical work work from the numbers and the text: the
+ * picture is uploaded, read and paid for on every turn of the role, and it is of no use
+ * to them.
+ * @type {ReadonlySet<string>}
+ * @exports
+ */
+export const LOOKS_AT_DESIGN = Object.freeze(new Set(['markup', 'styler', 'editor']));
 
 /**
  * The extensions of the files that hold bytes and not text.
@@ -267,6 +279,10 @@ export async function runStepStage({
     // The reference of the design: the roles see the screenshot, not only the numbers.
     const reference = await readReferences(root, inputs?.references ?? []);
     warnings.push(...reference.warnings);
+    // Only the roles that look at the design get the picture itself. The scripts and the
+    // icons work from the numbers and the text: a picture they do not need is uploaded,
+    // read and paid for on every turn of the role.
+    const parts = LOOKS_AT_DESIGN.has(role) ? reference.parts : [];
     const reports = [];
     let turns = 0;
     let usage = null;
@@ -294,7 +310,10 @@ export async function runStepStage({
         if (reference.names.length) {
             blocks.push([
                 '## The reference',
-                `The screenshot of the reference is attached to this request: ${reference.names.join(', ')}.`,
+                LOOKS_AT_DESIGN.has(role)
+                    ? `The screenshot of the reference is attached to this request: ${reference.names.join(', ')}.`
+                    : `The screenshot of the reference of the design: ${reference.names.join(', ')}. It is not attached`
+                        + ' to this request: work from the measurements, the palette and the tokens.',
                 'Look at it before you write: the regions, the proportions, the colours and the',
                 'spacing of the result come from that picture.',
             ].join('\n'));
@@ -305,7 +324,7 @@ export async function runStepStage({
             config,
             role,
             input: blocks.join('\n\n'),
-            parts: reference.parts,
+            parts,
             context: {
                 task: String(task ?? ''),
                 step,
@@ -362,7 +381,7 @@ export async function runStepStage({
                 maxTurns: config?.stages?.[role]?.maxTurns ?? null,
                 requireFiles: Boolean(step.files?.length),
                 notify,
-                parts: reference.parts,
+                parts,
             });
             turns += repair.turns;
             usage = usage ?? repair.usage;
