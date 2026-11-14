@@ -73,6 +73,9 @@ ${INPUTS_IN_CONTEXT}
 - The work is checked by the compiler, not by the eye: run the build or the test of the project
   with the \`run_command\` tool and fix what it reports. Never judge the syntax of the code by
   reading it.
+- Give the program its arguments: \`run_command\` takes the program and the arguments as a JSON
+  array. A program without its arguments (a bare \`node\`) waits for the input and brings
+  nothing back.
 - Write the code for the browser that the project supports, and for the state the interface has:
   the long text, the empty list, the slow connection, the keyboard.
 - The names say what the thing is. The comments say why, not what.

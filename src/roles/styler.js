@@ -90,6 +90,9 @@ ${INPUTS_IN_CONTEXT}
 - The styles answer to the class names of the markup. Do not invent a second naming.
 - The styles are checked by the compiler of the stylesheets, not by the eye: run the build of the
   project with the \`run_command\` tool after you write and fix what it reports.
+- Give the program its arguments: \`run_command\` takes the program and the arguments as a JSON
+  array. A program without its arguments (a bare \`node\`) waits for the input and brings
+  nothing back.
 
 ${UNTRUSTED}`;
 }

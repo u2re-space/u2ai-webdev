@@ -71,6 +71,21 @@ test('a program that fails does not throw', async () => {
     assert.equal(result.code, 3);
 });
 
+test('a program that waits for the input does not hold the run', async () => {
+    const started = Date.now();
+    const result = await runProgram({
+        command: process.execPath,
+        // The program reads the input until the end of it: without the end of the input it
+        // would wait for a key that never comes.
+        args: ['-e', 'process.stdin.resume(); process.stdin.on("end", () => process.stdout.write("done"))'],
+        cwd: process.cwd(),
+        timeoutMs: 20_000,
+    });
+    assert.equal(result.ok, true);
+    assert.match(result.text, /done/);
+    assert.ok(Date.now() - started < 15_000, 'the program did not wait for the timeout');
+});
+
 test('a program of the PATH is started from a directory', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-programs-cwd-'));
     await writeFile(path.join(root, 'marker.txt'), 'x', 'utf8');

@@ -165,6 +165,10 @@ export async function runProgram({
         let stderr = '';
         let timedOut = false;
         let settled = false;
+        // The program does not wait for the input: a program that reads the input without a
+        // question (the console of node, a watcher that waits for a key) would hold the run
+        // until the timeout and would bring nothing.
+        child.stdin?.end?.();
         const timer = setTimeout(() => { timedOut = true; killTree(child); }, timeoutMs);
         timer.unref?.();
         child.stdout?.on('data', (chunk) => { stdout += String(chunk); });
