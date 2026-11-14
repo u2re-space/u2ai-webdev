@@ -352,6 +352,27 @@ test('the renderer of json writes the events as json', () => {
     assert.equal(event.stages[0].name, 'plan');
 });
 
+test('the renderer says what a tool call touches', () => {
+    const lines = [];
+    const errors = [];
+    const renderer = createRenderer({
+        mode: 'plain',
+        stdout: { write: (text) => lines.push(text) },
+        stderr: { write: (text) => errors.push(text) },
+    });
+    renderer.event({ type: 'role.tool', name: 'read_file', arguments: { path: 'src/main.js' } });
+    renderer.event({ type: 'role.tool', name: 'write_file', arguments: { path: 'index.html', content: 'x'.repeat(300) } });
+    renderer.event({ type: 'role.tool', name: 'run_command', arguments: { command: 'npm', args: ['run', 'build'] } });
+    renderer.event({ type: 'role.tool.result', name: 'write_file', output: 'Записан index.html (9346 байт)' });
+    const text = errors.join('');
+    assert.match(text, /read_file src\/main\.js/);
+    assert.match(text, /write_file index\.html/);
+    assert.match(text, /run_command npm run build/);
+    assert.match(text, /→ Записан index\.html/);
+    // The content of the file is not a line of the log.
+    assert.doesNotMatch(text, /x{100}/);
+});
+
 test('the renderer says that the run waits for a thinking model', () => {
     const lines = [];
     const errors = [];

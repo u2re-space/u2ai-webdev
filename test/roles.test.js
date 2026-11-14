@@ -387,6 +387,10 @@ test('the loop of a role runs the tools and returns the answer', async () => {
         assert.equal(answer.toolCalls[0].name, 'write_file');
         assert.equal(answer.data.summary, 'The page is written.');
         assert.ok(events.some((event) => event.type === 'role.tool' && event.name === 'write_file'));
+        // The event of the call says what the call touches: the log is readable.
+        const call = events.find((event) => event.type === 'role.tool' && event.name === 'write_file');
+        assert.equal(call.arguments.path, 'index.html');
+        assert.ok(call.arguments.content.length <= 200);
 
         const body = await readFile(path.join(root, 'index.html'), 'utf8');
         assert.equal(body, '<h1>Привет</h1>');

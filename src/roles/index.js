@@ -271,6 +271,33 @@ export async function buildInstructions({ role, config = {}, context = {}, root 
 }
 
 /**
+ * The arguments of a tool call, cut to what a log needs.
+ *
+ * The content of a written file is not a part of a log line: it is kept short, so the
+ * event of the call stays small.
+ * @param {unknown} args
+ * @returns {object|null}
+ * @exports
+ * @ai.hint pure
+ */
+export function toolCallDetail(args) {
+    if (!args || typeof args !== 'object' || Array.isArray(args)) return null;
+    const out = {};
+    for (const [key, value] of Object.entries(args)) {
+        if (typeof value === 'string') {
+            out[key] = value.length > 160 ? `${value.slice(0, 160)}… (${value.length} знаков)` : value;
+        } else if (Array.isArray(value)) {
+            out[key] = value.slice(0, 8).map((item) => (
+                typeof item === 'string' && item.length > 80 ? `${item.slice(0, 80)}…` : item
+            ));
+        } else {
+            out[key] = value;
+        }
+    }
+    return out;
+}
+
+/**
  * Run one role: the model answers, the tools run, their answers go back, and the loop ends.
  *
  * The loop keeps the whole conversation in the `input` array, because the Responses API takes
@@ -418,7 +445,13 @@ export async function runRole({
 
         for (const call of work) {
             calls.push(call);
-            notify({ type: 'role.tool', role: key, name: call.name, turn: turns });
+            notify({
+                type: 'role.tool',
+                role: key,
+                name: call.name,
+                arguments: toolCallDetail(call.arguments),
+                turn: turns,
+            });
             let output;
             try {
                 output = await tools.execute(call.name, call.arguments ?? {});
@@ -427,6 +460,12 @@ export async function runRole({
             }
             if (WRITE_TOOLS.includes(call.name) && wroteSomething(output)) writes.push(call);
             const callId = call.callId ?? call.id ?? `${call.name}-${calls.length}`;
+            // The answer of the tool goes into the log only when it is short: the content
+            // of a file is not a line of the log.
+            const short = String(output ?? '').trim();
+            if (short && short.length <= 140) {
+                notify({ type: 'role.tool.result', role: key, name: call.name, output: short });
+            }
             items.push({
                 type: 'function_call',
                 call_id: callId,

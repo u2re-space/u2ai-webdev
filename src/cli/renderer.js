@@ -120,6 +120,29 @@ export function createRenderer({
      */
     const fileList = (files) => (Array.isArray(files) ? files : []).map(String).filter(Boolean);
 
+    /**
+     * The one line of a tool call: what the call touches.
+     *
+     * The name of the tool alone says nothing: "read_file" does not tell which file is
+     * read and "run_command" does not tell which program runs. The line names the thing.
+     * @param {object|null} detail the arguments of the call
+     * @returns {string}
+     */
+    const toolSummary = (detail) => {
+        if (!detail || typeof detail !== 'object' || Array.isArray(detail)) return '';
+        const one = (value) => String(value ?? '').replace(/\s+/g, ' ').trim();
+        if (typeof detail.command === 'string' && detail.command.trim()) {
+            const args = Array.isArray(detail.args) ? detail.args.map(one).filter(Boolean) : [];
+            return one(`${detail.command} ${args.join(' ')}`).slice(0, 110);
+        }
+        for (const key of ['path', 'file', 'query', 'name', 'url', 'prompt', 'ids', 'args']) {
+            const value = detail[key];
+            if (typeof value === 'string' && value.trim()) return one(value).slice(0, 110);
+            if (Array.isArray(value) && value.length) return one(value.map(one).join(' ')).slice(0, 110);
+        }
+        return '';
+    };
+
     return {
         mode,
         colors: paint,
@@ -208,15 +231,27 @@ export function createRenderer({
         },
 
         /**
+         * The answer of a tool: what the call gave back.
+         * @param {object} [detail]
+         * @returns {void}
+         */
+        toolResult(detail = null) {
+            const text = String(detail?.output ?? '').replace(/\s+/g, ' ').trim();
+            if (!text) return;
+            if (json) { emit('tool.result', { name: detail?.name ?? '', output: text }); return; }
+            err(`${paint.dim(`  → ${text.slice(0, 140)}`)}`);
+        },
+
+        /**
          * A tool of a role has been called.
          * @param {string} name
-         * @param {object} [detail]
+         * @param {object} [detail] the arguments of the call
          * @returns {void}
          */
         tool(name, detail = null) {
             if (json) { emit('tool', { name, detail }); return; }
-            const extra = detail && typeof detail === 'object' ? Object.keys(detail).length : '';
-            err(`${paint.dim(`${symbols.info} ${name}${extra ? ` ${JSON.stringify(detail)}` : ''}`)}`);
+            const text = toolSummary(detail);
+            err(`${paint.dim(`${symbols.info} ${name}${text ? ` ${text}` : ''}`)}`);
         },
 
         /**
@@ -336,6 +371,7 @@ export function createRenderer({
             else if (type === 'stage.done') this.stageDone(event.stage, event.status);
             else if (type === 'stage.skip') this.stageDone(event.stage, 'skipped');
             else if (type === 'role.tool') this.tool(event.name, event.arguments ?? null);
+            else if (type === 'role.tool.result') this.toolResult(event);
             else if (type === 'request.wait') this.wait(event.elapsedMs ?? 0);
             else if (type === 'request.retry') this.retry(event);
             else if (type === 'request.error') this.warning(`запрос не удался: ${event.error ?? ''}`);

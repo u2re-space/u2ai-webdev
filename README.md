@@ -543,6 +543,17 @@ and the vector graphics. The scripts, the icons and the other mechanical work ge
 the palette and the tokens, and no picture: a picture they do not need is uploaded, read and
 paid for on every turn of the role.
 
+The log of a run names what every call touches: the path of the file that is read or written,
+the program that runs, the words of the search. The answer of a tool is a line under the call
+when it is short — the content of a file is never a line of the log.
+
+```
+· read_file src/main.js
+· write_file index.html
+· run_command npm run build
+  → Записан index.html (9346 байт)
+```
+
 ## The bridges to the sibling CLIs
 
 Three external CLIs may help a run. Each of them is a subprocess, each of them may be switched off
