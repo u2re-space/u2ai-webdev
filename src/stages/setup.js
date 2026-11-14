@@ -15,8 +15,8 @@
  *          agent/fs-tools, agent/paths, cli/install
  * @usedBy stages/index, stages/markup, stages/coding, pipeline
  * @exports SETUP_FILE, detectPackageManager, ensureScaffold, hasEnvironment, applySetup,
- *          installDependencies, setupReadiness, writeSetup, readSetup, setupStage,
- *          INSTALL_CORRECTION
+ *          ensureStyleCompiler, installDependencies, setupReadiness, writeSetup, readSetup,
+ *          setupStage, INSTALL_CORRECTION
  * @ai.tags stages, setup, dependencies
  * @ai.hint io
  * @ai.hint legacy-0.2
@@ -28,7 +28,7 @@ import { readFile, stat, writeFile } from 'node:fs/promises';
 import { runRole } from '../roles/index.js';
 import { writeTextFile } from '../agent/fs-tools.js';
 import { saveDependency } from '../cli/install.js';
-import { preparedScaffoldFiles, writePreparedScaffold } from '../generate/scaffold.js';
+import { preparedScaffoldFiles, writePreparedScaffold, SCAFFOLD_VERSIONS } from '../generate/scaffold.js';
 import { runProgram } from '../agent/programs.js';
 import { architectureText } from './architect.js';
 import { runId, runFile, writeJsonFile, readJsonFile } from './workspace.js';
@@ -234,11 +234,71 @@ export async function applySetup({ root, data = {}, overwrite = false, maxWriteB
 }
 
 /**
+ * Ensure that the compiler of the styles is in the manifest of the project.
+ *
+ * The project that writes SCSS needs the `sass` of npm: without it the styles cannot be
+ * compiled — neither by the build of the project nor by the stage of the build. The version
+ * is the pinned one of the scaffold, and the package goes into the development
+ * dependencies: the compiler is a tool of the project, not a part of it.
+ * @param {{ root: string, styleLanguage?: string, version?: string }} request
+ * @returns {Promise<{ added: string|null, manifest: object|null }>}
+ * @exports
+ * @ai.hint io
+ */
+export async function ensureStyleCompiler({ root, styleLanguage = '', version = SCAFFOLD_VERSIONS.sass } = {}) {
+    const language = String(styleLanguage ?? '').trim().toLowerCase();
+    if (language !== 'scss') return { added: null, manifest: null };
+    const file = path.join(root, 'package.json');
+    const text = await readFile(file, 'utf8').catch(() => null);
+    if (text === null) return { added: null, manifest: null };
+    let manifest = null;
+    try {
+        manifest = JSON.parse(text);
+    } catch {
+        return { added: null, manifest: null };
+    }
+    if (!manifest || typeof manifest !== 'object') return { added: null, manifest: null };
+    const dev = manifest.devDependencies && typeof manifest.devDependencies === 'object' ? manifest.devDependencies : {};
+    const prod = manifest.dependencies && typeof manifest.dependencies === 'object' ? manifest.dependencies : {};
+    if (dev.sass || prod.sass) return { added: null, manifest };
+    manifest.devDependencies = { ...dev, sass: version };
+    await writeFile(file, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+    return { added: `sass@${version} (dev)`, manifest };
+}
+
+/**
+ * The packages of the manifest that are not on the disk.
+ * @param {string} root
+ * @param {object} manifest
+ * @returns {Promise<string[]>}
+ * @ai.hint io
+ */
+async function missingPackages(root, manifest) {
+    const names = [
+        ...Object.keys(manifest?.dependencies ?? {}),
+        ...Object.keys(manifest?.devDependencies ?? {}),
+    ];
+    const missing = [];
+    for (const name of names) {
+        if (!name) continue;
+        const found = await stat(path.join(root, 'node_modules', ...name.split('/')))
+            .then((info) => info.isDirectory())
+            .catch(() => false);
+        if (!found) missing.push(name);
+    }
+    return missing;
+}
+
+/**
  * Install the dependencies of the project.
  *
  * The installation is not a matter of the model: the manifest says what the project needs,
  * and the package manager of the project puts it on the disk. The code runs it, so a
  * project without `node_modules` never leaves the setup stage.
+ *
+ * The `node_modules` of the project is checked against the manifest: a directory that is
+ * there but does not hold every package of the manifest is not a reason to skip the
+ * installation — the package that is missing is exactly what has to be installed.
  * @param {{ root: string, manager?: string, env?: object, timeoutMs?: number, force?: boolean }} request
  * @returns {Promise<{ ran: boolean, ok: boolean, manager: string, text: string, reason: string|null }>}
  * @exports
@@ -248,7 +308,11 @@ export async function installDependencies({ root, manager = 'npm', env = process
     const managerName = String(manager ?? '').trim() || 'npm';
     const modules = await stat(path.join(root, 'node_modules')).then((info) => info.isDirectory()).catch(() => false);
     if (modules && !force) {
-        return { ran: false, ok: true, manager: managerName, text: 'node_modules есть: установка не нужна.', reason: null };
+        const { manifest } = await readManifest(root);
+        const missing = await missingPackages(root, manifest);
+        if (!missing.length) {
+            return { ran: false, ok: true, manager: managerName, text: 'node_modules есть: установка не нужна.', reason: null };
+        }
     }
     const commands = {
         npm: ['install', '--no-audit', '--no-fund'],
@@ -381,6 +445,9 @@ export async function setupStage({
     const run = id ?? runId();
     const manager = await detectPackageManager(root);
     const brief = architecture ? architectureText(architecture) : '';
+    const styleLanguage = String(
+        architecture?.stack?.style ?? config?.stack?.styleLanguage ?? 'scss',
+    ).trim().toLowerCase();
 
     // The skeleton of the project first: the manifest, the bundler and the rules.
     const scaffold = await ensureScaffold({ root, architecture });
@@ -438,6 +505,7 @@ export async function setupStage({
         // The skeleton is written even when the installer says nothing: the manifest and the
         // bundler are the environment of the project. The dependencies of that manifest are
         // installed by the code as well.
+        const compiler = await ensureStyleCompiler({ root, styleLanguage });
         const install = await installDependencies({ root, manager, env });
         const readiness = await setupReadiness(root, config);
         const manifest = readiness.checks.find((item) => item.id === 'manifest')?.ok ?? false;
@@ -457,6 +525,7 @@ export async function setupStage({
         const warnings = manifest
             ? ['Установщик не вернул окружение: остался только каркас проекта.']
             : ['Установщик не вернул окружение.'];
+        if (compiler.added) warnings.push(`Компилятор стилей добавлен: ${compiler.added}.`);
         if (install.ran && !install.ok) {
             warnings.push(`Зависимости не установлены: ${install.reason ?? 'неизвестная причина'}.`);
         }
@@ -476,6 +545,14 @@ export async function setupStage({
 
     const data = result.data;
     const applied = await applySetup({ root, data, overwrite });
+
+    // The compiler of the styles is a dependency of the project: the manifest names it, and
+    // the package manager puts it on the disk.
+    const compiler = await ensureStyleCompiler({ root, styleLanguage });
+    if (compiler.added) {
+        applied.dependencies.push(compiler.added);
+        applied.warnings.push(`Компилятор стилей добавлен: ${compiler.added}.`);
+    }
 
     // The dependencies go on the disk: the manifest says what the project needs, and the
     // package manager puts it there. The model does not install anything.

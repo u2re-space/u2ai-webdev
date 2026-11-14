@@ -551,6 +551,26 @@ CLI `ai-webdev` (`@u2ai/webdev`) с собственным конфигом `~/.
       сборка без `sass`, сборка проектом, сломанная сборка, стадия целиком),
       `test/steps.test.js` (файл рядом с файлами шага тоже проверяется)
 
+### step-33 — `sass` по npm и стили Vite
+- [x] `src/stages/setup.js` — `ensureStyleCompiler()`: для SCSS компилятор `sass` (`^1.80.0`)
+      добавляется в `devDependencies` манифеста; для CSS — нет; повторно не добавляется
+- [x] `src/stages/setup.js` — `missingPackages()`: установка не пропускается, если в
+      `node_modules` нет пакета из манифеста (например, `sass`)
+- [x] `src/stages/build.js` — `isViteProject()`: проект Vite узнаётся по `vite.config.*` и по
+      манифесту
+- [x] `src/stages/build.js` — `ensureStyleImport()`, `importPath()`, `scriptImports()`,
+      `insertImport()`: импорт точки входа стилей добавляется в главный JS-файл проекта
+      (`import './styles/main.scss'`), если его там нет; файл с тем же именем в другой папке
+      импортом не считается
+- [x] `src/stages/build.js` — `removeStyleLink()`: ссылка разметки на собранный CSS в проекте
+      Vite удаляется — этот CSS артефакт сборщика, а не файл проекта
+- [x] `src/stages/build.js` — стадия `build`: в проекте Vite стили не компилируются кодом,
+      их собирает сборщик; в остальных проектах путь прежний
+- [x] README (EN), planned.md (RU)
+- [x] Проверка: `test/build.test.js` (Vite по конфигу и по манифесту, путь импорта, импорт
+      добавлен, импорт не задвоен, ссылка на CSS удалена, стадия целиком на проекте Vite),
+      `test/stages.test.js` (`sass` в манифест, установка при неполном `node_modules`)
+
 ---
 
 ## 2. Порядок работы и зависимости шагов

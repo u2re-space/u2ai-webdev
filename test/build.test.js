@@ -20,6 +20,12 @@ import {
     htmlRefs,
     ensureHtmlWiring,
     compileStyles,
+    isViteProject,
+    importPath,
+    scriptImports,
+    ensureStyleImport,
+    insertImport,
+    removeStyleLink,
     buildStage,
 } from '../src/stages/build.js';
 
@@ -230,4 +236,123 @@ test('the stage connects the styles when the markup forgot the link', async () =
     assert.deepEqual(result.build.added, ['styles/main.css']);
     const text = await readFile(path.join(root, 'index.html'), 'utf8');
     assert.match(text, /<link rel="stylesheet" href="\.\/styles\/main\.css" \/>/);
+});
+
+test('the project of Vite is known by its config and by its manifest', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-vite-'));
+    assert.equal(await isViteProject(root), false);
+
+    await writeFile(path.join(root, 'vite.config.js'), 'export default {};\n', 'utf8');
+    assert.equal(await isViteProject(root), true);
+
+    const other = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-vite-'));
+    await writeFile(path.join(other, 'package.json'), JSON.stringify({
+        name: 'demo',
+        devDependencies: { vite: '^7.0.0' },
+    }, null, 2), 'utf8');
+    assert.equal(await isViteProject(other), true);
+});
+
+test('the import of the styles is named as the script names it', () => {
+    assert.equal(importPath('src/main.js', 'styles/main.scss'), '../styles/main.scss');
+    assert.equal(importPath('main.js', 'styles/main.scss'), './styles/main.scss');
+    assert.equal(importPath('src/main.js', 'src/styles/main.scss'), './styles/main.scss');
+});
+
+test('the import of the styles goes into the script of the project', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-vite-'));
+    await mkdir(path.join(root, 'src'), { recursive: true });
+    await writeFile(path.join(root, 'src', 'main.js'), "import './app.js';\n", 'utf8');
+
+    const result = await ensureStyleImport(root, 'src/main.js', 'styles/main.scss');
+
+    assert.equal(result.changed, true);
+    assert.equal(result.specifier, '../styles/main.scss');
+    const text = await readFile(path.join(root, 'src', 'main.js'), 'utf8');
+    assert.match(text, /import '\.\.\/styles\/main\.scss';/);
+});
+
+test('the import of the styles is not doubled', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-vite-'));
+    await mkdir(path.join(root, 'src'), { recursive: true });
+    await writeFile(path.join(root, 'src', 'main.js'), "import '../styles/main.scss';\n", 'utf8');
+
+    const result = await ensureStyleImport(root, 'src/main.js', 'styles/main.scss');
+
+    assert.equal(result.already, true);
+    assert.equal(result.changed, false);
+    const text = await readFile(path.join(root, 'src', 'main.js'), 'utf8');
+    assert.equal((text.match(/main\.scss/g) ?? []).length, 1);
+});
+
+test('the file with the same name in another folder is not the import of the styles', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-vite-'));
+    await mkdir(path.join(root, 'src'), { recursive: true });
+    await writeFile(path.join(root, 'src', 'main.js'), "import './domain/main.js';\n", 'utf8');
+
+    const result = await ensureStyleImport(root, 'src/main.js', 'styles/main.scss');
+
+    assert.equal(result.changed, true);
+    const text = await readFile(path.join(root, 'src', 'main.js'), 'utf8');
+    assert.match(text, /import '\.\.\/styles\/main\.scss';/);
+});
+
+test('the imports of a script are found', () => {
+    const content = "import './a.js';\nimport { b } from './b.js';\nimport 'sass';\n";
+
+    assert.deepEqual(scriptImports(content), ['./a.js', './b.js', 'sass']);
+});
+
+test('the import goes after the imports that are already there', () => {
+    const content = "// The entry of the project.\nimport './app.js';\n\nconst x = 1;\n";
+
+    const updated = insertImport(content, './styles/main.scss');
+
+    const lines = updated.split('\n');
+    assert.equal(lines[1], "import './app.js';");
+    assert.equal(lines[2], "import './styles/main.scss';");
+});
+
+test('the link of the markup to the built CSS is removed', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-vite-'));
+    await writeFile(path.join(root, 'index.html'),
+        '<!doctype html><html><head><link rel="stylesheet" href="./styles/main.css"></head>'
+        + '<body><script type="module" src="/src/main.js"></script></body></html>', 'utf8');
+
+    const result = await removeStyleLink(root, 'index.html', 'styles/main.css');
+
+    assert.equal(result.removed, true);
+    assert.equal(result.changed, true);
+    const text = await readFile(path.join(root, 'index.html'), 'utf8');
+    assert.doesNotMatch(text, /main\.css/);
+    assert.match(text, /<script type="module" src="\/src\/main\.js"><\/script>/);
+});
+
+test('the stage gives the styles of a Vite project to the bundler', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-vite-'));
+    await mkdir(path.join(root, 'src'), { recursive: true });
+    await mkdir(path.join(root, 'styles'), { recursive: true });
+    await writeFile(path.join(root, 'vite.config.js'), 'export default {};\n', 'utf8');
+    await writeFile(path.join(root, 'index.html'),
+        '<!doctype html><html><head><link rel="stylesheet" href="./styles/main.css"></head>'
+        + '<body><script type="module" src="/src/main.js"></script></body></html>', 'utf8');
+    await writeFile(path.join(root, 'styles', 'main.scss'), '.a { color: red; }\n', 'utf8');
+    await writeFile(path.join(root, 'src', 'main.js'), "console.log('hi');\n", 'utf8');
+    await fakeSass(root);
+
+    const result = await buildStage({
+        root,
+        config: { output: { work: './.tmp' } },
+        runId: 'run-vite',
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.build.vite, true);
+    // The bundler compiles the SCSS itself: no CSS file is built by the stage.
+    assert.deepEqual(result.build.compiled, []);
+    assert.equal(result.build.removedLink, 'styles/main.css');
+    const script = await readFile(path.join(root, 'src', 'main.js'), 'utf8');
+    assert.match(script, /import '\.\.\/styles\/main\.scss';/);
+    const html = await readFile(path.join(root, 'index.html'), 'utf8');
+    assert.doesNotMatch(html, /main\.css/);
 });

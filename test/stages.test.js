@@ -17,7 +17,7 @@ import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { normalizePlan, orderSteps, planText, planStage, writePlan, readPlan } from '../src/stages/plan.js';
 import { collectStage, collectText, componentCards, readInputs } from '../src/stages/collect.js';
 import { normalizeArchitecture, architectureText, architectStage } from '../src/stages/architect.js';
-import { detectPackageManager, applySetup, setupReadiness, setupStage, installDependencies } from '../src/stages/setup.js';
+import { detectPackageManager, applySetup, setupReadiness, setupStage, installDependencies, ensureStyleCompiler } from '../src/stages/setup.js';
 import { runId, runDirectory, sanitizeId } from '../src/stages/workspace.js';
 import { openRegistry } from '../src/registry.js';
 
@@ -434,6 +434,67 @@ test('the setup does not install twice', async () => {
     assert.equal(result.ok, true);
 });
 
+test('the setup installs the package that the manifest names and the disk does not have', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-install-'));
+    await mkdir(path.join(root, 'node_modules'), { recursive: true });
+    await writeFile(path.join(root, 'package.json'), JSON.stringify({
+        name: 'demo',
+        private: true,
+        devDependencies: { sass: '^1.80.0' },
+    }, null, 2), 'utf8');
+
+    // The manager does not exist: the point of the test is that the installation is
+    // attempted at all, because the package of the manifest is not on the disk.
+    const result = await installDependencies({ root, manager: 'no-such-manager', timeoutMs: 10_000 });
+
+    assert.equal(result.ran, true);
+});
+
+test('the setup does not install when every package of the manifest is on the disk', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-install-'));
+    await mkdir(path.join(root, 'node_modules', 'sass'), { recursive: true });
+    await writeFile(path.join(root, 'package.json'), JSON.stringify({
+        name: 'demo',
+        private: true,
+        devDependencies: { sass: '^1.80.0' },
+    }, null, 2), 'utf8');
+
+    const result = await installDependencies({ root, manager: 'no-such-manager', timeoutMs: 10_000 });
+
+    assert.equal(result.ran, false);
+    assert.equal(result.ok, true);
+});
+
+test('the compiler of the styles goes into the manifest of the project', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-install-'));
+    await writeFile(path.join(root, 'package.json'), JSON.stringify({
+        name: 'demo',
+        private: true,
+        devDependencies: { vite: '^7.0.0' },
+    }, null, 2), 'utf8');
+
+    const result = await ensureStyleCompiler({ root, styleLanguage: 'scss' });
+
+    assert.equal(result.added, 'sass@^1.80.0 (dev)');
+    const manifest = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
+    assert.equal(manifest.devDependencies.sass, '^1.80.0');
+    assert.equal(manifest.devDependencies.vite, '^7.0.0');
+});
+
+test('the compiler of the styles is not added twice, and not for plain CSS', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-install-'));
+    await writeFile(path.join(root, 'package.json'), JSON.stringify({
+        name: 'demo',
+        devDependencies: { sass: '^1.80.0' },
+    }, null, 2), 'utf8');
+
+    const again = await ensureStyleCompiler({ root, styleLanguage: 'scss' });
+    assert.equal(again.added, null);
+
+    const css = await ensureStyleCompiler({ root, styleLanguage: 'css' });
+    assert.equal(css.added, null);
+});
+
 test('the setup installs the dependencies even when the installer is silent', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-install-'));
     await writeFile(path.join(root, 'package.json'), JSON.stringify({
@@ -484,9 +545,12 @@ test('the stage of the setup applies the environment and writes the file', async
 
     assert.equal(result.ok, true);
     assert.match(result.file, /setup\.json$/);
-    assert.deepEqual(result.applied.dependencies, ['vite@^5.0.0 (dev)']);
+    // The compiler of the styles is a dependency of the project: the code adds it to the
+    // manifest, and the package manager installs it.
+    assert.deepEqual(result.applied.dependencies, ['vite@^5.0.0 (dev)', 'sass@^1.80.0 (dev)']);
     const manifest = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
     assert.equal(manifest.devDependencies.vite, '^5.0.0');
+    assert.equal(manifest.devDependencies.sass, '^1.80.0');
 });
 
 test('the directory of a run is under the working directory of the config', () => {

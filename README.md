@@ -95,7 +95,14 @@ run that leaves the setup stage has a `node_modules` and not only a promise of o
 of the programs (`src/agent/programs.js`) looks a program up in the PATH the way the shell looks
 it up: the name itself, then the shims of Windows (`npm.cmd`, `npx.cmd`). A shim is a batch
 file, and a batch file is started through the shell of the system. A missing program, a non-zero
-exit code and a timeout come back as an answer, never as an exception.
+exit code and a timeout come back as an answer, never as an exception. The install is skipped
+only when every package of the manifest is already on the disk: a `node_modules` that does not
+hold `sass` is a reason to install, not a reason to skip.
+
+The compiler of the styles is a dependency of the project: a project that writes SCSS gets
+`sass` in its `devDependencies` (`sass ^1.80.0`), and the package manager of the project puts it
+on the disk. The code of the stage `setup` adds it to the manifest and installs it — the model
+does not install anything.
 
 The styles are connected by the code of the stage `build`, not by the model. A model writes
 `styles/main.scss` with three partials beside it and forgets two things: the entry point does
@@ -107,6 +114,12 @@ script that runs. A partial that nobody uses renders nothing, so it is connected
 point of its own directory. A copy of a repair (`main-incorrect.scss`) is not a part of the
 styles: it is neither built nor linked, and the report names it. Without `sass` in
 `node_modules` the styles are not built, and the report says so.
+
+A project of Vite gets its styles the way Vite wants them: the import of the stylesheet goes
+into the script of the project (`import './styles/main.scss'`), the bundler compiles the SCSS
+itself, and the link of the markup to the built CSS is removed — that file is an artifact of
+the bundler, and a link to it breaks the build. The stage does this by the code as well: the
+import is added when it is missing, and the report names the specifier of the import.
 
 `--route <stages>` chooses the stages the run goes through (the stages they need are added
 automatically), `--stop-after <stage>` (or `--stop-after=<stage>`) pauses the run on the

@@ -22,8 +22,9 @@
  * @usedBy stages/index, pipeline
  * @exports BUILD_FILE, STYLE_EXTENSIONS, listStyleFiles, styleReferences, partitionStyles,
  *          primaryEntry, insertUses, ensureUses, htmlRefs, resolveRef, hrefFor,
- *          ensureHtmlWiring, compileStyles, scratchStyles, buildPath, writeBuild, readBuild,
- *          buildStage
+ *          ensureHtmlWiring, compileStyles, scratchStyles, isViteProject, importPath,
+ *          scriptImports, ensureStyleImport, insertImport, removeStyleLink, buildPath,
+ *          writeBuild, readBuild, buildStage
  * @ai.tags stages, build, styles, sass
  * @ai.hint io
  * @changed 2026-11-14 Первая версия: стили собираются и подключаются кодом.
@@ -49,7 +50,7 @@ const SKIP_DIRS = /^(?:\.git|node_modules|\.hg|\.svn|dist|build|coverage|\.next|
 const ENTRY_NAMES = Object.freeze(['main', 'styles', 'style', 'index', 'app', 'theme', 'global']);
 
 /** The names of a partial that looks like a scratch copy and is not a part of the styles. */
-const SCRATCH_NAMES = /(?:^|[-_.])(?:incorrect|wrong|copy|old|new|backup|bak|tmp|temp|fix|draft|test)(?:[-_.]|$)/i;
+const SCRATCH_NAMES = /(?:^|[-_.])(?:incorrect|wrong|copy|old|backup|bak|tmp|temp|fix|draft)(?:[-_.]|$)/i;
 
 /**
  * The files of the styles of the project.
@@ -468,6 +469,185 @@ export async function ensureHtmlWiring(root, htmlRel, { styles = [], script = nu
 }
 
 /**
+ * True when the project is built by Vite.
+ *
+ * The config of Vite is the proof; the manifest is the second proof, for the project that
+ * uses Vite without a config of its own.
+ * @param {string} root
+ * @returns {Promise<boolean>}
+ * @exports
+ * @ai.hint io
+ */
+export async function isViteProject(root) {
+    const names = ['vite.config.js', 'vite.config.mjs', 'vite.config.ts', 'vite.config.mts', 'vite.config.cjs'];
+    for (const name of names) {
+        const found = await stat(path.join(root, name)).then((info) => info.isFile()).catch(() => false);
+        if (found) return true;
+    }
+    const text = await readFile(path.join(root, 'package.json'), 'utf8').catch(() => null);
+    if (text === null) return false;
+    let manifest = null;
+    try {
+        manifest = JSON.parse(text);
+    } catch {
+        return false;
+    }
+    return Boolean(manifest?.dependencies?.vite || manifest?.devDependencies?.vite);
+}
+
+/**
+ * The name of the stylesheet as the script of the project names it.
+ * @param {string} scriptRel the path of the script
+ * @param {string} styleRel the path of the stylesheet
+ * @returns {string}
+ * @exports
+ * @ai.hint pure
+ */
+export function importPath(scriptRel, styleRel) {
+    const dir = path.posix.dirname(String(scriptRel ?? ''));
+    const rel = dir === '.' ? String(styleRel ?? '') : path.posix.relative(dir, String(styleRel ?? ''));
+    if (!rel) return './';
+    return rel.startsWith('.') ? rel : `./${rel}`;
+}
+
+/**
+ * Add the import of the stylesheet into the script of the project.
+ *
+ * This is the way of Vite: the bundler sees the import, compiles the SCSS and puts the CSS
+ * into the bundle. A script that does not import the stylesheet leaves the page unstyled.
+ * @param {string} root
+ * @param {string} scriptRel the path of the script
+ * @param {string} styleRel the path of the stylesheet
+ * @param {{ apply?: boolean }} [options]
+ * @returns {Promise<{ changed: boolean, specifier: string, already: boolean }>}
+ * @exports
+ * @ai.hint io
+ */
+export async function ensureStyleImport(root, scriptRel, styleRel, { apply = true } = {}) {
+    const script = String(scriptRel ?? '').trim();
+    const style = String(styleRel ?? '').trim();
+    const result = { changed: false, specifier: '', already: false };
+    if (!script || !style) return result;
+    const specifier = importPath(script, style);
+    result.specifier = specifier;
+    const file = path.join(root, script);
+    const text = await readFile(file, 'utf8').catch(() => null);
+    if (text === null) return result;
+    // The import is already there when the script names this very stylesheet: the name of
+    // the file alone is not a proof — `./domain/main.js` is not `./styles/main.scss`.
+    const already = scriptImports(text).some((item) => {
+        if (!item.startsWith('.')) return false;
+        const dir = path.posix.dirname(script);
+        const target = path.posix.normalize(path.posix.join(dir === '.' ? '' : dir, item));
+        return target === path.posix.normalize(style);
+    });
+    if (already) {
+        result.already = true;
+        return result;
+    }
+    if (!apply) {
+        result.changed = true;
+        return result;
+    }
+    const updated = insertImport(text, specifier);
+    await writeFile(file, updated, 'utf8');
+    result.changed = true;
+    return result;
+}
+
+/**
+ * The specifiers that a script imports.
+ * @param {string} content
+ * @returns {string[]}
+ * @exports
+ * @ai.hint pure
+ */
+export function scriptImports(content) {
+    const text = String(content ?? '');
+    const out = [];
+    const pattern = /(?:^|\n)\s*import\s+(?:[^'"]*?\sfrom\s+)?['"]([^'"]+)['"]/g;
+    let match = pattern.exec(text);
+    while (match) {
+        const item = match[1].trim();
+        if (item && !out.includes(item)) out.push(item);
+        match = pattern.exec(text);
+    }
+    return out;
+}
+
+/**
+ * Add an import at the top of a script.
+ *
+ * The import goes after the comment that opens the file and after the imports that are
+ * already there.
+ * @param {string} content
+ * @param {string} specifier
+ * @returns {string}
+ * @exports
+ * @ai.hint pure
+ */
+export function insertImport(content, specifier) {
+    const text = String(content ?? '');
+    const eol = text.includes('\r\n') ? '\r\n' : '\n';
+    const lines = text.split(/\r?\n/);
+    let at = 0;
+    for (let index = 0; index < Math.min(lines.length, 80); index++) {
+        const line = lines[index];
+        if (/^\s*import\s/.test(line) || /^\s*export\s+.*\sfrom\s/.test(line)) {
+            at = index + 1;
+            continue;
+        }
+        if (!line.trim() || /^\s*(?:\/\/|\/\*|\*)/.test(line)) continue;
+        break;
+    }
+    const statement = `import '${specifier}';`;
+    return [...lines.slice(0, at), statement, ...lines.slice(at)].join(eol);
+}
+
+/**
+ * Remove the link of the markup that points at the built stylesheet.
+ *
+ * The stylesheet that the build produces is not a file of the project: it is the artifact of
+ * the compilation. A Vite project gets its styles from the import in the script, so the link
+ * to the artifact is redundant — and a link to a file that is not there breaks the build.
+ * @param {string} root
+ * @param {string} htmlRel the path of the markup
+ * @param {string} cssRel the path of the stylesheet
+ * @param {{ apply?: boolean }} [options]
+ * @returns {Promise<{ changed: boolean, removed: boolean }>}
+ * @exports
+ * @ai.hint io
+ */
+export async function removeStyleLink(root, htmlRel, cssRel, { apply = true } = {}) {
+    const result = { changed: false, removed: false };
+    const html = String(htmlRel ?? '').trim();
+    const target = String(cssRel ?? '').trim();
+    if (!html || !target) return result;
+    const file = path.join(root, html);
+    const text = await readFile(file, 'utf8').catch(() => null);
+    if (text === null) return result;
+    const links = text.match(/<link\b[^>]*>/gi) ?? [];
+    const doomed = links.filter((tag) => {
+        if (!/rel\s*=\s*["']?stylesheet/i.test(tag)) return false;
+        const href = tag.match(/href\s*=\s*["']([^"']+)["']/i);
+        if (!href) return false;
+        return resolveRef(html, href[1]) === target;
+    });
+    if (!doomed.length) return result;
+    result.removed = true;
+    let updated = text;
+    for (const tag of doomed) {
+        updated = updated.replace(tag, '');
+    }
+    updated = updated.replace(/^[ \t]*\r?\n(?=[ \t]*$)/gm, '');
+    if (apply && updated !== text) {
+        await writeFile(file, updated, 'utf8');
+        result.changed = true;
+    }
+    return result;
+}
+
+/**
  * The path of the file of the build of a run.
  * @param {string} root
  * @param {object} config
@@ -605,7 +785,7 @@ export async function buildStage({
     const htmlRel = await findMarkup(root, named);
     const scriptRel = await findScript(root, htmlRel, named);
     const html = htmlRel ? await readFile(path.join(root, htmlRel), 'utf8').catch(() => '') : '';
-    const links = htmlRefs(html).styles.map((href) => resolveRef(htmlRel, href)).filter(Boolean);
+    let links = htmlRefs(html).styles.map((href) => resolveRef(htmlRel, href)).filter(Boolean);
 
     // The target of every entry point: the CSS of the same name, unless the markup asks for
     // a file of another name.
@@ -629,14 +809,51 @@ export async function buildStage({
         if (target) target.output = link;
     }
 
-    // The styles are compiled.
-    const compiled = apply
-        ? await compileStyles(root, targets, { env })
-        : { compiled: [], errors: [], note: 'сборка отключена: файлы не записываются.' };
+    // The styles are compiled. A Vite project does not need the CSS of the project: the
+    // bundler compiles the SCSS itself, when the script of the project imports it.
+    const vite = await isViteProject(root);
+    const primary = targets.find((item) => item.source === entry) ?? targets[0] ?? null;
+    let compiled = { compiled: [], errors: [], note: null };
+    let imported = null;
+    let unlinked = null;
+
+    if (vite && scriptRel && entry) {
+        // Vite: the import of the stylesheet goes into the script of the project, and the
+        // link of the markup to the CSS of the build goes away — that file is an artifact
+        // of the bundler, and a link to it breaks the build of the project.
+        imported = await ensureStyleImport(root, scriptRel, entry, { apply });
+        if (primary?.output && htmlRel) {
+            unlinked = await removeStyleLink(root, htmlRel, primary.output, { apply });
+        }
+        compiled = {
+            compiled: [],
+            errors: [],
+            note: `Стили подключены импортом в ${scriptRel}: сборщик Vite компилирует SCSS сам.`,
+        };
+    } else {
+        if (vite) {
+            warnings.push(
+                scriptRel
+                    ? 'Точка входа стилей не найдена: стили собраны напрямую.'
+                    : 'Скрипт проекта не найден: стили собраны напрямую.',
+            );
+        }
+        compiled = apply
+            ? await compileStyles(root, targets, { env })
+            : { compiled: [], errors: [], note: 'сборка отключена: файлы не записываются.' };
+    }
     for (const error of compiled.errors) {
         warnings.push(`Стили не собрались: ${error.file}: ${error.message}`);
     }
     if (compiled.note) warnings.push(compiled.note);
+    if (imported?.changed) {
+        warnings.push(`Импорт стилей добавлен: ${scriptRel} → ${imported.specifier}.`);
+    } else if (imported?.already) {
+        warnings.push(`Импорт стилей на месте: ${imported.specifier}.`);
+    }
+    if (unlinked?.removed) {
+        warnings.push(`Ссылка на собранный CSS удалена: ${primary.output}.`);
+    }
     for (const item of scratch) {
         warnings.push(`Файл-черновик не собирается: ${item}.`);
     }
@@ -645,7 +862,6 @@ export async function buildStage({
     }
 
     // The markup points at the styles and at the script.
-    const primary = targets.find((item) => item.source === entry) ?? targets[0] ?? null;
     const wiring = await ensureHtmlWiring(root, htmlRel, {
         styles: primary && compiled.compiled.includes(primary.output) ? [primary.output] : [],
         script: scriptRel,
@@ -658,6 +874,10 @@ export async function buildStage({
         warnings.push(`Подключено: ${item}.`);
     }
 
+    // The links of the markup after the stage touched it.
+    const htmlAfter = htmlRel ? await readFile(path.join(root, htmlRel), 'utf8').catch(() => '') : '';
+    links = htmlRefs(htmlAfter).styles.map((href) => resolveRef(htmlRel, href)).filter(Boolean);
+
     const build = {
         styles: entries,
         entry,
@@ -666,8 +886,11 @@ export async function buildStage({
         scratch,
         uses: uses.added.map((item) => `${item.file} -> ${item.partial}`),
         skippedPartials: uses.skipped,
+        vite,
         compiled: compiled.compiled,
         errors: compiled.errors,
+        import: imported ? { script: scriptRel, specifier: imported.specifier, changed: imported.changed, already: imported.already } : null,
+        removedLink: unlinked?.removed ? primary?.output ?? null : null,
         markup: htmlRel,
         script: scriptRel,
         links: links,
