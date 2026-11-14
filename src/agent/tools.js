@@ -17,6 +17,7 @@
  */
 
 import path from 'node:path';
+import { stat } from 'node:fs/promises';
 import { toolSpecs as buildSpecs } from './tool-specs.js';
 import { listFiles, readTextFile, searchFiles, writeTextFile, replaceInFile, deleteFile, makeDirectory, copyPath } from './fs-tools.js';
 import { listProjectBackups, restoreProjectBackup } from './project-backup.js';
@@ -186,6 +187,41 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
     const specs = [...buildSpecs(config?.tools, { role }), ...mcpSpecs];
     let allowed = (writeDirs ?? [root]).map((dir) => path.resolve(dir));
 
+    // The files the role has already read: the content of a file stays in the conversation,
+    // and the second read of it costs the context of the run for nothing.
+    const reads = new Map();
+
+    /**
+     * The mark of a file: its size and the time of the last change.
+     *
+     * A file that changed since the last read is a new file for the role, even when the
+     * path is the same.
+     * @param {string} target
+     * @returns {Promise<string|null>}
+     */
+    async function stampOf(target) {
+        try {
+            const located = await resolveInside(root, String(target ?? ''), { allowRoot: false });
+            const info = await stat(located.abs);
+            return `${info.size}:${info.mtimeMs}`;
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * Forget the reads of a path: the file changed, and its old content is not the content
+     * of the disk any more.
+     * @param {string} target
+     * @returns {void}
+     */
+    function forgetReads(target) {
+        const prefix = `${String(target ?? '')}|`;
+        for (const key of reads.keys()) {
+            if (key === prefix.slice(0, -1) || key.startsWith(prefix)) reads.delete(key);
+        }
+    }
+
     /**
      * The directories the skill packs may live in, beyond the standard ones.
      * @returns {string[]}
@@ -272,21 +308,33 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                 return listing.text;
             }
             case 'read_file': {
+                const target = String(args.path ?? '');
+                const startLine = Number.isSafeInteger(Number(args.startLine)) ? Number(args.startLine) : null;
+                const endLine = Number.isSafeInteger(Number(args.endLine)) ? Number(args.endLine) : null;
+                const key = `${target}|${startLine ?? ''}|${endLine ?? ''}`;
+                const stamp = await stampOf(target);
+                const seen = reads.get(key);
+                if (seen && stamp && seen === stamp) {
+                    return `Файл ${target} уже прочитан в этом разговоре и с тех пор не менялся. Его содержимое — выше в истории; читать его второй раз не нужно.`;
+                }
                 const file = await readTextFile({
                     root,
-                    file: String(args.path ?? ''),
-                    startLine: Number.isSafeInteger(Number(args.startLine)) ? Number(args.startLine) : null,
-                    endLine: Number.isSafeInteger(Number(args.endLine)) ? Number(args.endLine) : null,
+                    file: target,
+                    startLine,
+                    endLine,
                 });
+                if (stamp) reads.set(key, stamp);
                 return file.text;
             }
             case 'write_file': {
                 const target = await writePath(args.path);
+                forgetReads(target.rel);
                 const result = await writeTextFile({ root, file: target.rel, content: String(args.content ?? '') });
                 return `Записан ${result.rel} (${result.bytes} байт${result.created ? ', новый файл' : ''}).`;
             }
             case 'replace_text': {
                 const target = await writePath(args.path);
+                forgetReads(target.rel);
                 const result = await replaceInFile({
                     root,
                     file: target.rel,
@@ -298,6 +346,7 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
             }
             case 'delete_file': {
                 const target = await writePath(args.path);
+                forgetReads(target.rel);
                 const result = await deleteFile({ root, file: target.rel });
                 return `Удалён ${result.rel}. Снимок: ${result.projectBackup?.id ?? 'нет'}.`;
             }

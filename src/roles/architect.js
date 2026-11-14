@@ -10,6 +10,7 @@
  */
 
 import { UNTRUSTED } from './untrusted.js';
+import { INPUTS_IN_CONTEXT } from './inputs.js';
 import { referenceNote } from './reference.js';
 
 /** The name of the role. */
@@ -55,6 +56,7 @@ ${design}
 ${reference}
 
 Rules:
+${INPUTS_IN_CONTEXT}
 - The platform of today is the platform you design for: look the guides up with the
   \`web_guidance\` tool before you design a control, a form or a layout, and let the
   structure follow them.

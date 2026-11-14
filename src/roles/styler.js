@@ -10,6 +10,7 @@
  */
 
 import { UNTRUSTED } from './untrusted.js';
+import { INPUTS_IN_CONTEXT } from './inputs.js';
 import { referenceNote } from './reference.js';
 
 /** The name of the role. */
@@ -59,6 +60,7 @@ ${design}
 ${reference}
 
 Rules:
+${INPUTS_IN_CONTEXT}
 - Look the guides up with the \`web_guidance\` tool before you write the rules of a layout,
   an animation or a scroll: the platform of today already holds the answer.
 - The title of the step is not the kind of work: a step whose title says "describe" or

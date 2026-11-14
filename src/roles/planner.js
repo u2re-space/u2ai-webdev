@@ -10,6 +10,7 @@
  */
 
 import { UNTRUSTED } from './untrusted.js';
+import { INPUTS_IN_CONTEXT } from './inputs.js';
 
 /** The name of the role. */
 export const name = 'planner';
@@ -48,6 +49,7 @@ ${stack}
 ${design}
 
 Rules:
+${INPUTS_IN_CONTEXT}
 - The answer is the plan itself, not a description of your work. A step is a piece of work to do
   now, with its files and its criteria. Never answer with a plan like "first I will study the
   project" or "then I will decide the structure": that is a plan of intentions, and it is wrong.

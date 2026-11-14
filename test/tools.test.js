@@ -46,6 +46,24 @@ test('the toolset writes, reads and replaces a file', async () => {
     assert.equal(body, '<h1>hello</h1>');
 });
 
+test('a file that was read once is not read twice', async () => {
+    const { tools } = await workspace();
+    await tools.execute('write_file', { path: 'src/index.html', content: '<h1>hi</h1>' });
+    const first = await tools.execute('read_file', { path: 'src/index.html' });
+    assert.match(first, /<h1>hi<\/h1>/);
+
+    // The content of the file is in the conversation above: the second read brings nothing
+    // new and costs the context of the run.
+    const second = await tools.execute('read_file', { path: 'src/index.html' });
+    assert.match(second, /уже прочитан/);
+    assert.doesNotMatch(second, /<h1>hi<\/h1>/);
+
+    // A file that changed on the disk is read again.
+    await tools.execute('write_file', { path: 'src/index.html', content: '<h1>bye</h1>' });
+    const third = await tools.execute('read_file', { path: 'src/index.html' });
+    assert.match(third, /<h1>bye<\/h1>/);
+});
+
 test('the toolset refuses to write outside the working directory', async () => {
     const { tools } = await workspace();
     await assert.rejects(

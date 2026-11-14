@@ -255,6 +255,12 @@ A run reads the direction of the design from the project itself:
 The values of `tokens.css` win over the document and over the palette. A conflict between the
 sources is reported, never resolved silently.
 
+The inputs are collected before the run and put into the context of every role, so a role does
+not read them again: the sheet of the measurements is big, and reading it twice costs the
+context of the run and brings nothing new. The tool `read_file` keeps the files the role has
+already read: the second read of a file that did not change answers with a short note instead
+of the whole file.
+
 The reference of the design is found by the name: a picture the task names (`landing.png`), a
 picture whose name says that it is a reference (`landing`, `reference`, `screenshot`, `mockup`,
 `design`), or a picture of `.ai/refs/`. `inputs.reference` in the config names it outright — a

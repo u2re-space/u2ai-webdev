@@ -199,6 +199,13 @@ test('the effort of a stage is pulled down to what the model takes', async () =>
     }
 });
 
+test('the roles that read the project are told that the inputs are already in the context', () => {
+    for (const name of ['planner', 'architect', 'markup', 'coder', 'styler']) {
+        const text = ROLES[name].instructions({});
+        assert.match(text, /are already in your context/, `the role ${name} may read the inputs again`);
+    }
+});
+
 test('the roles that may measure the reference have the tool of the measurer', () => {
     for (const name of ['planner', 'architect', 'styler']) {
         assert.ok(ROLES[name].tools.includes('call_ai_measure'), `the role ${name} cannot call the measurer`);

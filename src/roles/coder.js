@@ -10,6 +10,7 @@
  */
 
 import { UNTRUSTED } from './untrusted.js';
+import { INPUTS_IN_CONTEXT } from './inputs.js';
 import { referenceNote } from './reference.js';
 
 /** The name of the role. */
@@ -56,6 +57,7 @@ ${design}
 ${reference}
 
 Rules:
+${INPUTS_IN_CONTEXT}
 - The platform of today comes before the habit of yesterday: look the guides up with the
   \`web_guidance\` tool before you write a dialog, a form or a table, and follow what they
   say.
