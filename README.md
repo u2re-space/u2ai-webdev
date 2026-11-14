@@ -259,6 +259,12 @@ and the styles follow the image and not only the numbers of the measurements.
 The bridges to the sibling CLIs add more: `ai-decompose` splits a reference into screens,
 `ai-measure` measures a reference, and `ai-image` makes the pictures that the project needs.
 
+The measurer is not only a bridge in the config: the planner, the architect and the styler have
+the tool `call_ai_measure` and may measure the reference themselves when the measurements of the
+project are missing or thin — `["measure", "landing.png"]` for the sizes and the positions,
+`["design", "landing.png"]` for the look, `["palette", "landing.png"]` for the colours. The tool
+is switched off with `tools.external_measure: false` in the config.
+
 ## Configuration
 
 The configuration lives in `~/.ai-webdev/config.json` (`AI_WEBDEV_HOME` moves the whole home

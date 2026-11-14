@@ -19,7 +19,9 @@ export const name = 'architect';
 export const schema = 'architecture';
 
 /** The tools the role may call. */
-export const tools = ['list_files', 'read_file', 'search_files', 'read_skill', 'web_guidance'];
+export const tools = [
+    'list_files', 'read_file', 'search_files', 'call_ai_measure', 'read_skill', 'web_guidance',
+];
 
 /** How many turns the role may spend. */
 export const maxTurns = 16;
@@ -65,6 +67,9 @@ Rules:
   not \`--c-t\`).
 - The stack of the project is given. Do not invent a framework, a bundler or a library that the
   plan does not ask for.
+- If the measurements of the reference are missing or thin, measure the reference yourself with
+  the \`call_ai_measure\` tool: \`["measure", "landing.png"]\` for the sizes and the positions,
+  \`["design", "landing.png"]\` for the look. The tokens and the grid then follow the picture.
 - Keep the structure as small as the task allows. A module that holds one function and is used
   once is a function.
 

@@ -18,7 +18,9 @@ export const name = 'planner';
 export const schema = 'plan';
 
 /** The tools the role may call. */
-export const tools = ['list_files', 'read_file', 'search_files', 'read_skill'];
+export const tools = [
+    'list_files', 'read_file', 'search_files', 'call_ai_measure', 'read_skill',
+];
 
 /** How many turns the role may spend. */
 export const maxTurns = 12;
@@ -52,6 +54,10 @@ Rules:
 - The plan has at least two steps. If the task needs one step, it is still a plan — say what the
   step is and how it is checked.
 - Read the project first: the files that already exist decide what the plan may assume.
+- If the task names a reference picture and the project has no measurements of it, measure it
+  first with the \`call_ai_measure\` tool: \`["measure", "landing.png"]\` for the sizes and the
+  positions, \`["design", "landing.png"]\` for the look. The plan then works on real numbers
+  instead of guesses.
 - One step is one role's work. The steps are small enough to be done in one sitting and large
   enough to be worth a step. A step that needs two roles is two steps.
 - The steps come in an order that can be executed: the markup before the styles, the setup

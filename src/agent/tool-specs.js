@@ -354,7 +354,10 @@ export const TOOL_SPECS = Object.freeze({
     call_ai_measure: {
         configKey: 'external_measure',
         description: 'Call the external `ai-measure` CLI to measure a picture or to produce a design direction. '
-            + 'This CLI has no measurer of its own: the work is delegated to @u2ai/measurer.',
+            + 'This CLI has no measurer of its own: the work is delegated to @u2ai/measurer. '
+            + 'The args are the arguments of the CLI as strings, e.g. ["measure", "landing.png"] for the '
+            + 'measurements of a reference, ["design", "landing.png"] for the design direction, '
+            + '["palette", "landing.png"] for the colours.',
         parameters: {
             type: 'object',
             properties: {

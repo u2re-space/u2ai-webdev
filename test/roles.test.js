@@ -15,6 +15,7 @@ import path from 'node:path';
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 
 import { ROLES, ROLE_NAMES, resolveRole, roleSchema, buildInstructions, runRole, roleReason } from '../src/roles/index.js';
+import { toolSpecs } from '../src/agent/tool-specs.js';
 import { createClient } from '../src/openai/client.js';
 import { defaults } from '../src/config.js';
 
@@ -147,6 +148,14 @@ test('a role is resolved from the config', () => {
     assert.equal(changed.maxTurns, 3);
 
     assert.equal(resolveRole('nothing', config), null);
+});
+
+test('the roles that may measure the reference have the tool of the measurer', () => {
+    for (const name of ['planner', 'architect', 'styler']) {
+        assert.ok(ROLES[name].tools.includes('call_ai_measure'), `the role ${name} cannot call the measurer`);
+    }
+    const specs = toolSpecs(defaults.tools, { role: 'planner' });
+    assert.ok(specs.some((spec) => spec.name === 'call_ai_measure'));
 });
 
 test('the schema of a role comes from the catalogue', () => {
