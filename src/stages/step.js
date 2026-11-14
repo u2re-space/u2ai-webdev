@@ -14,7 +14,7 @@
  *          inputs/index, inputs/references, stages/workspace
  * @usedBy stages/markup, stages/coding, stages/styling
  * @exports STEPS_DIR, stepsForRole, applyFiles, stepReportPath, writeStepReport,
- *          readStepReport, missingFiles, runStepStage
+ *          readStepReport, resumableStep, missingFiles, runStepStage
  * @ai.tags stages, steps, files
  * @ai.hint io
  * @ai.hint legacy-0.2
@@ -188,6 +188,34 @@ export async function missingFiles(root, files = []) {
 }
 
 /**
+ * The report of a step that may be taken as done.
+ *
+ * A step is done when its report says so and its files are still on the disk. A file that
+ * was deleted after the step means the work is not there any more, and the step is done
+ * again.
+ * @param {string} root
+ * @param {object} config
+ * @param {string} id
+ * @param {object} step the step of the plan
+ * @returns {Promise<object|null>}
+ * @exports
+ * @ai.hint io
+ */
+export async function resumableStep(root, config = {}, id = null, step = {}) {
+    const stepId = String(step?.id ?? '').trim();
+    if (!stepId) return null;
+    const report = await readStepReport(root, config, id, stepId).catch(() => null);
+    if (!report || report.ok !== true) return null;
+    const written = Array.isArray(report.applied?.written) && report.applied.written.length
+        ? report.applied.written
+        : (Array.isArray(report.files) ? report.files.map((file) => file?.path ?? file) : []);
+    const names = written.length ? written : (Array.isArray(step.files) ? step.files : []);
+    const missing = await missingFiles(root, names);
+    if (missing.length) return null;
+    return { ...report, resumed: true };
+}
+
+/**
  * Run one role over the steps of the plan that belong to it.
  *
  * @param {{ client: object, config?: object, root?: string, task?: string, role: string,
@@ -244,6 +272,14 @@ export async function runStepStage({
     let usage = null;
 
     for (const step of steps) {
+        // A step that is already done is not done again: the run continues with what is
+        // on the disk. A model that has to write the same file a second time pays for
+        // the whole stage and changes nothing.
+        const done = await resumableStep(root, config, run, step);
+        if (done) {
+            reports.push(done);
+            continue;
+        }
         const blocks = [];
         if (task) blocks.push(String(task).trim());
         blocks.push([

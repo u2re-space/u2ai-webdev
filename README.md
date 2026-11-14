@@ -526,11 +526,17 @@ The state of the run lives on the disk with it:
 | `pictures.json` | The prepared pictures and their paths. |
 | `plan.json` | The plan of the work. |
 | `architecture.json`, `setup.json` | The structure of the project and the environment of it. |
+| `steps/<id>.json` | The report of every step of the plan: the files it wrote, the checks it passed. |
 
 A continued run reads those files back: the stages that are skipped would otherwise leave the
 later ones with nothing. The task belongs to the run, so `--resume <id>` without a task of its
 own works on the task of the earlier run. A run whose `inputs.json` is missing collects the
 inputs again — the collection is deterministic, and the later stages need what it finds.
+
+A step of the plan that is already done is not done again: its report is on the disk and its
+files are still there, so the run continues with the work that exists. A file that was deleted
+after the step means the work is gone, and the step is done again. The run never asks a model
+to write the same file twice.
 
 ## The bridges to the sibling CLIs
 

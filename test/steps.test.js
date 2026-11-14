@@ -11,7 +11,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 
 import { stepsForRole, applyFiles, stepReportPath, readStepReport, runStepStage } from '../src/stages/step.js';
 import { markupStage } from '../src/stages/markup.js';
@@ -151,6 +151,58 @@ test('a step stage runs the role over its steps and writes the reports', async (
     assert.equal(report.summary, 'The entry.');
     assert.equal(report.commands.length, 1);
     assert.match(stepReportPath(root, { output: { work: './.tmp' } }, 'run-1', 'code-1'), /steps[\\/]code-1\.json$/);
+});
+
+test('a step that is already done is not done again', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-steps-resume-'));
+    const config = { output: { work: './.tmp' }, stages: { coder: { maxTurns: 4 } } };
+    const client = fakeClient([schemaAnswer('code', {
+        summary: 'The entry.',
+        files: [{ path: 'src/main.js', content: 'export const x = 1;\n', language: 'js' }],
+        commands: [],
+        notes: '',
+    })]);
+
+    const first = await runStepStage({
+        client,
+        config,
+        root,
+        task: 'Make a landing.',
+        role: 'coder',
+        plan: PLAN,
+        runId: 'run-1',
+    });
+    assert.equal(first.ok, true);
+
+    // The run continues: the step is on the disk, and the model is not asked again.
+    let asked = 0;
+    const second = await runStepStage({
+        client: { responses: { async create() { asked += 1; return { output: [], output_text: '' }; } } },
+        config,
+        root,
+        task: 'Make a landing.',
+        role: 'coder',
+        plan: PLAN,
+        runId: 'run-1',
+    });
+    assert.equal(asked, 0);
+    assert.equal(second.ok, true);
+    assert.equal(second.steps.length, 1);
+    assert.equal(second.steps[0].resumed, true);
+
+    // A file that was deleted after the step means the work is not there any more.
+    await rm(path.join(root, 'src', 'main.js'));
+    const third = await runStepStage({
+        client: { responses: { async create() { asked += 1; return { output: [], output_text: '' }; } } },
+        config,
+        root,
+        task: 'Make a landing.',
+        role: 'coder',
+        plan: PLAN,
+        runId: 'run-1',
+    });
+    assert.ok(asked > 0, 'the model has to be asked again for a step that is not on the disk');
+    assert.equal(third.steps[0].resumed, undefined);
 });
 
 test('a plan without a step of the role skips the stage', async () => {
