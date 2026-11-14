@@ -435,6 +435,52 @@ test('a resumed run without the inputs collects them again', async () => {
     assert.deepEqual(done, ['collect', 'plan']);
 });
 
+test('a continued run takes the essence of the task of its own flags', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-resume-essence-'));
+    await writeFile(path.join(root, 'what-needs.md'), '# What needs\n\n- the drop menu works\n');
+    const dir = path.join(root, '.tmp', 'run-1');
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, 'inputs.json'), JSON.stringify({
+        task: 'Make a landing.',
+        essence: [],
+        design: { present: true },
+    }));
+    await writeFile(path.join(dir, 'progress.json'), JSON.stringify({
+        id: 'run-1',
+        task: 'Make a landing.',
+        status: 'paused',
+        cursor: 1,
+        stages: [
+            { name: 'collect', status: 'completed', index: 1 },
+            { name: 'plan', status: 'pending', index: 2 },
+        ],
+    }));
+
+    let seen = null;
+    const stages = [
+        { name: 'collect', title: 'Collect', dependsOn: [], run: async () => ({ ok: true }) },
+        {
+            name: 'plan',
+            title: 'Plan',
+            dependsOn: ['collect'],
+            run: async (args) => { seen = args; return { ok: true }; },
+        },
+    ];
+
+    const result = await resumePipeline({
+        client: { responses: { create: async () => ({ output: [] }) } },
+        config: { ...CONFIG, memory: { enabled: false }, inputs: { ...(CONFIG.inputs ?? {}), extra: ['what-needs.md'] } },
+        root,
+        runId: 'run-1',
+        stages,
+    });
+
+    assert.equal(result.status, 'completed');
+    assert.equal(seen.inputs.essence.length, 1);
+    assert.equal(seen.inputs.essence[0].path, 'what-needs.md');
+    assert.match(seen.inputs.essence[0].text, /the drop menu works/);
+});
+
 test('the files of the stages are collected', () => {
     const files = pipelineFiles({
         applied: { written: ['index.html'] },

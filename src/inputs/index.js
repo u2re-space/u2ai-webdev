@@ -12,7 +12,7 @@
  * @depends node:path, node:fs/promises, inputs/design-md, inputs/measurements, inputs/palette,
  *          inputs/tokens, inputs/assets, inputs/references, config/paths
  * @usedBy stages/collect, stages/index
- * @exports collectInputs, inputContext, inputSummary
+ * @exports collectEssence, collectInputs, inputContext, inputSummary, mergeInputs
  * @ai.tags inputs, context
  * @ai.hint io
  * @changed 2026-11-15 The essence of the task: the files of `inputs.extra` (`--input`).
@@ -46,9 +46,10 @@ async function readOptional(root, file) {
  * @param {string} root
  * @param {string[]} files the paths, relative to the root
  * @returns {Promise<{ files: Array<{ path: string, text: string }>, warnings: string[] }>}
+ * @exports
  * @ai.hint io
  */
-async function collectEssence(root, files = []) {
+export async function collectEssence(root, files = []) {
     const out = [];
     const warnings = [];
     for (const file of Array.isArray(files) ? files : []) {
@@ -138,6 +139,49 @@ export async function collectInputs({ root, config = {}, task = '' } = {}) {
         assets,
         references,
         warnings,
+    };
+}
+
+/**
+ * Merge the inputs of this run into the inputs of the earlier run.
+ *
+ * A continued run reads the inputs back from the disk, but the flags of this run may name
+ * something the earlier run did not know: the essence of the task (`--input`) and the
+ * picture of the task (`--image`). The parts the earlier run collected are kept — they
+ * describe the design as it was — and the new parts are put in front of them.
+ * @param {object|null} stored the inputs of the earlier run
+ * @param {object|null} fresh the inputs of this run
+ * @returns {object|null}
+ * @exports
+ * @ai.hint pure
+ */
+export function mergeInputs(stored = null, fresh = null) {
+    if (!stored) return fresh;
+    if (!fresh) return stored;
+
+    const essence = [];
+    const seenEssence = new Set();
+    for (const item of [...(fresh.essence ?? []), ...(stored.essence ?? [])]) {
+        const key = String(item?.path ?? '');
+        if (!key || seenEssence.has(key)) continue;
+        seenEssence.add(key);
+        essence.push(item);
+    }
+
+    const references = [];
+    const seenReferences = new Set();
+    for (const item of [...(fresh.references ?? []), ...(stored.references ?? [])]) {
+        const key = String(item?.path ?? '');
+        if (!key || seenReferences.has(key)) continue;
+        seenReferences.add(key);
+        references.push(item);
+    }
+
+    return {
+        ...stored,
+        essence,
+        references,
+        warnings: [...(fresh.warnings ?? []), ...(stored.warnings ?? [])],
     };
 }
 

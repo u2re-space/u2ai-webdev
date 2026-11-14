@@ -31,6 +31,7 @@ import { readArchitecture } from './stages/architect.js';
 import { readSetup } from './stages/setup.js';
 import { readReview } from './stages/review.js';
 import { readInputs } from './stages/collect.js';
+import { collectInputs, mergeInputs } from './inputs/index.js';
 import { readPictures } from './stages/pictures.js';
 import { createProgress, recordStep, readProgress, writeProgress } from './agent/work-plan.js';
 import { openMemory, memoryContext, memoryFile } from './memory.js';
@@ -185,6 +186,14 @@ export async function runPipeline({
         ctx.pictures = await readPictures(root, config, run);
         if (ctx.pictures.length && ctx.inputs) {
             ctx.inputs = { ...ctx.inputs, pictures: ctx.pictures };
+        }
+        // The flags of this run may name what the earlier run did not know: the essence of
+        // the task (`--input`) and the picture of the task (`--image`). The inputs are
+        // collected again — the collection is deterministic — and the new parts are merged
+        // into the ones that are read back.
+        if (ctx.inputs) {
+            const fresh = await collectInputs({ root, config, task: ctx.task });
+            ctx.inputs = mergeInputs(ctx.inputs, fresh);
         }
         // A run that was started before the inputs were written collects them again: the
         // collection is deterministic, and the later stages need what it finds.
