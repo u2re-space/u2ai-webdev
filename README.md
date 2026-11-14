@@ -56,6 +56,7 @@ same as `ai-webdev run "make a landing"`.
 | `config [init\|show\|path]` | The configuration of the home. |
 | `jobs [list\|show\|cancel\|rm\|prune\|run]` | The background jobs. |
 | `memory [list\|search\|add\|rm\|tasks]` | The permanent memory of the project. |
+| `skills [list\|search\|show\|path\|rm]` | The skill packs of the project, of the home and of the package. |
 
 `ai-webdev --help` prints the same list with every flag of the run.
 
@@ -80,8 +81,8 @@ report into the directory of the run and hands the result to the next one.
 | `learn` | Write the lessons of the run into the permanent memory. |
 
 `--route <stages>` chooses the stages the run goes through (the stages they need are added
-automatically), `--stop-after <stage>` pauses the run on the border of a stage, and
-`--resume <id>` continues it later.
+automatically), `--stop-after <stage>` (or `--stop-after=<stage>`) pauses the run on the
+border of a stage, and `--resume <id>` continues it later.
 
 ## The roles
 
@@ -266,6 +267,36 @@ ai-webdev memory tasks
 
 The kinds of a record: `fact`, `convention`, `decision`, `preference`, `pitfall`, `summary`,
 `note`. The scopes: `global` (every project) and `project` (this directory).
+
+## The skill packs
+
+A skill pack is a directory with a `SKILL.md` inside: the markdown that teaches a role
+something the model does not know. The packs are looked for in the project
+(`.agents/skills/`, `.koda/skills/`, `.claude/skills/`, `.rules/skills/`), in the home
+(`~/.agents/skills/`) and in the package itself. The copy of the project wins over the copy of
+the home, and the copy of the home wins over the one of the package.
+
+```bash
+ai-webdev skills list                # every pack: the name, the source, the description
+ai-webdev skills search dialog       # the packs that mention the words
+ai-webdev skills show modern-web-guidance
+ai-webdev skills path modern-web-guidance
+ai-webdev skills rm demo             # only the packs of the project
+```
+
+The pack of the package is `modern-web-guidance`: 209 guides of the modern web platform
+(the dialogs, the forms, the layout, the animation, the accessibility, the performance) by the
+Chrome, Edge, Firefox and MDN teams, under Apache-2.0. The roles that write or judge the
+interface read it with the tool `web_guidance`:
+
+| Call | What it does |
+|---|---|
+| `web_guidance` with `query` | The search: the ids and the summaries of the guides that fit the words. |
+| `web_guidance` with `ids` | The retrieve: the whole text of the guides, by their ids. |
+
+The guides are read from the disk of the package: no network, no npm, no waiting. The CLI of the
+upstream (`npx modern-web-guidance@latest search|retrieve`) is the fallback — for the guide that
+is newer than the bundle, and for the caller that asks for the CLI (`source: "cli"`).
 
 ## The process of a run
 

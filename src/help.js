@@ -33,6 +33,8 @@ Commands:
                               The background jobs.
   memory [list|search|add|rm|tasks]
                               The permanent memory of the project.
+  skills [list|search|show|path|rm]
+                              The skill packs of the project, of the home and of the package.
   ... memory add <text> --as <kind>
                               The kind of a record: fact | convention | decision |
                               preference | pitfall | summary | note.

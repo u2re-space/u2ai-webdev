@@ -12,7 +12,8 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
-import { mkdtemp } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 import { EXIT, VALUE_FLAGS, parseArgv } from '../src/cli.js';
@@ -183,6 +184,45 @@ test('an unknown command is a task', async () => {
     const result = await cli(['make a landing', '--route', 'nowhere']);
     assert.equal(result.code, EXIT.usage);
     assert.match(result.stderr, /--route: неизвестные стадии: nowhere\./);
+});
+
+test('the command of the skills lists the packs of the project and of the package', async () => {
+    const work = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-skills-cli-'));
+    const pack = path.join(work, '.agents', 'skills', 'demo');
+    await mkdir(pack, { recursive: true });
+    await writeFile(path.join(pack, 'SKILL.md'), '---\nname: demo\ndescription: a demo pack\n---\n\nThe steps.');
+
+    const listed = await cli(['skills', 'list'], { cwd: work });
+    assert.equal(listed.code, EXIT.ok);
+    assert.match(listed.stdout, /demo/);
+    assert.match(listed.stdout, /modern-web-guidance/);
+
+    const found = await cli(['skills', 'search', 'demo'], { cwd: work });
+    assert.equal(found.code, EXIT.ok);
+    assert.match(found.stdout, /demo/);
+
+    const shown = await cli(['skills', 'show', 'demo'], { cwd: work });
+    assert.equal(shown.code, EXIT.ok);
+    assert.match(shown.stdout, /The steps/);
+
+    const where = await cli(['skills', 'path', 'demo'], { cwd: work });
+    assert.equal(where.code, EXIT.ok);
+    assert.match(where.stdout, /demo/);
+});
+
+test('a skill pack of the project is removed and the pack of the package is not', async () => {
+    const work = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-skills-rm-'));
+    const pack = path.join(work, '.agents', 'skills', 'demo');
+    await mkdir(pack, { recursive: true });
+    await writeFile(path.join(pack, 'SKILL.md'), '---\nname: demo\ndescription: a demo pack\n---\n\nThe steps.');
+
+    const removed = await cli(['skills', 'rm', 'demo'], { cwd: work });
+    assert.equal(removed.code, EXIT.ok);
+    assert.equal(existsSync(path.join(pack, 'SKILL.md')), false);
+
+    const builtin = await cli(['skills', 'rm', 'modern-web-guidance'], { cwd: work });
+    assert.equal(builtin.code, EXIT.failure);
+    assert.match(builtin.stdout, /встроен/);
 });
 
 test('the command of the stages lists the stages of the pipeline', async () => {

@@ -21,13 +21,14 @@
  * @depends node:path, node:fs/promises
  * @usedBy agent/tools, roles/index, stages/collect
  * @exports FRONTMATTER_RE, defaultSkillsDir, parseFrontmatter, loadSkillPacks, skillsForRole,
- *          listSkillPacks, discoverSkills, buildSkillInstructions, readSkill, filterSkillsByKeywords
+ *          listSkillPacks, discoverSkills, buildSkillInstructions, readSkill, filterSkillsByKeywords,
+ *          skillDirectoryGroups, skillDirectories, skillCatalog, removeSkillPack
  * @ai.tags skills, prompts
  * @ai.hint io
  */
 
 import path from 'node:path';
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { readdir, readFile, rm, stat } from 'node:fs/promises';
 import { builtinSkillsDir } from './guidance.js';
 
 /** The marker of the frontmatter of a skill file. */
@@ -158,6 +159,26 @@ export async function listSkillPacks({ dir = null, env = process.env } = {}) {
 }
 
 /**
+ * The directories of the skill packs with their kind: the project, the home or the package.
+ * @param {string} root the project directory
+ * @param {object} [env]
+ * @returns {Array<{ dir: string, kind: string }>}
+ * @exports
+ * @ai.hint pure
+ */
+export function skillDirectoryGroups(root, env = process.env) {
+    const home = env.HOME || env.USERPROFILE || '';
+    return [
+        { dir: path.join(root, '.agents', 'skills'), kind: 'project' },
+        { dir: path.join(root, '.koda', 'skills'), kind: 'project' },
+        { dir: path.join(root, '.claude', 'skills'), kind: 'project' },
+        { dir: path.join(root, '.rules', 'skills'), kind: 'project' },
+        { dir: path.join(home, '.agents', 'skills'), kind: 'home' },
+        { dir: builtinSkillsDir(), kind: 'builtin' },
+    ];
+}
+
+/**
  * The directories the skill packs may live in, in the order they are looked at.
  *
  * The packs that ship with the package come last: a copy of a pack in the project wins
@@ -170,15 +191,76 @@ export async function listSkillPacks({ dir = null, env = process.env } = {}) {
  * @ai.hint pure
  */
 export function skillDirectories(root, env = process.env) {
-    const home = env.HOME || env.USERPROFILE || '';
-    return [
-        path.join(root, '.agents', 'skills'),
-        path.join(root, '.koda', 'skills'),
-        path.join(root, '.claude', 'skills'),
-        path.join(root, '.rules', 'skills'),
-        path.join(home, '.agents', 'skills'),
-        builtinSkillsDir(),
+    return skillDirectoryGroups(root, env).map((group) => group.dir);
+}
+
+/**
+ * The catalog of the skill packs: every pack with its directory and its kind.
+ *
+ * The first pack of a name wins: the project answers before the home, the home before
+ * the package.
+ *
+ * @param {string} root the project directory
+ * @param {{ env?: object, extraDirs?: string[] }} [options]
+ * @returns {Promise<Array<{ name: string, description: string, path: string, dir: string,
+ *   kind: string, removable: boolean }>>}
+ * @exports
+ * @ai.hint io
+ */
+export async function skillCatalog(root, { env = process.env, extraDirs = [] } = {}) {
+    const groups = [
+        ...skillDirectoryGroups(root, env),
+        ...extraDirs.map((dir) => ({ dir, kind: 'extra' })),
     ];
+    const out = [];
+    const seen = new Set();
+    for (const group of groups) {
+        for (const pack of await discoverInDir(group.dir)) {
+            if (seen.has(pack.name)) continue;
+            seen.add(pack.name);
+            out.push({
+                name: pack.name,
+                description: pack.description,
+                path: pack.path,
+                dir: group.dir,
+                kind: group.kind,
+                removable: group.kind === 'project',
+            });
+        }
+    }
+    return out;
+}
+
+/**
+ * Remove a skill pack of the project.
+ *
+ * Only the packs of the project may be removed: the pack of the package belongs to the
+ * installation, and the pack of the home belongs to the user.
+ *
+ * @param {string} name the name of the pack
+ * @param {string} root the project directory
+ * @param {{ env?: object }} [options]
+ * @returns {Promise<{ removed: boolean, path: string|null, reason: string|null }>}
+ * @exports
+ * @ai.hint io
+ */
+export async function removeSkillPack(name, root, { env = process.env } = {}) {
+    const wanted = String(name ?? '').trim();
+    if (!wanted) return { removed: false, path: null, reason: 'no-name' };
+    if (!/^[\w.-]+$/.test(wanted)) return { removed: false, path: null, reason: 'bad-name' };
+
+    for (const group of skillDirectoryGroups(root, env)) {
+        if (group.kind !== 'project') continue;
+        const dir = path.join(group.dir, wanted);
+        const info = await stat(dir).catch(() => null);
+        if (!info?.isDirectory()) continue;
+        await rm(dir, { recursive: true, force: true });
+        return { removed: true, path: dir, reason: null };
+    }
+
+    const catalog = await skillCatalog(root, { env });
+    const found = catalog.find((pack) => pack.name === wanted);
+    return { removed: false, path: null, reason: found ? (found.kind === 'builtin' ? 'builtin' : 'home') : 'not-found' };
 }
 
 /**

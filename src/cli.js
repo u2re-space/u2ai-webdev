@@ -9,7 +9,7 @@
  *   an interrupted run leaves 130.
  *
  * @depends node:module, help, config, cli/errors, cli/compatibility, cli/renderer,
- *          cli/run, cli/install, cli/component, cli/config, cli/jobs, cli/memory
+ *          cli/run, cli/install, cli/component, cli/config, cli/jobs, cli/memory, cli/skills
  * @usedBy bin/ai-webdev, index
  * @exports EXIT, VALUE_FLAGS, parseArgv, main
  * @ai.tags cli, dispatch
@@ -19,6 +19,7 @@
  * @changed 2026-11-13 The commands of the registry: `component` and `install`.
  * @changed 2026-11-13 The whole surface: run, plan, stages, component, install, jobs, memory.
  * @changed 2026-11-13 The command of the configuration: `config`.
+ * @changed 2026-11-14 The command of the skill packs: `skills`.
  */
 
 import { createRequire } from 'node:module';
@@ -31,6 +32,7 @@ import { runCommand, planCommand, stagesCommand, configOverrides } from './cli/r
 import { installCommand } from './cli/install.js';
 import { componentCommand } from './cli/component.js';
 import { configCommand } from './cli/config.js';
+import { skillsCommand } from './cli/skills.js';
 import { jobsCommand } from './cli/jobs.js';
 import { memoryCommand } from './cli/memory.js';
 
@@ -135,6 +137,7 @@ const COMMANDS = Object.freeze({
     config: configCommand,
     jobs: jobsCommand,
     memory: memoryCommand,
+    skills: skillsCommand,
 });
 
 /**

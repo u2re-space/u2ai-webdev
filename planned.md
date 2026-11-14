@@ -186,7 +186,7 @@ CLI `ai-webdev` (`@u2ai/webdev`) с собственным конфигом `~/.
 | `ai-webdev jobs list\|follow\|wait\|cancel\|rm` | фоновые задачи |
 | `ai-webdev memory list\|search\|add\|rm` | постоянная память |
 | `ai-webdev map` | перестроить `.ai/map.json` |
-| `ai-webdev skills` | список доступных скилл-паков |
+| `ai-webdev skills list\|search\|show\|path\|rm` | скилл-паки: список, поиск, текст, путь, удаление (только паки проекта) |
 | `ai-webdev docs` | документация стандартов и форматов |
 | `ai-webdev config show\|path\|check` | конфиг |
 | `ai-webdev models` | профили моделей и их лимиты |
@@ -387,6 +387,21 @@ CLI `ai-webdev` (`@u2ai/webdev`) с собственным конфигом `~/.
 - [x] `README.md` — установка, команды, примеры, формат конфига, мосты, входные данные
 - [x] Затухание в монолите: `ai gen`/`ai run` веб-части делегируют в `ai-webdev`
 - [x] Чеклист релиза: `npm run check`, `npm test`, `npm pack --dry-run`, версия, репозиторий
+
+### step-21 — Скилл-паки и гайды современной платформы
+- [x] `skills/modern-web-guidance/` — вендоренный пак гайдов (209 гайдов, 17 категорий,
+      Apache-2.0, `NOTICE.md` с правками копии)
+- [x] `src/agent/guidance.js` — движок гайдов: индекс, поиск по словам, чтение по id,
+      категории, запасной путь через CLI апстрима (`npx modern-web-guidance@latest`)
+- [x] Инструмент `web_guidance` (`configKey: guidance`): поиск, чтение, каталог, источник
+      `bundled` или `cli`
+- [x] `src/agent/skills.js` — каталог паков пакета стал последним в списке: копия проекта
+      важнее встроенной; `skillCatalog()`, `removeSkillPack()`
+- [x] Команда `src/cli/skills.js` — `list | search | show | path | rm`; встроенные пакеты
+      не удаляются
+- [x] Роли архитектора, кодера, разметчика, стилиста, редактора, ревьюера, аудитора и
+      ученика получили инструмент и правило: сначала гайды, потом код
+- [x] Проверка: `test/guidance.test.js`, тесты команды `skills` в `test/cli.test.js`
 
 ---
 
