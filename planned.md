@@ -923,6 +923,16 @@ CLI `ai-webdev` (`@u2ai/webdev`) с собственным конфигом `~/.
 - [x] README (EN), planned.md (RU)
 - [x] Проверка: `npm test` — 371 тест, все проходят
 
+### step-58 — Сервер vite не запускается из роли
+- [x] Проблема (живой прогон ForMeasure, 2026-11-15): роль вызвала `npx vite` — сервер
+      разработки не заканчивается сам, а запрет знал только `vite dev` и `npm run dev`. Сервер
+      остался жить после прогона и держал порт
+- [x] `src/agent/tools.js` — `BLOCKING_COMMANDS` отказывает и голому `vite`, и `npx vite`,
+      и `vite dev`; `vite build` и `npm run build` остаются разрешёнными
+- [x] `test/tools.test.js` — тест на все формы команды vite
+- [x] README (EN), planned.md (RU)
+- [x] Проверка: `npm test` — 372 теста, все проходят
+
 ---
 
 ## 2. Порядок работы и зависимости шагов

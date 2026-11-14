@@ -14,7 +14,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, mkdir, readFile } from 'node:fs/promises';
 
-import { createToolset, htmlToText } from '../src/agent/tools.js';
+import { createToolset, htmlToText, BLOCKING_COMMANDS } from '../src/agent/tools.js';
 import { runBridge } from '../src/agent/bridges.js';
 import { normalizeVerdict, verdictFromScores } from '../src/agent/quality.js';
 import { resolvePace, effortFor } from '../src/agent/pace.js';
@@ -159,6 +159,15 @@ test('a command that does not finish on its own is refused', async () => {
     });
     assert.match(answer, /не запущена/);
     assert.match(answer, /не заканчивается сама/);
+});
+
+test('the dev server of vite is refused in every form', () => {
+    assert.ok(BLOCKING_COMMANDS.test('vite'), 'the bare vite is refused');
+    assert.ok(BLOCKING_COMMANDS.test('npx vite'), 'the vite of npx is refused');
+    assert.ok(BLOCKING_COMMANDS.test('npx vite --port 5173'), 'the vite of npx with a port is refused');
+    assert.ok(BLOCKING_COMMANDS.test('vite dev'), 'the dev of vite is refused');
+    assert.equal(BLOCKING_COMMANDS.test('vite build'), false, 'the build of vite is not refused');
+    assert.equal(BLOCKING_COMMANDS.test('npm run build'), false, 'the build of npm is not refused');
 });
 
 test('the html of a page becomes readable text', () => {

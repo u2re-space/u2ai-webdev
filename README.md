@@ -615,7 +615,8 @@ when it is short — the content of a file is never a line of the log.
 A program that runs through `run_command` has to finish on its own: a server or a watcher is
 refused before it starts, and the program never waits for the input — the input is closed at
 once, so a program that reads it (the console of node) ends instead of holding the run until
-the timeout.
+the timeout. The dev server of vite is refused in every form (`vite`, `npx vite`, `vite dev`);
+the build of vite (`vite build`) is not.
 
 The answer of a role is the work of the step: a file that is on the disk and differs from the
 answer is written, and the old file goes to the backup. A file that the role wrote with its own

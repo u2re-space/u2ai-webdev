@@ -37,10 +37,13 @@ export { WINDOWS_EXTENSIONS, quoteWindowsArg, findProgram, killTree } from './pr
  *
  * Such a command would hold the run until the timeout, and the work of the run would wait for
  * nothing. The tool refuses them and says what to do instead.
+ *
+ * The dev server of vite is refused in every form: `vite`, `npx vite`, `vite dev`. The build
+ * of vite (`vite build`) does finish, and it is not refused.
  * @type {RegExp}
  * @ai.hint pure
  */
-export const BLOCKING_COMMANDS = /(?:python[0-9.]*\s+-m\s+http\.server|\bhttp-server\b|\blive-server\b|\bserve\b|\bvite\s+(?:dev|preview)\b|\bnpm\s+run\s+(?:dev|preview|serve|start)\b|\btail\s+-f\b)/i;
+export const BLOCKING_COMMANDS = /(?:python[0-9.]*\s+-m\s+http\.server|\bhttp-server\b|\blive-server\b|\bserve\b|(?:^|\s)(?:npx\s+)?vite\b(?!\s+build)|\bnpm\s+run\s+(?:dev|preview|serve|start)\b|\btail\s+-f\b)/i;
 
 /**
  * Turn a name into a token the API accepts.
