@@ -330,6 +330,19 @@ test('the link of the markup to the built CSS is removed', async () => {
     assert.match(text, /<script type="module" src="\/src\/main\.js"><\/script>/);
 });
 
+test('the link of the markup to the source stylesheet is removed as well', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-vite-'));
+    await writeFile(path.join(root, 'index.html'),
+        '<!doctype html><html><head><link rel="stylesheet" href="/scss/main.scss"></head>'
+        + '<body><script type="module" src="/src/main.js"></script></body></html>', 'utf8');
+
+    const result = await removeStyleLink(root, 'index.html', ['scss/main.css', 'scss/main.scss']);
+
+    assert.equal(result.removed, true);
+    const text = await readFile(path.join(root, 'index.html'), 'utf8');
+    assert.doesNotMatch(text, /main\.scss/);
+});
+
 test('the stage gives the styles of a Vite project to the bundler', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-vite-'));
     await mkdir(path.join(root, 'src'), { recursive: true });

@@ -649,24 +649,28 @@ export function insertImport(content, specifier) {
 }
 
 /**
- * Remove the link of the markup that points at the built stylesheet.
+ * Remove the links of the markup that point at the stylesheets of the project.
  *
  * The stylesheet that the build produces is not a file of the project: it is the artifact of
  * the compilation. A Vite project gets its styles from the import in the script, so the link
  * to the artifact is redundant — and a link to a file that is not there breaks the build.
+ * The link to the source stylesheet goes away as well: the import is the one way to the
+ * styles now, and both together load the styles twice.
  * @param {string} root
  * @param {string} htmlRel the path of the markup
- * @param {string} cssRel the path of the stylesheet
+ * @param {string|string[]} targets the paths of the stylesheets
  * @param {{ apply?: boolean }} [options]
  * @returns {Promise<{ changed: boolean, removed: boolean }>}
  * @exports
  * @ai.hint io
  */
-export async function removeStyleLink(root, htmlRel, cssRel, { apply = true } = {}) {
+export async function removeStyleLink(root, htmlRel, targets, { apply = true } = {}) {
     const result = { changed: false, removed: false };
     const html = String(htmlRel ?? '').trim();
-    const target = String(cssRel ?? '').trim();
-    if (!html || !target) return result;
+    const list = (Array.isArray(targets) ? targets : [targets])
+        .map((item) => String(item ?? '').trim())
+        .filter(Boolean);
+    if (!html || !list.length) return result;
     const file = path.join(root, html);
     const text = await readFile(file, 'utf8').catch(() => null);
     if (text === null) return result;
@@ -675,7 +679,7 @@ export async function removeStyleLink(root, htmlRel, cssRel, { apply = true } = 
         if (!/rel\s*=\s*["']?stylesheet/i.test(tag)) return false;
         const href = tag.match(/href\s*=\s*["']([^"']+)["']/i);
         if (!href) return false;
-        return resolveRef(html, href[1]) === target;
+        return list.includes(resolveRef(html, href[1]));
     });
     if (!doomed.length) return result;
     result.removed = true;
@@ -873,8 +877,10 @@ export async function buildStage({
         // link of the markup to the CSS of the build goes away — that file is an artifact
         // of the bundler, and a link to it breaks the build of the project.
         imported = await ensureStyleImport(root, scriptRel, entry, { apply });
-        if (primary?.output && htmlRel) {
-            unlinked = await removeStyleLink(root, htmlRel, primary.output, { apply });
+        if (htmlRel) {
+            // The link to the source stylesheet goes away as well: the import is the one way
+            // to the styles now, and the two together load the styles twice.
+            unlinked = await removeStyleLink(root, htmlRel, [primary?.output, entry], { apply });
         }
         // The bundler compiles the styles itself, but the stage still checks them: a
         // stylesheet that does not compile breaks the build of the user.
