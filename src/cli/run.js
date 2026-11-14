@@ -318,7 +318,6 @@ export async function runCommand(ctx) {
     const onInterrupt = () => controller.abort();
     process.on('SIGINT', onInterrupt);
 
-    const client = await createClient({ config, env, signal: controller.signal });
     const notify = (event) => {
         renderer?.event?.(event);
         if (event?.type === 'stage.done' && event.stage === 'plan' && event.result?.plan) {
@@ -333,6 +332,9 @@ export async function runCommand(ctx) {
             }
         }
     };
+    // The events of the transport reach the renderer: the wait of a thinking model, the
+    // retries of a failed host.
+    const client = await createClient({ config, env, signal: controller.signal, onEvent: notify });
 
     try {
         const request = {
@@ -382,7 +384,8 @@ export async function planCommand(ctx) {
     if (kind && config?.agent) config.agent.kind = kind;
     if (!task) throw new UsageError('Укажите задачу: ai-webdev plan "сделать лендинг".');
 
-    const client = await createClient({ config, env });
+    const notify = (event) => renderer?.event?.(event);
+    const client = await createClient({ config, env, onEvent: notify });
     try {
         const report = await runPipeline({
             client,
@@ -390,7 +393,7 @@ export async function planCommand(ctx) {
             root: cwd,
             task,
             stageNames: ['collect', 'plan'],
-            notify: (event) => renderer?.event?.(event),
+            notify,
             env,
         });
         for (const warning of report.warnings ?? []) renderer?.warning?.(warning);

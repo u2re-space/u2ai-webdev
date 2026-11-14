@@ -159,7 +159,7 @@ test('the effort of a role comes from the profile of the stages', () => {
     assert.equal(resolveRole('styler', config).effort, 'xhigh');
     assert.equal(resolveRole('coder', config).effort, 'medium');
     assert.equal(resolveRole('planner', config).effort, 'medium');
-    assert.equal(resolveRole('architect', config).effort, 'high');
+    assert.equal(resolveRole('architect', config).effort, 'medium');
     assert.equal(resolveRole('installer', config).effort, 'low');
 
     // The effort of the run is the ceiling: a stage never works above it.

@@ -352,6 +352,30 @@ test('the renderer of json writes the events as json', () => {
     assert.equal(event.stages[0].name, 'plan');
 });
 
+test('the renderer says that the run waits for a thinking model', () => {
+    const lines = [];
+    const errors = [];
+    const renderer = createRenderer({
+        mode: 'plain',
+        stdout: { write: (text) => lines.push(text) },
+        stderr: { write: (text) => errors.push(text) },
+    });
+    renderer.event({ type: 'request.wait', elapsedMs: 60_000 });
+    renderer.event({ type: 'request.retry', attempt: 2, error: 'No data from the server' });
+    const text = errors.join('');
+    assert.match(text, /thinking \(60s\)/);
+    assert.match(text, /retry 2/);
+});
+
+test('the renderer of json writes the wait as json', () => {
+    const lines = [];
+    const renderer = createRenderer({ mode: 'json', stdout: { write: (text) => lines.push(text) } });
+    renderer.event({ type: 'request.wait', elapsedMs: 20_000 });
+    const event = JSON.parse(lines[0]);
+    assert.equal(event.type, 'wait');
+    assert.equal(event.seconds, 20);
+});
+
 test('the mode of the renderer follows the flags', () => {
     assert.equal(detectMode({ json: true, quiet: false }), 'json');
     assert.equal(detectMode({ json: false, quiet: true }), 'quiet');

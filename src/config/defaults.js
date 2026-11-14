@@ -16,11 +16,12 @@ import { ENUMS } from './constants.js';
  * The markup and the styles carry the look of the reference: they get the deepest
  * reasoning. The mechanical work — the scripts, the icons, the lessons — gets the
  * cheapest one. The planner and the architect stay in between: they decide, but they
- * do not build.
+ * do not build. A thinking model spends minutes on a high effort, so the stages that
+ * only decide stay at `medium`.
  */
 export const STAGE_EFFORT = Object.freeze({
     planner: 'medium',
-    architect: 'high',
+    architect: 'medium',
     director: 'medium',
     coder: 'medium',
     markup: 'xhigh',
@@ -28,7 +29,7 @@ export const STAGE_EFFORT = Object.freeze({
     iconifier: 'medium',
     installer: 'low',
     editor: 'medium',
-    reviewer: 'high',
+    reviewer: 'medium',
     auditor: 'medium',
     learner: 'low',
 });
@@ -65,7 +66,14 @@ export const defaults = {
     stageEffort: { ...STAGE_EFFORT },
   },
   retries: 3,
-  timeoutMs: 120_000,
+  /**
+   * How long a request may stay silent before it is treated as dead.
+   *
+   * A thinking model works for minutes without a word. A short timeout does not make
+   * the model faster: it throws away the whole reasoning and asks again. The ceiling
+   * of the config is ten minutes.
+   */
+  timeoutMs: 600_000,
 
   // --- HTTP backends -------------------------------------------------------
   /**

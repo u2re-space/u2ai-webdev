@@ -220,6 +220,33 @@ export function createRenderer({
         },
 
         /**
+         * The run waits for the model.
+         *
+         * A thinking model works for minutes without a word. The line says that the run
+         * is alive, so the silence of the terminal is not read as a hang.
+         * @param {number} [elapsedMs] how long the request has been in flight
+         * @returns {void}
+         */
+        wait(elapsedMs = 0) {
+            const ms = Number(elapsedMs);
+            const seconds = Number.isFinite(ms) ? Math.max(1, Math.round(ms / 1000)) : 0;
+            if (json) { emit('wait', { elapsedMs: ms, seconds }); return; }
+            err(`${paint.dim(`${symbols.info} thinking (${seconds}s)`)}`);
+        },
+
+        /**
+         * A request failed and is repeated.
+         * @param {object} [detail]
+         * @returns {void}
+         */
+        retry(detail = null) {
+            const attempt = detail?.attempt ?? null;
+            const error = String(detail?.error ?? '');
+            if (json) { emit('retry', { attempt, error }); return; }
+            err(`${paint.dim(`${symbols.info} retry${attempt ? ` ${attempt}` : ''}${error ? `: ${error}` : ''}`)}`);
+        },
+
+        /**
          * The files the run touched.
          * @param {string[]} files
          * @returns {void}
@@ -309,6 +336,9 @@ export function createRenderer({
             else if (type === 'stage.done') this.stageDone(event.stage, event.status);
             else if (type === 'stage.skip') this.stageDone(event.stage, 'skipped');
             else if (type === 'role.tool') this.tool(event.name, event.arguments ?? null);
+            else if (type === 'request.wait') this.wait(event.elapsedMs ?? 0);
+            else if (type === 'request.retry') this.retry(event);
+            else if (type === 'request.error') this.warning(`запрос не удался: ${event.error ?? ''}`);
             else if (type === 'warning') this.warning(event.text);
             else if (type === 'files') this.files(event.files);
             else if (type === 'plan') this.plan(event.plan);
