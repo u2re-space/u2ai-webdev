@@ -199,6 +199,12 @@ turns.
 given many times. The config may override the model, the effort, the instructions and the tools of
 any role, and may add roles of its own.
 
+Every role works at the effort of its stage: the markup and the styles at `xhigh`, the
+architecture and the review at `high`, the scripts, the plan and the mechanical work at `medium`,
+the environment at `low`. The effort of the run (`reasoning.effort`, the flag `--effort`) is the
+ceiling: a stage never works above it. The profile lives in `reasoning.stageEffort` and may be
+changed or turned off there.
+
 The answer of a role has a schema, and the loop watches it: a role that answers with a text
 instead of the data of its schema is asked once more, and the last turn belongs to the answer —
 when the turns of the role run out, it is asked to give the answer alone, without any tool. A
@@ -315,6 +321,32 @@ the effort and the channel of the schema.
 }
 ```
 
+The effort of a run is not one number for everybody. `reasoning.effort` is the ceiling of the
+run, and `reasoning.stageEffort` says what every stage asks for:
+
+```json
+{
+  "reasoning": {
+    "effort": "xhigh",
+    "stageEffort": {
+      "markup": "xhigh",
+      "styler": "xhigh",
+      "architect": "high",
+      "reviewer": "high",
+      "planner": "medium",
+      "coder": "medium",
+      "iconifier": "medium",
+      "installer": "low"
+    }
+  }
+}
+```
+
+The markup and the styles carry the look of the reference: they get the deepest reasoning. The
+scripts, the icons and the mechanical work get the cheapest one. A stage never works above the
+ceiling of the run, and the effort of a role set in `roles.<role>.effort` wins over the profile.
+`"stageEffort": null` turns the profile off and leaves every role with the effort of the run.
+
 The channel of the schema says how the answer of a role reaches the code: `tool` makes the
 schema a function the model calls, `format` pins the text of the answer to it, `auto` picks
 `tool` when the role has other tools and `format` otherwise. The channel matters because a
@@ -328,7 +360,7 @@ The sections of the file:
 | Section | What it holds |
 |---|---|
 | `model`, `baseURL`, `apiKey`, `backends`, `modelsBackends`, `fallback` | The API: the model, the hosts, the pool of the fallbacks. |
-| `reasoning`, `limits`, `models` | The effort, the summaries, the budgets of the run and the ceilings of the models. |
+| `reasoning`, `limits`, `models` | The effort, the profile of the stages, the summaries, the budgets of the run and the ceilings of the models. |
 | `tools` | The tools the roles may call. |
 | `stack` | The stack the generator writes for: the framework, the markup, the styles, the script, the icons. |
 | `agent` | The knobs of the run: `fidelity`, `creativity`, `platform`, `kind`, `approve`, `extract`. |
@@ -367,7 +399,7 @@ The home directory holds:
 | `AI_WEBDEV_BASE_URL` | The endpoint of the API (`OPENAI_BASE_URL` also works). |
 | `AI_WEBDEV_MODEL` | The model of the roles (`AI_MODEL` also works). |
 | `AI_WEBDEV_BACKENDS` | The JSON list of the backends. |
-| `AI_WEBDEV_EFFORT` | The reasoning effort of the run. |
+| `AI_WEBDEV_EFFORT` | The ceiling of the reasoning effort of the run. |
 | `AI_WEBDEV_FRAMEWORK`, `AI_WEBDEV_MARKUP`, `AI_WEBDEV_STYLE`, `AI_WEBDEV_SCRIPT`, `AI_WEBDEV_ICON_SET` | The stack of the generator. |
 | `AI_WEBDEV_FIDELITY`, `AI_WEBDEV_CREATIVITY`, `AI_WEBDEV_KIND` | The knobs of the generation. |
 | `AI_WEBDEV_SPEED`, `AI_WEBDEV_QUALITY`, `AI_WEBDEV_PACE` | The dials of the team. |

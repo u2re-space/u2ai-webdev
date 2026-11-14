@@ -651,6 +651,26 @@ CLI `ai-webdev` (`@u2ai/webdev`) с собственным конфигом `~/.
       `test/steps.test.js` (бинарный файл не перезаписан), `npm test` — 333 теста,
       все проходят; живой шаг `markup` на Kimi пишет `index.html` (9.4 КБ, 9 ходов)
 
+### step-39 — Effort у каждой стадии свой
+- [x] Проблема: прогон на `moonshotai/kimi-k3.1-pro` шёл полчаса на одной стадии — все роли
+      работали с effort прогона (`xhigh`), хотя план, архитектура и скрипты в таком
+      размышлении не нуждаются
+- [x] `src/config/defaults.js` — `STAGE_EFFORT`: профиль стадий — разметка и стили `xhigh`,
+      архитектура и ревью `high`, план, скрипты, иконки, редактор, аудит `medium`,
+      установщик и ученик `low`
+- [x] `src/config/defaults.js` — `reasoning.stageEffort` — профиль в конфиге;
+      `reasoning.effort` — потолок прогона, стадия никогда не работает выше него
+- [x] `src/agent/pace.js` — `stageEffortFor()`, `lowerEffort()`: effort роли — это effort
+      роли из конфига, иначе профиль стадии под потолком прогона, иначе сам потолок;
+      `roles.<role>.effort` важнее профиля
+- [x] `src/openai/client.js` — effort стадии опускается до потолка модели (`snapEffort`):
+      модель с потолком `high` не получает `xhigh`
+- [x] `src/config/validate.js` — проверка `reasoning.stageEffort`: роль известна, уровень из
+      лестницы усилий (`null` выключает профиль)
+- [x] `src/help.js`, README (EN), planned.md (RU)
+- [x] Проверка: `test/roles.test.js` (профиль стадий, потолок, effort роли, потолок модели),
+      `test/config.test.js` (проверка профиля), `npm test` — 335 тестов, все проходят
+
 ---
 
 ## 2. Порядок работы и зависимости шагов

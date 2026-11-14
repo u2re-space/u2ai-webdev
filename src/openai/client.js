@@ -21,7 +21,7 @@ import {
     responsesRouteUnsupported, stripRejectedFields, toChatBody,
 } from './chat.js';
 import { buildResponsesBody } from './responses.js';
-import { getModelProfile } from '../model/profiles.js';
+import { getModelProfile, snapEffort } from '../model/profiles.js';
 
 /** Statuses worth another try on the same backend. */
 const RETRYABLE_STATUS = new Set([408, 409, 425, 429, 500, 502, 503, 504]);
@@ -380,9 +380,12 @@ export async function createClient({ config, env = process.env, signal = null, o
         const wanted = model ?? config?.model ?? null;
         const profile = getModelProfile(wanted, config);
         const channel = schemaChannel ?? profile?.schemaChannel ?? 'auto';
+        // The effort of the stage is pulled down to what the model really takes: a model
+        // with a lower ceiling refuses the level above it.
+        const level = snapEffort(effort, profile);
         const body = buildResponsesBody({
             model, instructions, input, parts, tools, schema, schemaName, schemaChannel: channel, strict,
-            effort, summary, mode,
+            effort: level, summary, mode,
             maxOutputTokens, temperature, store, truncation, verbosity, stream, previousResponseId,
             toolChoice, parallelToolCalls,
         });

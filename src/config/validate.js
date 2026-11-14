@@ -279,6 +279,15 @@ export function validateConfig(config) {
   if (c.reasoning.effort !== null && !ENUMS.reasoningEfforts.includes(c.reasoning.effort)) fail(`reasoning.effort: ${ENUMS.reasoningEfforts.join(' | ')}`);
   if (c.reasoning.summary !== null && !ENUMS.reasoningSummaries.includes(c.reasoning.summary)) fail(`reasoning.summary: ${ENUMS.reasoningSummaries.join(' | ')}`);
   if (c.reasoning.mode !== null && c.reasoning.mode !== undefined && !ENUMS.reasoningModes.includes(c.reasoning.mode)) fail(`reasoning.mode: ${ENUMS.reasoningModes.join(' | ')}`);
+  const stageEffort = c.reasoning.stageEffort;
+  if (stageEffort !== null && stageEffort !== undefined) {
+    if (!isRecord(stageEffort)) fail('reasoning.stageEffort: объект или null');
+    const known = new Set(Object.keys(defaults.roles).filter((name) => name !== 'default'));
+    for (const [name, level] of Object.entries(stageEffort)) {
+      if (!known.has(name) && !isRecord(c.customRoles?.[name])) fail(`reasoning.stageEffort.${name}: неизвестная роль`);
+      if (!ENUMS.reasoningEfforts.includes(level)) fail(`reasoning.stageEffort.${name}: ${ENUMS.reasoningEfforts.join(' | ')}`);
+    }
+  }
   if (c.verbosity !== null && !['low', 'medium', 'high'].includes(c.verbosity)) fail('verbosity: low | medium | high');
   if (c.temperature !== null && !(Number.isFinite(c.temperature) && c.temperature >= 0 && c.temperature <= 2)) fail('temperature: 0..2');
   if (c.maxOutputTokens !== null && !(Number.isSafeInteger(c.maxOutputTokens) && c.maxOutputTokens >= 16)) fail('maxOutputTokens ≥ 16');

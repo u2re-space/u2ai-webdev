@@ -61,7 +61,8 @@ Options of the run:
   --role <role=model[:effort[:max-effort]]>
                               The model of a role. May be given many times.
   --model <id>                The model of the run.
-  --effort <level>            The reasoning effort of the run.
+  --effort <level>            The ceiling of the reasoning effort of the run: a stage
+                              never works above it.
   --summary <mode>            auto | concise | detailed | none — the reasoning summary.
   --context <level>           The budget of the context: small | normal | large | max | auto.
   --detail                    Print more of the reports of the stages.

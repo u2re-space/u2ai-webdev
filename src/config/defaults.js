@@ -10,6 +10,29 @@
 
 import { ENUMS } from './constants.js';
 
+/**
+ * The effort of every role of the run, by the stage it works in.
+ *
+ * The markup and the styles carry the look of the reference: they get the deepest
+ * reasoning. The mechanical work — the scripts, the icons, the lessons — gets the
+ * cheapest one. The planner and the architect stay in between: they decide, but they
+ * do not build.
+ */
+export const STAGE_EFFORT = Object.freeze({
+    planner: 'medium',
+    architect: 'high',
+    director: 'medium',
+    coder: 'medium',
+    markup: 'xhigh',
+    styler: 'xhigh',
+    iconifier: 'medium',
+    installer: 'low',
+    editor: 'medium',
+    reviewer: 'high',
+    auditor: 'medium',
+    learner: 'low',
+});
+
 export const defaults = {
   // --- API -----------------------------------------------------------------
   /** Text model for the role agents. */
@@ -27,7 +50,20 @@ export const defaults = {
   maxOutputTokens: null,
   /** Per-model ceilings: { "<model>": { window, maxOutput, ceiling } }. */
   models: {},
-  reasoning: { effort: 'high', summary: 'auto', mode: null },
+  reasoning: {
+    /**
+     * The ceiling of the reasoning effort of the run. A stage asks for the effort it
+     * needs (`reasoning.stageEffort`), but never works above this ceiling.
+     */
+    effort: 'xhigh',
+    summary: 'auto',
+    mode: null,
+    /**
+     * The effort of every role, by the stage it works in. `null` turns the profile off
+     * and leaves every role with the effort of `reasoning.effort`.
+     */
+    stageEffort: { ...STAGE_EFFORT },
+  },
   retries: 3,
   timeoutMs: 120_000,
 

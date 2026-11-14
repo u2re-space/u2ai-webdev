@@ -150,6 +150,55 @@ test('a role is resolved from the config', () => {
     assert.equal(resolveRole('nothing', config), null);
 });
 
+test('the effort of a role comes from the profile of the stages', () => {
+    const config = structuredClone(defaults);
+    config.reasoning.effort = 'xhigh';
+    // The markup and the styles carry the look of the reference: they get the deepest
+    // reasoning; the scripts and the mechanical work get the cheapest one.
+    assert.equal(resolveRole('markup', config).effort, 'xhigh');
+    assert.equal(resolveRole('styler', config).effort, 'xhigh');
+    assert.equal(resolveRole('coder', config).effort, 'medium');
+    assert.equal(resolveRole('planner', config).effort, 'medium');
+    assert.equal(resolveRole('architect', config).effort, 'high');
+    assert.equal(resolveRole('installer', config).effort, 'low');
+
+    // The effort of the run is the ceiling: a stage never works above it.
+    config.reasoning.effort = 'medium';
+    assert.equal(resolveRole('markup', config).effort, 'medium');
+    assert.equal(resolveRole('coder', config).effort, 'medium');
+
+    // The effort of the role itself wins over the profile.
+    config.roles.markup.effort = 'high';
+    assert.equal(resolveRole('markup', config).effort, 'high');
+
+    // A profile that is turned off leaves every role with the effort of the run.
+    config.roles.markup.effort = null;
+    config.reasoning.stageEffort = null;
+    assert.equal(resolveRole('markup', config).effort, 'medium');
+    assert.equal(resolveRole('coder', config).effort, 'medium');
+});
+
+test('the effort of a stage is pulled down to what the model takes', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-effort-'));
+    const home = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-home-'));
+    const env = { HOME: home, USERPROFILE: home };
+    const api = await mockApi([textAnswer('ok')]);
+
+    try {
+        const config = structuredClone(defaults);
+        // The ceiling of this model is `high`: the stage may ask for `xhigh`, but the
+        // model refuses the level above its ceiling.
+        config.model = 'openai/gpt-6.1-terra';
+        config.backends = [{ baseURL: api.url, apiKey: 'test-key' }];
+        config.reasoning.effort = 'xhigh';
+        const client = await createClient({ config, env });
+        await client.responses.create({ model: config.model, instructions: 'x', input: 'y', effort: 'xhigh' });
+        assert.equal(api.requests[0].reasoning.effort, 'high');
+    } finally {
+        await api.close();
+    }
+});
+
 test('the roles that may measure the reference have the tool of the measurer', () => {
     for (const name of ['planner', 'architect', 'styler']) {
         assert.ok(ROLES[name].tools.includes('call_ai_measure'), `the role ${name} cannot call the measurer`);

@@ -6,7 +6,7 @@
  * @depends config/constants, model/profiles
  * @usedBy stages/index, roles/index, cli
  * @exports FINE_QUALITY_KEYS, defaultFineQuality, fineQuality, stageEffort, assertPaceBudget,
- *          resolvePace, effortFor
+ *          resolvePace, effortFor, stageEffortFor, lowerEffort
  * @ai.tags pace, quality
  * @ai.hint pure
  */
@@ -123,17 +123,69 @@ export function resolvePace({ config = {}, stage = null, role = null } = {}) {
 }
 
 /**
- * The effort of a role: the effort of the config, moved by the dial of the stage.
+ * The effort of a role from the profile of the stages.
+ *
+ * The profile lives in the config (`reasoning.stageEffort`): a role that is not in it
+ * keeps the effort of the run. A profile that is turned off (`null`) keeps nothing.
+ * @param {{ config?: object, role?: string|null }} request
+ * @returns {string|null}
+ * @exports
+ * @ai.hint pure
+ */
+export function stageEffortFor({ config = {}, role = null } = {}) {
+    const key = String(role ?? '').trim().toLowerCase();
+    if (!key) return null;
+    const profile = config?.reasoning?.stageEffort;
+    if (!profile || typeof profile !== 'object' || Array.isArray(profile)) return null;
+    const level = profile[key];
+    return typeof level === 'string' && level ? level : null;
+}
+
+/**
+ * The lower of two efforts.
+ *
+ * The ladder of the efforts is the order of the enum: `low` is below `high`, `high` is
+ * below `xhigh`. The name of a level that is not in the ladder is kept as it is.
+ * @param {string|null} first
+ * @param {string|null} second
+ * @returns {string|null}
+ * @exports
+ * @ai.hint pure
+ */
+export function lowerEffort(first, second) {
+    const a = String(first ?? '');
+    const b = String(second ?? '');
+    if (!a) return b || null;
+    if (!b) return a;
+    const ladder = ENUMS.reasoningEfforts;
+    const at = ladder.indexOf(a);
+    const bt = ladder.indexOf(b);
+    if (at < 0 || bt < 0) return a;
+    return ladder[Math.min(at, bt)];
+}
+
+/**
+ * The effort of a role: the effort of the role, the effort of its stage under the
+ * ceiling of the run, or the ceiling itself.
+ *
+ * The profile of the stages says what a stage asks for; `reasoning.effort` is the budget
+ * of the run: a stage never works above it. An effort set for the role itself
+ * (`roles.<role>.effort`) is taken as it is.
  * @param {{ config?: object, role?: string|null, effort?: string|null }} request
  * @returns {string|null}
  * @exports
  * @ai.hint pure
  */
 export function effortFor({ config = {}, role = null, effort = null } = {}) {
-    const base = effort ?? config?.reasoning?.effort ?? null;
+    const ceiling = config?.reasoning?.effort ?? null;
+    const asked = stageEffortFor({ config, role });
+    const base = effort ?? (asked ? lowerEffort(asked, ceiling) : ceiling);
     if (!base) return null;
     const pace = resolvePace({ config, role });
     const key = role ? STAGE_OF_ROLE[role] : null;
     if (!key) return base;
-    return stageEffort(base, defaultFineQuality(pace.speed, pace.quality), pace.stageQuality);
+    const moved = stageEffort(base, defaultFineQuality(pace.speed, pace.quality), pace.stageQuality);
+    // The dial of the stage is an explicit wish of the user: it may lift the effort above
+    // the ceiling of the run.
+    return moved;
 }

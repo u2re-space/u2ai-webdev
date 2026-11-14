@@ -99,6 +99,21 @@ test('the validation rejects an unknown stage and an unknown field', () => {
     assert.throws(() => validateConfig(section), /Конфигурация: stack\.colors: неизвестное поле/);
 });
 
+test('the validation of the profile of the stages names the role', () => {
+    const level = cloneDefaults();
+    level.reasoning.stageEffort.markup = 'turbo';
+    assert.throws(() => validateConfig(level), /Конфигурация: reasoning\.stageEffort\.markup: none \| minimal \| low \| medium \| high \| xhigh \| max/);
+
+    const role = cloneDefaults();
+    role.reasoning.stageEffort.sculptor = 'high';
+    assert.throws(() => validateConfig(role), /Конфигурация: reasoning\.stageEffort\.sculptor: неизвестная роль/);
+
+    // The profile may be turned off: every role keeps the effort of the run.
+    const off = cloneDefaults();
+    off.reasoning.stageEffort = null;
+    assert.doesNotThrow(() => validateConfig(off));
+});
+
 test('the validation of the bridges names the bridge', () => {
     const config = cloneDefaults();
     config.bridges.decompose.enabled = 'yes';
