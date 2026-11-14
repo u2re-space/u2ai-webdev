@@ -339,6 +339,30 @@ const exitCode = await main(['run', 'make a landing page', '--route', 'plan']);
 `main` is the whole CLI. `loadConfig` returns the merged configuration, `STAGES` is the registry of
 the stages, and `runPipeline` (from `src/pipeline.js`) runs the pipeline without the CLI.
 
+## The access layer
+
+`src/access` is the door between the model and the machine: the files and the commands under one
+root. Both halves work through a backend, so the same rules hold on a native disk, in the memory,
+or over a remote one.
+
+```js
+import { createAccess } from './src/access/index.js';
+
+const access = createAccess({ root: process.cwd() });
+
+await access.fs.writeText('notes/todo.md', '# todo');
+const read = await access.fs.readText('notes/todo.md');
+const found = await access.fs.search({ query: 'todo' });
+
+const answer = await access.exec.run('node', ['--version']);
+```
+
+The rules of the paths live in one place and are never optional: a path may not leave the root —
+neither through `..` nor through a symbolic link — the secret files and the secret directories are
+never accessible, and the read-only directories may be read, but never written. The words of the
+refusals belong to the package: `src/agent/paths.js` keeps them Russian and borrows the rules from
+`src/access/paths.js`.
+
 ## Limits
 
 - The package writes the files of the answers, but never overwrites a file that exists and never
