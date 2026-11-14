@@ -31,6 +31,16 @@ export const REFERENCE_HINTS = /(?:^|[-_.\s])(?:landing|reference|ref|screenshot
 const EXTENSION_PRIORITY = Object.freeze(['.png', '.webp', '.jpg', '.jpeg', '.gif', '.bmp']);
 
 /**
+ * The path of a file in the form the project uses: slashes, no `./` at the start.
+ * @param {string} file
+ * @returns {string}
+ * @ai.hint pure
+ */
+function toPosix(file) {
+    return String(file ?? '').split(path.win32.sep).join('/');
+}
+
+/**
  * The name of a file without its extension.
  * @param {string} file
  * @returns {string}
@@ -81,8 +91,14 @@ export async function findReferences({ root, config = {}, task = '', limit = 4 }
         ? configured
         : (typeof configured === 'string' && configured.trim() ? [configured.trim()] : []);
     for (const file of list) {
-        const images = await listImages({ root, dir: path.dirname(file), depth: 0, limit: 1 });
-        const match = images.find((item) => item.path === path.basename(file));
+        const wanted = toPosix(String(file ?? '').trim()).replace(/^\.\//, '');
+        if (!wanted) continue;
+        const dir = path.posix.dirname(wanted);
+        const images = await listImages({ root, dir: dir === '.' ? '.' : dir, depth: 0, limit: 8 });
+        // The path of the file is the path of the project: the staged references live in
+        // `.ai/refs/`, and the name alone is not enough to find them.
+        const match = images.find((item) => item.path === wanted)
+            ?? images.find((item) => path.basename(item.path) === path.basename(wanted));
         if (match) take(match, 100);
     }
 

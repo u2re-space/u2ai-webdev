@@ -244,6 +244,8 @@ A run reads the direction of the design from the project itself:
 
 | Input | What it gives |
 |---|---|
+| `--input <file>` | The essence of the task: the notes of the author of the task. |
+| `--image <file>` | The picture of the task: it is staged in the project and becomes a reference. |
 | `DESIGN.md` | The intent of the design: the pages, the blocks, the tone. |
 | `measurements.json` | The measurements of the reference: the frames, the gaps, the sizes. |
 | `palette.json` | The colors of the design. |
@@ -260,6 +262,15 @@ not read them again: the sheet of the measurements is big, and reading it twice 
 context of the run and brings nothing new. The tool `read_file` keeps the files the role has
 already read: the second read of a file that did not change answers with a short note instead
 of the whole file.
+
+The essence of the task is the file of the flag `--input`: it goes into the context of every
+role as the block `# The essence of the task`, before the design and the measurements, because
+it says what the result has to be. The flag may be given many times, and the paths are
+relative to the root of the project. A file that is not there is a warning, not an error.
+
+The picture of the task is the file of the flag `--image`: it is staged in `.ai/refs/` (a file
+outside the project is copied there, a file of the project keeps its path) and becomes a
+reference of the design. The roles that look at the design see it.
 
 The reference of the design is found by the name: a picture the task names (`landing.png`), a
 picture whose name says that it is a reference (`landing`, `reference`, `screenshot`, `mockup`,
@@ -381,7 +392,7 @@ The sections of the file:
 | `pace` | The dials of the team: `speed`, `quality` and the per-stage dials. |
 | `stages` | Every stage: `enabled` and `maxTurns`. |
 | `output` | Where the artifacts go: `dir` (`.ai/`) and `work` (`.tmp/`). |
-| `inputs` | The names of the input files. |
+| `inputs` | The names of the input files: the design, the measurements, the palette, the tokens, the files of the essence (`extra`) and the reference. |
 | `pictures` | The crops of the reference that are prepared: the kinds, the command of `ai-image`, the subject, the model, the directory, the limit. |
 | `memory` | The permanent memory: the file, the scope, the limit, the summaries of the files, the finished tasks. |
 | `components` | The local registry: the directory, the index, the vendor directory. |

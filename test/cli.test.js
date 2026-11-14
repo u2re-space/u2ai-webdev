@@ -131,6 +131,14 @@ test('the flags that are out of the range are a usage error', () => {
     assert.throws(() => configOverrides({ extract: 'sometimes' }), /--extract: off \| auto \| always\./);
 });
 
+test('the essence of the task and the pictures of the task are flags of the run', () => {
+    const overrides = configOverrides({ input: ['what-needs.md', 'notes.md'] });
+    assert.deepEqual(overrides.inputs.extra, ['what-needs.md', 'notes.md']);
+    assert.throws(() => configOverrides({ input: true }), /--input: нужно значение\./);
+    assert.throws(() => configOverrides({ image: true }), /--image: нужно значение\./);
+    assert.deepEqual(configOverrides({}), {});
+});
+
 test('the specs of the roles are parsed', () => {
     assert.deepEqual(parseRoleSpecs('coder=model:high:max'), [
         { name: 'coder', model: 'model', effort: 'high', maxEffort: 'max' },

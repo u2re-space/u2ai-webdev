@@ -53,6 +53,7 @@ export const VALUE_FLAGS = new Set([
     'creativity', 'platform', 'kind', 'frontend-framework', 'frontend-markup-language',
     'frontend-style-language', 'frontend-script-language', 'icon-set',
     'tag', 'tags', 'version', 'framework', 'scope', 'name', 'kind', 'as',
+    'input', 'image',
 ]);
 
 /**

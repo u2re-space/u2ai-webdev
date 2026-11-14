@@ -286,3 +286,41 @@ test('the collected inputs carry the reference', async () => {
     assert.equal(inputSummary(collected).references, 1);
     assert.match(inputContext(collected), /The reference of the design/);
 });
+
+test('the essence of the task is read and goes into the context', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-essence-'));
+    await writeFile(path.join(root, 'what-needs.md'), '# What needs\n\n- the drop menu works\n');
+    const config = structuredClone(defaults);
+    config.inputs.extra = ['what-needs.md'];
+
+    const collected = await collectInputs({ root, config, task: 'Make the landing.' });
+
+    assert.equal(inputSummary(collected).essence, 1);
+    const text = inputContext(collected);
+    assert.match(text, /# The essence of the task/);
+    assert.match(text, /the drop menu works/);
+});
+
+test('a missing essence is a warning, not an error', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-essence2-'));
+    const config = structuredClone(defaults);
+    config.inputs.extra = ['what-needs.md'];
+
+    const collected = await collectInputs({ root, config, task: 'x' });
+
+    assert.equal(inputSummary(collected).essence, 0);
+    assert.ok(collected.warnings.some((line) => line.includes('what-needs.md')));
+});
+
+test('the reference of the config is found in a nested directory', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-refs6-'));
+    await mkdir(path.join(root, '.ai', 'refs'), { recursive: true });
+    await writeFile(path.join(root, '.ai', 'refs', 'shot.png'), 'png');
+    const config = structuredClone(defaults);
+    config.inputs.reference = ['.ai/refs/shot.png'];
+
+    const found = await findReferences({ root, config, task: 'Make the page.' });
+
+    assert.equal(found.length, 1);
+    assert.equal(found[0].path, '.ai/refs/shot.png');
+});

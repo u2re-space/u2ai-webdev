@@ -56,6 +56,10 @@ Options of the run:
   --frontend-style-language <name>    css | scss | less
   --frontend-script-language <name>   javascript | typescript
   --icon-set <name>           auto | phosphor | lucide
+  --input <file>              The file with the essence of the task. May be given many
+                              times: the roles read it before they work.
+  --image <file>              The picture of the task. May be given many times: the
+                              picture is staged in the project and becomes a reference.
   --extract <mode>            off | auto | always — the files of the answers.
   --approve <level>           ask | read | write | all — the confirmations.
   --role <role=model[:effort[:max-effort]]>

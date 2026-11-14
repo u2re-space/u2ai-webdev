@@ -279,6 +279,13 @@ export const defaults = {
     measurements: 'measurements.json',
     palette: 'palette.json',
     tokens: 'tokens.css',
+    /**
+     * The files with the essence of the task: the notes the run reads before it starts.
+     *
+     * The paths are relative to the root of the project. The flag `--input` writes this
+     * list for one run; the file may be given many times.
+     */
+    extra: [],
     /** Read the project instructions (AGENTS.md, CLAUDE.md). */
     projectInstructions: true,
     /**

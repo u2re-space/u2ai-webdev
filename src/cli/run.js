@@ -22,6 +22,7 @@ import { createClient } from '../openai/client.js';
 import { runPipeline, resumePipeline } from '../pipeline.js';
 import { STAGES, STAGE_NAMES, stageByName, stageDependencies, enabledStages } from '../stages/index.js';
 import { ENUMS } from '../config/constants.js';
+import { stageReferences } from '../generate/references.js';
 import { UsageError } from './errors.js';
 
 /**
@@ -99,6 +100,22 @@ function asList(value) {
 }
 
 /**
+ * A flag as a list of paths: the flag may be given many times.
+ *
+ * A flag without a value is a mistake: the name says what it wants.
+ * @param {Record<string, string|boolean|string[]>} flags
+ * @param {string} name
+ * @returns {string[]}
+ * @ai.hint pure
+ */
+function pathListFlag(flags, name) {
+    const raw = flags?.[name];
+    if (raw === undefined || raw === null) return [];
+    if (raw === true) throw new UsageError(`--${name}: нужно значение.`);
+    return asList(raw).map((item) => item.trim()).filter(Boolean);
+}
+
+/**
  * The specs of the roles: `name=model[:effort[:max-effort]]`.
  *
  * @param {unknown} value the value of the flag `--role`
@@ -165,6 +182,12 @@ export function configOverrides(flags = {}) {
     put('stack', 'iconSet', stringFlag(flags, 'icon-set'));
     put('reasoning', 'effort', stringFlag(flags, 'effort'));
     put('reasoning', 'summary', stringFlag(flags, 'summary', ['auto', 'concise', 'detailed', 'none']));
+
+    // The essence of the task: the files the run reads before it starts.
+    const essence = pathListFlag(flags, 'input');
+    if (essence.length) put('inputs', 'extra', essence);
+    // The pictures of the task are staged by the run itself: the flag is only checked here.
+    pathListFlag(flags, 'image');
 
     const model = stringFlag(flags, 'model');
     if (model) overrides.model = model;
@@ -317,6 +340,27 @@ export async function runCommand(ctx) {
     const controller = new AbortController();
     const onInterrupt = () => controller.abort();
     process.on('SIGINT', onInterrupt);
+
+    // The pictures of the task are staged in the project and become the references of the
+    // run: the roles that look at the design see them.
+    const images = pathListFlag(flags, 'image');
+    if (images.length) {
+        const staged = await stageReferences({
+            images,
+            root: cwd,
+            maxBytes: 20 * 1024 * 1024,
+            signal: controller.signal,
+        });
+        for (const warning of staged.warnings ?? []) renderer?.warning?.(warning);
+        const rels = (staged.refs ?? []).map((item) => String(item?.rel ?? '')).filter(Boolean);
+        if (rels.length) {
+            const current = config?.inputs?.reference ?? null;
+            const list = Array.isArray(current)
+                ? current.map((item) => String(item))
+                : (typeof current === 'string' && current.trim() ? [current.trim()] : []);
+            config.inputs = { ...(config.inputs ?? {}), reference: [...list, ...rels] };
+        }
+    }
 
     const notify = (event) => {
         renderer?.event?.(event);

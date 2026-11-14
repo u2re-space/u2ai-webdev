@@ -333,6 +333,9 @@ export function validateConfig(config) {
     if (typeof c.inputs[key] !== 'string' || !c.inputs[key].trim()) fail(`inputs.${key}: непустая строка`);
   }
   if (typeof c.inputs.projectInstructions !== 'boolean') fail('inputs.projectInstructions: true | false');
+  const extra = c.inputs.extra ?? [];
+  if (!Array.isArray(extra)) fail('inputs.extra: список строк');
+  if (extra.some((item) => typeof item !== 'string' || !item.trim())) fail('inputs.extra: список непустых строк');
   const reference = c.inputs.reference ?? null;
   if (reference !== null && typeof reference !== 'string' && !Array.isArray(reference)) {
     fail('inputs.reference: null | строка | список строк');

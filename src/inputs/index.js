@@ -3,10 +3,11 @@
  * @module inputs/index
  * @purpose Collect the inputs of a run into one context the roles read.
  *
- *   The context is the sum of the parts: the task, the design direction, the measurements, the
- *   palette, the tokens, the instructions of the project and the pictures. Every part says
- *   whether it was found, and the conflicts between the parts are reported rather than resolved
- *   silently — except the tokens of the stylesheet, which win over the document.
+ *   The context is the sum of the parts: the task, the essence of the task, the design
+ *   direction, the measurements, the palette, the tokens, the instructions of the project
+ *   and the pictures. Every part says whether it was found, and the conflicts between the
+ *   parts are reported rather than resolved silently — except the tokens of the stylesheet,
+ *   which win over the document.
  *
  * @depends node:path, node:fs/promises, inputs/design-md, inputs/measurements, inputs/palette,
  *          inputs/tokens, inputs/assets, inputs/references, config/paths
@@ -14,6 +15,7 @@
  * @exports collectInputs, inputContext, inputSummary
  * @ai.tags inputs, context
  * @ai.hint io
+ * @changed 2026-11-15 The essence of the task: the files of `inputs.extra` (`--input`).
  */
 
 import path from 'node:path';
@@ -37,11 +39,37 @@ async function readOptional(root, file) {
 }
 
 /**
+ * Read the files with the essence of the task.
+ *
+ * The files are the notes of the author of the task: they say what matters and what does
+ * not. A missing file is not an error: the part is simply absent, and the report says so.
+ * @param {string} root
+ * @param {string[]} files the paths, relative to the root
+ * @returns {Promise<{ files: Array<{ path: string, text: string }>, warnings: string[] }>}
+ * @ai.hint io
+ */
+async function collectEssence(root, files = []) {
+    const out = [];
+    const warnings = [];
+    for (const file of Array.isArray(files) ? files : []) {
+        const rel = String(file ?? '').trim();
+        if (!rel) continue;
+        const text = await readOptional(root, rel);
+        if (text === null) {
+            warnings.push(`The file ${rel} was not found.`);
+            continue;
+        }
+        out.push({ path: rel, text });
+    }
+    return { files: out, warnings };
+}
+
+/**
  * Collect the inputs of a run.
  *
  * The paths come from the config: `inputs.designMd`, `inputs.measurements`, `inputs.palette`,
- * `inputs.tokens`. A missing file is not an error: the part is simply absent, and the report
- * says so.
+ * `inputs.tokens` and `inputs.extra` — the files with the essence of the task. A missing
+ * file is not an error: the part is simply absent, and the report says so.
  * @param {{ root: string, config?: object, task?: string }} options
  * @returns {Promise<object>} the collected inputs
  * @exports
@@ -82,6 +110,10 @@ export async function collectInputs({ root, config = {}, task = '' } = {}) {
         ? { files: [], text: '' }
         : await readProjectInstructions({ root });
 
+    // The essence of the task: the notes of the author of the task.
+    const essence = await collectEssence(root, inputs.extra ?? []);
+    warnings.push(...essence.warnings);
+
     const assets = await collectAssetFiles({
         root,
         dirs: [
@@ -96,6 +128,7 @@ export async function collectInputs({ root, config = {}, task = '' } = {}) {
 
     return {
         task: String(task ?? ''),
+        essence: essence.files,
         design,
         measurements,
         palette,
@@ -121,6 +154,20 @@ export function inputContext(collected = {}) {
     const blocks = [];
 
     if (collected.task) blocks.push(`# Task\n${collected.task}`);
+
+    const essence = Array.isArray(collected.essence) ? collected.essence : [];
+    for (const item of essence) {
+        const text = String(item?.text ?? '').trim();
+        if (!text) continue;
+        blocks.push([
+            '# The essence of the task',
+            `Source: ${item.path}`,
+            'This file holds the essence of the task: what the result has to be and how it',
+            'has to behave. Follow it. The other parts of the context describe the design and',
+            'the project, they do not overrule it.',
+            text,
+        ].join('\n'));
+    }
 
     const design = collected.design;
     if (design?.present) {
@@ -240,8 +287,8 @@ export function inputContext(collected = {}) {
  * A short report of the inputs: what was found and what was not.
  * @param {object} collected
  * @returns {{ design: boolean, measurements: boolean, palette: boolean, tokens: boolean,
- *   assets: number, references: number, instructions: number, conflicts: number,
- *   warnings: string[] }}
+ *   essence: number, assets: number, references: number, instructions: number,
+ *   conflicts: number, warnings: string[] }}
  * @exports
  * @ai.hint pure
  */
@@ -251,6 +298,7 @@ export function inputSummary(collected = {}) {
         measurements: Boolean(collected.measurements?.present),
         palette: Boolean(collected.palette?.present),
         tokens: Boolean(collected.tokens?.present),
+        essence: Array.isArray(collected.essence) ? collected.essence.length : 0,
         assets: collected.assets?.length ?? 0,
         references: collected.references?.length ?? 0,
         instructions: collected.instructions?.files?.length ?? 0,
