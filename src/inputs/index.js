@@ -43,15 +43,20 @@ async function readOptional(root, file) {
  *
  * The files are the notes of the author of the task: they say what matters and what does
  * not. A missing file is not an error: the part is simply absent, and the report says so.
+ *
+ * A file may be a template: the placeholder `{{message}}` is replaced with the task of the run,
+ * so the notes and the task live in one file.
  * @param {string} root
  * @param {string[]} files the paths, relative to the root
+ * @param {string} [task] the task of the run
  * @returns {Promise<{ files: Array<{ path: string, text: string }>, warnings: string[] }>}
  * @exports
  * @ai.hint io
  */
-export async function collectEssence(root, files = []) {
+export async function collectEssence(root, files = [], task = '') {
     const out = [];
     const warnings = [];
+    const message = String(task ?? '').trim();
     for (const file of Array.isArray(files) ? files : []) {
         const rel = String(file ?? '').trim();
         if (!rel) continue;
@@ -60,7 +65,10 @@ export async function collectEssence(root, files = []) {
             warnings.push(`The file ${rel} was not found.`);
             continue;
         }
-        out.push({ path: rel, text });
+        out.push({
+            path: rel,
+            text: message ? text.replaceAll('{{message}}', message) : text,
+        });
     }
     return { files: out, warnings };
 }
@@ -112,7 +120,7 @@ export async function collectInputs({ root, config = {}, task = '' } = {}) {
         : await readProjectInstructions({ root });
 
     // The essence of the task: the notes of the author of the task.
-    const essence = await collectEssence(root, inputs.extra ?? []);
+    const essence = await collectEssence(root, inputs.extra ?? [], task);
     warnings.push(...essence.warnings);
 
     const assets = await collectAssetFiles({

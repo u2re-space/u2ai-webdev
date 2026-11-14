@@ -301,6 +301,19 @@ test('the essence of the task is read and goes into the context', async () => {
     assert.match(text, /the drop menu works/);
 });
 
+test('the placeholder of a template file is replaced with the task of the run', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-essence3-'));
+    await writeFile(path.join(root, 'what-needs.md'), '{{message}}\n\n# What needs\n');
+    const config = structuredClone(defaults);
+    config.inputs.extra = ['what-needs.md'];
+
+    const collected = await collectInputs({ root, config, task: 'Make the landing.' });
+
+    const text = collected.essence[0].text;
+    assert.match(text, /Make the landing\./);
+    assert.doesNotMatch(text, /\{\{message\}\}/);
+});
+
 test('a missing essence is a warning, not an error', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-essence2-'));
     const config = structuredClone(defaults);

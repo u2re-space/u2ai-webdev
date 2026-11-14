@@ -268,6 +268,17 @@ role as the block `# The essence of the task`, before the design and the measure
 it says what the result has to be. The flag may be given many times, and the paths are
 relative to the root of the project. A file that is not there is a warning, not an error.
 
+A file of the essence may be a template: the placeholder `{{message}}` is replaced with the
+task of the run, so the notes and the task live in one file and the file is not written twice.
+
+```markdown
+{{message}}
+
+# What needs
+
+The board is the inset of the hero, the badge is a sunburst.
+```
+
 The picture of the task is the file of the flag `--image`: it is staged in `.ai/refs/` (a file
 outside the project is copied there, a file of the project keeps its path) and becomes a
 reference of the design. The roles that look at the design see it.
