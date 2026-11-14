@@ -164,6 +164,7 @@ export const defaults = {
     markup: { enabled: true, maxTurns: 16 },
     coding: { enabled: true, maxTurns: 24 },
     styling: { enabled: true, maxTurns: 16 },
+    build: { enabled: true, maxTurns: 1 },
     vector: { enabled: true, maxTurns: 8 },
     iconify: { enabled: true, maxTurns: 8 },
     review: { enabled: true, maxTurns: 12 },

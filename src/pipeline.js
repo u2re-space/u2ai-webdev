@@ -137,6 +137,7 @@ export async function runPipeline({
         plan: null,
         architecture: null,
         setup: null,
+        build: null,
         pictures: [],
         reports: [],
         review: null,

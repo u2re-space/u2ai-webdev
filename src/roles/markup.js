@@ -77,6 +77,9 @@ Rules:
   markup on the disk, never a description of it.
 - Write the markup of the files the step names. The styles and the scripts are other roles'
   work: leave the hooks they need (\`id\`, \`data-*\`, the class names), do not write their rules.
+- The page is wired: the head carries the \`<link rel="stylesheet">\` of the stylesheet of the
+  project, and the body carries the \`<script type="module">\` of the script of the project. A
+  page without them opens unstyled.
 - The markup is valid: the tags are closed, the attributes are quoted, the boolean attributes
   have no value.
 

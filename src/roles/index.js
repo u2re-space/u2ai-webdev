@@ -130,7 +130,7 @@ export function syntaxCorrection(errors = []) {
     const list = (Array.isArray(errors) ? errors : [])
         .map((item) => `- ${item?.file ?? 'файл'}: ${item?.message ?? 'ошибка'}`)
         .join('\n');
-    return `The files of the step are on the disk, but they do not compile. Fix them now with the tools: read the file, repair the broken line, write the file again. The compiler said:\n${list}\n\nA file that is written as text with "\\n" inside a string, or with a backslash at the end of a line, is broken — write the real line breaks and the real escapes. Do not answer until the files are fixed.`;
+    return `The files of the step are on the disk, but they do not compile. Fix them now with the tools: read the file, repair the broken line, write the file again. The compiler said:\n${list}\n\nA file that is written as text with "\\n" inside a string, or with a backslash at the end of a line, is broken — write the real line breaks and the real escapes. Write the repaired file under the same path as the broken one: a copy with another name leaves the broken file on the disk. Do not answer until the files are fixed.`;
 }
 
 /** The tools that write into the project. */

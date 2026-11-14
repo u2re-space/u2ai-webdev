@@ -14,7 +14,7 @@
  * @depends node:path, node:os, node:fs/promises, agent/programs
  * @usedBy stages/step
  * @exports SCRIPT_EXTENSIONS, STYLE_EXTENSIONS, CHECKED_EXTENSIONS, checkableFile,
- *          findSass, checkScript, checkStyle, checkFile, checkFiles
+ *          findSass, firstError, checkScript, checkStyle, checkFile, checkFiles
  * @ai.tags tools, agent, syntax
  * @ai.hint io
  */
@@ -73,9 +73,10 @@ export async function findSass(root, env = process.env) {
  * The error of a compiler, without the noise around it.
  * @param {string} text
  * @returns {string}
+ * @exports
  * @ai.hint pure
  */
-function firstError(text) {
+export function firstError(text) {
     const lines = String(text ?? '')
         .split(/\r?\n/)
         .map((line) => line.trim())

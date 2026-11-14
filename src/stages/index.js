@@ -11,8 +11,8 @@
  *   The registry holds no state: the state of a run lives in the directory of the run.
  *
  * @depends stages/collect, stages/plan, stages/architect, stages/setup, stages/markup,
- *          stages/coding, stages/styling, stages/vector, stages/iconify, stages/review,
- *          stages/audit, stages/learn
+ *          stages/coding, stages/styling, stages/build, stages/vector, stages/iconify,
+ *          stages/review, stages/audit, stages/learn
  * @usedBy pipeline, cli
  * @exports STAGES, STAGE_NAMES, stageByName, stageOrder, enabledStages, stageDependencies,
  *          resumeStageName, stageTitles
@@ -30,6 +30,7 @@ import { setupStage } from './setup.js';
 import { markupStage } from './markup.js';
 import { codingStage } from './coding.js';
 import { stylingStage } from './styling.js';
+import { buildStage } from './build.js';
 import { vectorStage } from './vector.js';
 import { iconifyStage } from './iconify.js';
 import { reviewStage } from './review.js';
@@ -110,6 +111,14 @@ export const STAGES = Object.freeze([
         apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
     },
     {
+        name: 'build',
+        title: 'Connect the styles',
+        dependsOn: ['styling'],
+        run: buildStage,
+        args: (ctx) => ({ apply: ctx.apply !== false }),
+        apply: (ctx, result) => { ctx.build = result?.build ?? null; },
+    },
+    {
         name: 'vector',
         title: 'Draw the vector graphics',
         dependsOn: ['coding'],
@@ -128,7 +137,7 @@ export const STAGES = Object.freeze([
     {
         name: 'review',
         title: 'Review the result',
-        dependsOn: ['coding', 'styling', 'vector', 'iconify'],
+        dependsOn: ['coding', 'styling', 'build', 'vector', 'iconify'],
         run: reviewStage,
         apply: (ctx, result) => { ctx.review = result ?? null; },
     },

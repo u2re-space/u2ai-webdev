@@ -530,16 +530,26 @@ CLI `ai-webdev` (`@u2ai/webdev`) с собственным конфигом `~/.
       в запросе), `test/steps.test.js` (референс в запросе роли)
 
 ### step-32 — Стили подключены: сборка и разметка
-- [ ] `src/stages/build.js` — точка входа стилей: файлы `scss`/`sass`, не партиалы и не
-      используемые другими файлами
-- [ ] `src/stages/build.js` — недостающий `@use` для партиала, который никто не использует
-- [ ] `src/stages/build.js` — компиляция `sass` проекта: `styles/main.scss` → `styles/main.css`
-- [ ] `src/stages/build.js` — `index.html`: `<link rel="stylesheet">` на собранный CSS и
-      `<script type="module">` на скрипт, если их нет
-- [ ] `src/stages/index.js`, `src/config/constants.js`, `src/config/defaults.js` — стадия `build`
-      после `styling`
-- [ ] README (EN), planned.md (RU)
-- [ ] Проверка: `test/build.test.js`
+- [x] `src/stages/build.js` — точка входа стилей: файлы `scss`/`sass`, не партиалы и не
+      используемые другими файлами; черновики (`main-incorrect.scss`) не часть стилей
+- [x] `src/stages/build.js` — недостающий `@use` для партиала, который никто не использует
+- [x] `src/stages/build.js` — компиляция `sass` проекта: `styles/main.scss` → `styles/main.css`
+- [x] `src/stages/build.js` — `index.html`: `<link rel="stylesheet">` на собранный CSS и
+      `<script type="module">` на скрипт, если их нет; битая ссылка — в отчёт
+- [x] `src/stages/index.js`, `src/config/constants.js`, `src/config/defaults.js` — стадия `build`
+      после `styling`; `review` зависит от неё
+- [x] `src/stages/step.js` — проверяются и те файлы, что роль написала рядом с файлами шага:
+      сломанный партиал, которого никто не назвал, тоже сломан
+- [x] `src/stages/build.js` — сломанная сборка не оставляет файл: `sass` пишет ошибку в
+      результат, а ошибка в CSS хуже, чем нет CSS
+- [x] `src/roles/markup.js`, `src/roles/styler.js` — роли сказано про точку входа и про
+      ссылку на стили
+- [x] `src/stages/step.js`, `src/roles/index.js` — починка пишет файл под тем же путём, а не
+      копией рядом
+- [x] README (EN), planned.md (RU)
+- [x] Проверка: `test/build.test.js` (точка входа, партиал-сирота, `@use`, ссылки разметки,
+      сборка без `sass`, сборка проектом, сломанная сборка, стадия целиком),
+      `test/steps.test.js` (файл рядом с файлами шага тоже проверяется)
 
 ---
 

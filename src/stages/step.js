@@ -276,8 +276,14 @@ export async function runStepStage({
         }
 
         // The files of the step have to compile. The compiler of the platform sees the lost
-        // quote and the stray backslash that the reader of the code does not see.
-        let syntax = await checkFiles(root, step.files ?? [], { env });
+        // quote and the stray backslash that the reader of the code does not see. The files
+        // the role wrote beside the ones of the step are checked too: a broken stylesheet
+        // that nobody named is still broken.
+        const checkedFiles = [...new Set([
+            ...(step.files ?? []),
+            ...(apply ? applied.written : files.map((file) => String(file?.path ?? '').trim())),
+        ])].filter(Boolean);
+        let syntax = await checkFiles(root, checkedFiles, { env });
         let answer = result;
         let repair = null;
         if (syntax.errors.length) {
@@ -305,9 +311,10 @@ export async function runStepStage({
             turns += repair.turns;
             usage = usage ?? repair.usage;
             if (repair.data) answer = repair;
-            const broken = new Set(syntax.errors.map((item) => item.file));
-            const repaired = (Array.isArray(repair.data?.files) ? repair.data.files : [])
-                .filter((file) => broken.has(String(file?.path ?? '').trim()));
+            // The files of the repair are the files of the role: they go on the disk as they
+            // are. A file that is written under another name is a copy, and the check below
+            // says that the broken file is still broken.
+            const repaired = Array.isArray(repair.data?.files) ? repair.data.files : [];
             if (apply && repaired.length) {
                 const written = await applyFiles({ root, files: repaired, overwrite: true });
                 warnings.push(...written.warnings);
@@ -317,7 +324,7 @@ export async function runStepStage({
                     warnings: applied.warnings,
                 };
             }
-            syntax = await checkFiles(root, step.files ?? [], { env });
+            syntax = await checkFiles(root, checkedFiles, { env });
         }
         for (const note of syntax.notes) warnings.push(`Шаг ${step.id}: ${note}`);
         for (const error of syntax.errors) {

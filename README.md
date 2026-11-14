@@ -75,6 +75,7 @@ report into the directory of the run and hands the result to the next one.
 | `markup` | Write the markup of the pages. |
 | `coding` | Write the code: the scripts, the modules, the data. |
 | `styling` | Write the styles: the tokens, the layout, the states. |
+| `build` | Connect the styles: the entry point, the compilation, the links of the markup. |
 | `vector` | Draw the vector graphics as code: the SVG of the ornaments and the illustrations. |
 | `iconify` | Choose the icons of the interface and check that every one of them is on the disk. |
 | `review` | Review the result: the markup, the code, the styles and the accessibility. |
@@ -95,6 +96,17 @@ of the programs (`src/agent/programs.js`) looks a program up in the PATH the way
 it up: the name itself, then the shims of Windows (`npm.cmd`, `npx.cmd`). A shim is a batch
 file, and a batch file is started through the shell of the system. A missing program, a non-zero
 exit code and a timeout come back as an answer, never as an exception.
+
+The styles are connected by the code of the stage `build`, not by the model. A model writes
+`styles/main.scss` with three partials beside it and forgets two things: the entry point does
+not always `@use` the partials, and the page links a CSS file that was never built. The stage
+finds the entry point (the stylesheet that is not a partial and that nobody uses), adds the
+missing `@use`, compiles the stylesheets with the `sass` of the project (`styles/main.scss` →
+`styles/main.css`) and makes sure that the markup points at the CSS that exists and at the
+script that runs. A partial that nobody uses renders nothing, so it is connected to the entry
+point of its own directory. A copy of a repair (`main-incorrect.scss`) is not a part of the
+styles: it is neither built nor linked, and the report names it. Without `sass` in
+`node_modules` the styles are not built, and the report says so.
 
 `--route <stages>` chooses the stages the run goes through (the stages they need are added
 automatically), `--stop-after <stage>` (or `--stop-after=<stage>`) pauses the run on the

@@ -37,6 +37,7 @@ export * from './src/stages/step.js';
 export * from './src/stages/markup.js';
 export * from './src/stages/coding.js';
 export * from './src/stages/styling.js';
+export * from './src/stages/build.js';
 export * from './src/stages/vector.js';
 export * from './src/stages/iconify.js';
 export * from './src/vector/svg.js';

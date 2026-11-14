@@ -11,7 +11,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 
 import { stepsForRole, applyFiles, stepReportPath, readStepReport, runStepStage } from '../src/stages/step.js';
 import { markupStage } from '../src/stages/markup.js';
@@ -314,6 +314,40 @@ test('a broken file that stays broken is an error of the step', async () => {
 
     assert.equal(result.ok, false);
     assert.ok(result.warnings.some((item) => /ошибка синтаксиса/.test(item)));
+    assert.equal(result.steps[0].syntax.errors.length, 1);
+});
+
+test('the file the role wrote beside the files of the step is checked too', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-steps-extra-'));
+    // The compiler of the stylesheets refuses every file: the test does not need sass.
+    const bin = path.join(root, 'node_modules', '.bin');
+    await mkdir(bin, { recursive: true });
+    await writeFile(path.join(bin, 'sass.cmd'), '@echo off\r\necho Error: expected "{". 1>&2\r\nexit /b 65\r\n', 'utf8');
+    // The step names one file, but the role writes a stylesheet beside it, and that
+    // stylesheet does not compile.
+    const answer = schemaAnswer('code', {
+        summary: 'The entry and the styles.',
+        files: [
+            { path: 'src/main.js', content: 'export const x = 1;\n', language: 'js' },
+            { path: 'src/styles/main.css', content: '.a { color: red;\n', language: 'css' },
+        ],
+        commands: [],
+        notes: '',
+    });
+    const client = fakeClient([answer, answer]);
+
+    const result = await runStepStage({
+        client,
+        config: { output: { work: './.tmp' }, stages: { coder: { maxTurns: 4 } } },
+        root,
+        task: 'Make a landing.',
+        role: 'coder',
+        plan: PLAN,
+        runId: 'run-1',
+    });
+
+    assert.equal(result.ok, false);
+    assert.ok(result.steps[0].syntax.checked.includes('src/styles/main.css'));
     assert.equal(result.steps[0].syntax.errors.length, 1);
 });
 

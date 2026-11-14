@@ -50,6 +50,7 @@ export * from './stages/step.js';
 export * from './stages/markup.js';
 export * from './stages/coding.js';
 export * from './stages/styling.js';
+export * from './stages/build.js';
 export * from './stages/vector.js';
 export * from './stages/iconify.js';
 export * from './vector/svg.js';
