@@ -20,7 +20,7 @@ export const schema = 'review';
 
 /** The tools the role may call. */
 export const tools = [
-    'list_files', 'read_file', 'search_files', 'run_command', 'fetch_url', 'read_skill',
+    'list_files', 'read_file', 'search_files', 'run_command', 'fetch_url', 'read_skill', 'web_guidance',
 ];
 
 /** How many turns the role may spend. */
@@ -49,6 +49,8 @@ ${stack}
 ${design}
 
 Rules:
+- The guides of the platform are the yardstick of the audit: look one up with the
+  \`web_guidance\` tool when you judge the accessibility, the performance or the motion.
 - The structure: the dead files, the modules that do one thing in three places, the names that
   lie, the imports that go the wrong way. Report the path of every file you name.
 - The accessibility: the keyboard path of every control, the focus, the names, the contrast,

@@ -84,6 +84,8 @@ export const defaults = {
     icons: true,
     /** Read and run the skill packs. */
     skill: true,
+    /** Search and read the guides of the modern web platform. */
+    guidance: true,
     /** Call the external `ai-decompose` CLI. */
     external_decompose: true,
     /** Call the external `ai-measure` CLI. */

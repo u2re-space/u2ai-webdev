@@ -20,7 +20,7 @@ export const schema = 'code';
 /** The tools the role may call. */
 export const tools = [
     'list_files', 'read_file', 'write_file', 'replace_text', 'delete_file', 'make_dir',
-    'copy_path', 'search_files', 'run_command', 'read_skill',
+    'copy_path', 'search_files', 'run_command', 'read_skill', 'web_guidance',
 ];
 
 /** How many turns the role may spend. */
@@ -53,6 +53,9 @@ ${stack}
 ${design}
 
 Rules:
+- The platform of today comes before the habit of yesterday: look the guides up with the
+  \`web_guidance\` tool before you write a dialog, a form or a table, and follow what they
+  say.
 - Write complete code. No placeholders, no "the rest is left as an exercise", no empty functions
   that only say what the comment says.
 - Follow the structure and the tokens of the architect. A file that is not in the plan is not

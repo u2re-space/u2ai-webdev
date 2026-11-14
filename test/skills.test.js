@@ -78,9 +78,12 @@ test('the skill packs of the project are discovered and read', async () => {
     await writeFile(path.join(pack, 'SKILL.md'), '---\nname: demo\ndescription: a demo pack\n---\n\nThe steps.');
 
     const skills = await discoverSkills(root, { env });
-    assert.equal(skills.length, 1);
+    // The pack of the package is always there; the copy of the project comes first.
+    assert.ok(skills.some((skill) => skill.name === 'modern-web-guidance'));
+    const own = skills.filter((skill) => skill.name === 'demo');
+    assert.equal(own.length, 1);
     assert.equal(skills[0].name, 'demo');
-    assert.match(buildSkillInstructions(skills), /demo/);
+    assert.match(buildSkillInstructions(own), /demo/);
 
     const one = await readSkill('demo', root, { env });
     assert.equal(one.name, 'demo');

@@ -246,6 +246,28 @@ export const TOOL_SPECS = Object.freeze({
         required: ['name'],
         roles: [],
     },
+    web_guidance: {
+        configKey: 'guidance',
+        description: 'The guides of the modern web platform: the standards of the platform of today '
+            + '(dialogs, forms, layout, animation, accessibility, performance). '
+            + 'Search them with `query` and read the ones that fit with `ids`; the guides ship with '
+            + 'the CLI, so the answer is immediate.',
+        parameters: {
+            type: 'object',
+            properties: {
+                query: str('The words of the search, for example `light dismiss dialog`. '
+                    + 'Empty = the catalog of all the guides.'),
+                ids: str('JSON array of the ids of the guides to read, for example ["dialog"].'),
+                limit: int('How many guides the search returns. Default 8.'),
+                source: str('Where the guides come from: `bundled` (the ones of the package) or '
+                    + '`cli` (the CLI of the upstream pack, through npx). Default `bundled`.'),
+            },
+            required: [],
+            additionalProperties: false,
+        },
+        required: [],
+        roles: [],
+    },
     fetch_url: {
         configKey: 'fetch',
         description: 'Fetch a page of the internet and read its text. The answer is cut to a size that fits the context.',

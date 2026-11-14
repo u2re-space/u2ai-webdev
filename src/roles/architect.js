@@ -18,7 +18,7 @@ export const name = 'architect';
 export const schema = 'architecture';
 
 /** The tools the role may call. */
-export const tools = ['list_files', 'read_file', 'search_files', 'read_skill'];
+export const tools = ['list_files', 'read_file', 'search_files', 'read_skill', 'web_guidance'];
 
 /** How many turns the role may spend. */
 export const maxTurns = 16;
@@ -50,6 +50,9 @@ ${stack}
 ${design}
 
 Rules:
+- The platform of today is the platform you design for: look the guides up with the
+  \`web_guidance\` tool before you design a control, a form or a layout, and let the
+  structure follow them.
 - Read the project first. An existing project has a structure already: extend it, do not replace it.
 - A module is a file with one responsibility. Its name says what it is, its path says where it
   lives, its \`exports\` say what the others may use.

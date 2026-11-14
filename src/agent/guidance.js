@@ -18,8 +18,9 @@
  *
  * @depends node:path, node:url, node:fs/promises
  * @usedBy agent/tools, cli/skills
- * @exports GUIDANCE_SKILL, builtinSkillsDir, guidanceSkillDir, guidesDir, guideIndex,
- *          searchGuides, readGuide, guidanceCategories, runGuidanceCli
+ * @exports GUIDANCE_SKILL, GUIDANCE_SOURCE, builtinSkillsDir, guidanceSkillDir, guidesDir,
+ *          guideIndex, searchGuides, readGuide, guidanceCategories, runGuidanceCli,
+ *          guidanceSearchText, guidanceRetrieveText, guidanceCatalogText, guidanceFromCli
  * @ai.tags guidance, skills, web
  * @ai.hint io
  */
@@ -125,8 +126,15 @@ function titleOf(text) {
  */
 function summaryOf(text) {
     const body = String(text ?? '').replace(/^#\s+.+$/m, '').trim();
-    const paragraph = body.split(/\n\s*\n/)[0] ?? '';
-    return paragraph.replace(/\s+/g, ' ').trim();
+    const parts = body.split(/\n\s*\n/);
+    for (const part of parts) {
+        const trimmed = part.trim();
+        if (!trimmed) continue;
+        // A heading is not a summary: the first paragraph of the text is.
+        if (/^#{1,6}\s/.test(trimmed)) continue;
+        return trimmed.replace(/\s+/g, ' ').trim();
+    }
+    return '';
 }
 
 /** The index of the guides, built once per process. */
@@ -313,6 +321,117 @@ export async function readGuide(id, { category = '' } = {}) {
         summary: found.summary,
         text: found.text,
     };
+}
+
+/** The kind of the answer: the bundled guides or the CLI of the upstream. */
+export const GUIDANCE_SOURCE = Object.freeze({ bundled: 'bundled', cli: 'cli' });
+
+/**
+ * The answer of the search: the ids of the guides that fit, with their titles.
+ *
+ * The text is the answer of the tool: the model reads it and takes the ids from it.
+ *
+ * @param {string} query
+ * @param {{ limit?: number, source?: string }} [options] `source: 'cli'` asks the CLI of
+ *   the upstream instead of the bundled guides.
+ * @returns {Promise<string>}
+ * @exports
+ * @ai.hint io
+ */
+export async function guidanceSearchText(query, { limit = 8, source = GUIDANCE_SOURCE.bundled } = {}) {
+    const text = String(query ?? '').trim();
+    if (!text) return await guidanceCatalogText();
+
+    if (source === GUIDANCE_SOURCE.cli) {
+        const answer = await guidanceFromCli(['search', text], {});
+        return answer || `CLI не ответил: «${text}».`;
+    }
+
+    const found = await searchGuides(text, { limit });
+    if (!found.length) {
+        return `Ничего не найдено: «${text}».\nПопробуйте словами пользователя, а не терминами: «light dismiss dialog», а не «modal api».`;
+    }
+    const lines = [`# The guides that fit «${text}»`, ''];
+    for (const item of found) {
+        lines.push(`- **${item.id}** (${item.category}): ${item.title}${item.summary ? ` — ${item.summary}` : ''}`);
+    }
+    lines.push('', 'Read a guide with the `ids` argument: `web_guidance` with `ids: ["<id>"]`.');
+    return lines.join('\n');
+}
+
+/**
+ * The answer of the retrieve: the whole text of the guides of the ids.
+ *
+ * A guide that is not in the package is asked of the CLI of the upstream: the answer of
+ * the CLI is a text, or the path of the file it wrote it to.
+ *
+ * @param {string[]} ids the ids of the guides
+ * @param {{ cwd?: string, env?: object, source?: string }} [options] `source: 'cli'` asks
+ *   the CLI of the upstream instead of the bundled guides.
+ * @returns {Promise<string>}
+ * @exports
+ * @ai.hint io
+ */
+export async function guidanceRetrieveText(ids, { cwd = process.cwd(), env = process.env, source = GUIDANCE_SOURCE.bundled } = {}) {
+    const list = (Array.isArray(ids) ? ids : [ids]).map((item) => String(item).trim()).filter(Boolean);
+    if (!list.length) return 'Скажите, какие гайды прочитать: `ids: ["dialog"]`.';
+
+    const blocks = [];
+    for (const id of list) {
+        const guide = source === GUIDANCE_SOURCE.cli ? null : await readGuide(id);
+        if (guide) {
+            blocks.push(`# ${guide.id} (${guide.category})\n\n${guide.text.trim()}`);
+            continue;
+        }
+        const fallen = await guidanceFromCli(['retrieve', id], { cwd, env });
+        blocks.push(fallen);
+    }
+    return blocks.join('\n\n---\n\n');
+}
+
+/**
+ * The answer of the CLI of the upstream: the text of the program, or the text of the
+ * file it wrote it to.
+ *
+ * @param {string[]} args the arguments of the program
+ * @param {{ cwd?: string, env?: object }} [options]
+ * @returns {Promise<string>}
+ * @exports
+ * @ai.hint io
+ */
+export async function guidanceFromCli(args, { cwd = process.cwd(), env = process.env } = {}) {
+    const result = await runGuidanceCli(args, { cwd, env });
+    if (!result.ok) {
+        return `Гайд не найден в пакете, и CLI не ответил: ${result.output || result.reason || 'без ответа'}`;
+    }
+    if (result.file) {
+        const text = await readFile(result.file, 'utf8').catch(() => null);
+        if (text) return text.trim();
+    }
+    return result.output.trim();
+}
+
+/**
+ * The catalog of the guides: the categories with their counts and the ids of the guides.
+ *
+ * @returns {Promise<string>}
+ * @exports
+ * @ai.hint io
+ */
+export async function guidanceCatalogText() {
+    const guides = await guideIndex();
+    if (!guides.length) {
+        return 'В пакете нет гайдов. Поставьте пакет `modern-web-guidance` в `skills/` или включите CLI.';
+    }
+    const categories = await guidanceCategories();
+    const lines = ['# The guides of the pack', ''];
+    for (const item of categories) {
+        lines.push(`## ${item.category} (${item.count})`);
+        const own = guides.filter((guide) => guide.category === item.category);
+        for (const guide of own) lines.push(`- **${guide.id}**: ${guide.title}`);
+        lines.push('');
+    }
+    return lines.join('\n').trim();
 }
 
 /**

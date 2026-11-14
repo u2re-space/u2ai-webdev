@@ -20,7 +20,7 @@ export const schema = null;
 
 /** The tools the role may call. */
 export const tools = [
-    'list_files', 'read_file', 'search_files', 'fetch_url', 'read_skill',
+    'list_files', 'read_file', 'search_files', 'fetch_url', 'read_skill', 'web_guidance',
 ];
 
 /** How many turns the role may spend. */
@@ -49,6 +49,8 @@ ${review}
 ${memory}
 
 Rules:
+- A lesson about the platform of today is worth keeping: look the guides up with the
+  \`web_guidance\` tool when the project needs a standard the next run must not lose.
 - Write a lesson only when it is true for this project and not for every project. The name of
   the project, the file, the library and the version are what make a lesson useful.
 - The kinds of a lesson: a fact (the project uses Vite, the design tokens live in

@@ -20,7 +20,7 @@ export const schema = 'style';
 /** The tools the role may call. */
 export const tools = [
     'list_files', 'read_file', 'write_file', 'replace_text', 'search_files',
-    'download_font', 'call_ai_measure', 'read_skill',
+    'download_font', 'call_ai_measure', 'read_skill', 'web_guidance',
 ];
 
 /** How many turns the role may spend. */
@@ -56,6 +56,8 @@ ${style}
 ${design}
 
 Rules:
+- Look the guides up with the \`web_guidance\` tool before you write the rules of a layout,
+  an animation or a scroll: the platform of today already holds the answer.
 - The colours, the sizes, the fonts, the spaces, the radii, the shadows and the durations are
   tokens. A rule names a token, never a raw value. The tokens are declared once, at the top.
 - Every length has an explicit unit. \`rem\` for the type and the spacing, \`px\` for the

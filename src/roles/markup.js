@@ -19,7 +19,7 @@ export const schema = 'markup';
 
 /** The tools the role may call. */
 export const tools = [
-    'list_files', 'read_file', 'write_file', 'replace_text', 'search_files', 'read_skill',
+    'list_files', 'read_file', 'write_file', 'replace_text', 'search_files', 'read_skill', 'web_guidance',
 ];
 
 /** How many turns the role may spend. */
@@ -55,6 +55,9 @@ ${markup}
 ${design}
 
 Rules:
+- The platform of today comes before the habit of yesterday: look the guides up with the
+  \`web_guidance\` tool before you write a dialog, a form or a table, and follow what they
+  say.
 - The element comes before the class. A title is a heading, a list is a list, a link to a place
   is an anchor and an action is a button. A \`<div>\` with a click handler is neither.
 - The landmarks are in place: one \`<main>\`, and the \`header\`, \`nav\`, \`aside\` and \`footer\`

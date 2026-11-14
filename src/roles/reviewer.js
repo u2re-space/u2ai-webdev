@@ -19,7 +19,7 @@ export const schema = 'review';
 
 /** The tools the role may call. */
 export const tools = [
-    'list_files', 'read_file', 'search_files', 'run_command', 'fetch_url', 'read_skill',
+    'list_files', 'read_file', 'search_files', 'run_command', 'fetch_url', 'read_skill', 'web_guidance',
 ];
 
 /** How many turns the role may spend. */
@@ -60,6 +60,8 @@ ${design}
 ${shots}
 
 Rules:
+- The guides of the platform are the yardstick: look one up with the \`web_guidance\` tool
+  when you judge a control, a form or a motion, and name the rule it breaks.
 - Judge the criteria first, one by one. A criterion that is not met is an issue with a path and
   a request, not a feeling.
 - Then judge the quality: the semantics of the markup, the accessibility (the keyboard, the

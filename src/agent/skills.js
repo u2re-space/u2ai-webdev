@@ -28,6 +28,7 @@
 
 import path from 'node:path';
 import { readdir, readFile, stat } from 'node:fs/promises';
+import { builtinSkillsDir } from './guidance.js';
 
 /** The marker of the frontmatter of a skill file. */
 export const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
@@ -158,6 +159,10 @@ export async function listSkillPacks({ dir = null, env = process.env } = {}) {
 
 /**
  * The directories the skill packs may live in, in the order they are looked at.
+ *
+ * The packs that ship with the package come last: a copy of a pack in the project wins
+ * over the one of the package, and the copy in the home wins over both.
+ *
  * @param {string} root the project directory
  * @param {object} [env]
  * @returns {string[]}
@@ -172,6 +177,7 @@ export function skillDirectories(root, env = process.env) {
         path.join(root, '.claude', 'skills'),
         path.join(root, '.rules', 'skills'),
         path.join(home, '.agents', 'skills'),
+        builtinSkillsDir(),
     ];
 }
 

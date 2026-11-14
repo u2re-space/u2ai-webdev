@@ -23,6 +23,7 @@ import { listProjectBackups, restoreProjectBackup } from './project-backup.js';
 import { generateSvg, downloadFont, downloadIcons } from './assets.js';
 import { runBridge } from './bridges.js';
 import { readSkill } from './skills.js';
+import { guidanceSearchText, guidanceRetrieveText, GUIDANCE_SOURCE } from './guidance.js';
 import { isInside, resolveInside } from './paths.js';
 
 export { toolSpecs, enabledToolNames } from './tool-specs.js';
@@ -363,6 +364,24 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                 const parts = String(command).trim().split(/\s+/);
                 const timeout = Number.isSafeInteger(Number(args.timeoutMs)) ? Number(args.timeoutMs) : 120_000;
                 return await runProgram(parts[0], [...parts.slice(1), ...parseArgsList(args.args)], timeout);
+            }
+            case 'web_guidance': {
+                const ids = parseArgsList(args.ids);
+                const limit = Number.isSafeInteger(Number(args.limit)) && Number(args.limit) > 0
+                    ? Number(args.limit)
+                    : 8;
+                const source = String(args.source ?? GUIDANCE_SOURCE.bundled).trim().toLowerCase();
+                if (ids.length) {
+                    return await guidanceRetrieveText(ids, {
+                        cwd: root,
+                        env,
+                        source: source === GUIDANCE_SOURCE.cli ? GUIDANCE_SOURCE.cli : GUIDANCE_SOURCE.bundled,
+                    });
+                }
+                return await guidanceSearchText(String(args.query ?? ''), {
+                    limit,
+                    source: source === GUIDANCE_SOURCE.cli ? GUIDANCE_SOURCE.cli : GUIDANCE_SOURCE.bundled,
+                });
             }
             case 'fetch_url': {
                 const answer = await fetchPage({
