@@ -13,7 +13,7 @@ import { ENUMS } from './constants.js';
 export const defaults = {
   // --- API -----------------------------------------------------------------
   /** Text model for the role agents. */
-  model: 'moonshotai/kimi-k3.1-pro',
+  model: 'minimax/minimax-m3.1-flash',//'moonshotai/kimi-k3.1-pro',
   /** Endpoint of the text API; backends[] below can override it. */
   baseURL: 'https://routerai.ru/api/v1',
   apiKey: null,
@@ -27,7 +27,7 @@ export const defaults = {
   maxOutputTokens: null,
   /** Per-model ceilings: { "<model>": { window, maxOutput, ceiling } }. */
   models: {},
-  reasoning: { effort: 'medium', summary: 'auto', mode: null },
+  reasoning: { effort: 'high', summary: 'auto', mode: null },
   retries: 3,
   timeoutMs: 120_000,
 
