@@ -10,7 +10,7 @@
  *
  * @depends node:path, node:child_process, agent/fs-tools, agent/project-backup, agent/assets,
  *          agent/bridges, agent/tool-specs, agent/paths
- * @exports createToolset, toolSpecs, enabledToolNames, mcpToolEntries, htmlToText
+ * @exports createToolset, toolSpecs, enabledToolNames, mcpToolEntries, htmlToText, BLOCKING_COMMANDS
  * @ai.tags tools, agent
  * @ai.hint keep
  */
@@ -27,6 +27,16 @@ import { guidanceSearchText, guidanceRetrieveText, GUIDANCE_SOURCE } from './gui
 import { isInside, resolveInside } from './paths.js';
 
 export { toolSpecs, enabledToolNames } from './tool-specs.js';
+
+/**
+ * The commands that do not finish on their own: a server, a watcher, a tail.
+ *
+ * Such a command would hold the run until the timeout, and the work of the run would wait for
+ * nothing. The tool refuses them and says what to do instead.
+ * @type {RegExp}
+ * @ai.hint pure
+ */
+export const BLOCKING_COMMANDS = /(?:python[0-9.]*\s+-m\s+http\.server|\bhttp-server\b|\blive-server\b|\bserve\b|\bvite\s+(?:dev|preview)\b|\bnpm\s+run\s+(?:dev|preview|serve|start)\b|\btail\s+-f\b)/i;
 
 /**
  * Turn a name into a token the API accepts.
@@ -202,8 +212,7 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
      * @param {string[]} args
      * @param {number} timeoutMs
      * @returns {Promise<string>}
-     */
-    async function runProgram(command, args, timeoutMs) {
+     */    async function runProgram(command, args, timeoutMs) {
         return await new Promise((resolve, reject) => {
             const child = spawn(command, args, { cwd: root, env, shell: false, windowsHide: true });
             let stdout = '';
@@ -336,10 +345,17 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
             }
             case 'run_command': {
                 const argsList = parseArgsList(args.args);
+                const command = String(args.command ?? '').trim();
+                const line = [command, ...argsList].join(' ');
+                // A server or a watcher does not finish on its own: it would hold the run
+                // until the timeout, and the work of the run would wait for nothing.
+                if (BLOCKING_COMMANDS.test(line)) {
+                    return 'Команда не запущена: она не заканчивается сама. Проверьте файлы проекта или запустите такую команду в фоне оболочки.';
+                }
                 return await runProgram(
-                    String(args.command ?? ''),
+                    command,
                     argsList,
-                    Number.isSafeInteger(Number(args.timeoutMs)) ? Number(args.timeoutMs) : 120_000,
+                    Number.isSafeInteger(Number(args.timeoutMs)) ? Number(args.timeoutMs) : 60_000,
                 );
             }
             case 'run_script': {

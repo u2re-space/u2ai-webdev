@@ -344,6 +344,47 @@ test('a role whose turns ran out still gives the schema of the answer', async ()
     }
 });
 
+test('a role that only describes its work is told to do it', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-loop-work-'));
+    const home = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-home-'));
+    const env = { HOME: home, USERPROFILE: home };
+
+    // The first answer is a description of the work, the second one is the work.
+    const api = await mockApi([
+        schemaAnswer('code', { ...codeData(), files: [] }),
+        schemaAnswer('code', codeData()),
+    ]);
+
+    try {
+        const config = structuredClone(defaults);
+        config.model = 'test-model';
+        config.backends = [{ baseURL: api.url, apiKey: 'test-key' }];
+        config.reasoning.effort = 'low';
+        const client = await createClient({ config, env });
+
+        const answer = await runRole({
+            client,
+            config,
+            role: 'coder',
+            input: 'Make the page.',
+            context: { task: 'Make the page.', step: { id: 'markup', files: ['index.html'] } },
+            root,
+            env,
+            requireFiles: true,
+        });
+
+        assert.equal(answer.stopped, 'completed');
+        assert.equal(answer.turns, 2);
+        assert.equal(answer.data.files.length, 1);
+        // The second request carries the correction of the work.
+        const second = api.requests[1].input.map((item) => JSON.stringify(item)).join('\n');
+        assert.match(second, /have not done the work yet/);
+        assert.match(second, /index\.html/);
+    } finally {
+        api.close();
+    }
+});
+
 test('the reason of an answer without data is named', () => {    assert.match(roleReason({ refusal: 'I cannot do that.' }), /отказ модели/);
     assert.match(roleReason({ error: { message: 'the model is down' } }), /ошибка ответа/);
     assert.match(roleReason({ text: 'Сначала изучу проект.' }), /ответ без данных/);

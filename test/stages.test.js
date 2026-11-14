@@ -370,6 +370,42 @@ test('the readiness of the project is checked honestly', async () => {
     assert.equal(after.ok, true);
 });
 
+test('the stage of the setup writes the skeleton of the project', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-scaffold-'));
+    const client = fakeClient([schemaAnswer('setup', {
+        summary: 'The environment.',
+        packageManager: 'npm',
+        dependencies: [],
+        scripts: [],
+        files: [],
+        commands: [],
+        notes: '',
+    })]);
+
+    const result = await setupStage({
+        client,
+        config: { output: { work: './.tmp' } },
+        root,
+        task: 'Make a landing.',
+        architecture: {
+            summary: 'x',
+            stack: { framework: 'vanilla', markup: 'html', style: 'scss', script: 'javascript' },
+            modules: [],
+            tokens: [],
+            notes: '',
+        },
+        runId: 'run-1',
+    });
+
+    // The manifest and the bundler are written by the code, not by the model.
+    const manifest = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
+    assert.equal(manifest.scripts.dev, 'vite');
+    assert.ok(manifest.devDependencies.vite);
+    const vite = await readFile(path.join(root, 'vite.config.js'), 'utf8');
+    assert.match(vite, /defineConfig/);
+    assert.deepEqual(result.setup.scaffold.written.sort(), ['.rules/files.md', '.rules/stack.md', 'package.json', 'vite.config.js']);
+});
+
 test('the stage of the setup applies the environment and writes the file', async () => {
     const root = await makeProject();
     const client = fakeClient([schemaAnswer('setup', {

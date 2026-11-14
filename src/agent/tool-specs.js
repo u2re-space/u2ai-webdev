@@ -186,13 +186,13 @@ export const TOOL_SPECS = Object.freeze({
     },
     run_command: {
         configKey: 'command',
-        description: 'Run a program in the working directory. The program is started without a shell, so the arguments are exact.',
+        description: 'Run a program in the working directory. The program is started without a shell, so the arguments are exact. The program has to finish on its own: a server or a watcher is refused.',
         parameters: {
             type: 'object',
             properties: {
                 command: str('The program to run, for example npm.'),
                 args: str('JSON array of the arguments, as strings.'),
-                timeoutMs: int('How long the program may run. Default 120000.'),
+                timeoutMs: int('How long the program may run. Default 60000.'),
             },
             required: ['command'],
             additionalProperties: false,

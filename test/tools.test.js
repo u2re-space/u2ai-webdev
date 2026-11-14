@@ -107,6 +107,16 @@ test('fetch_url reads the text of a page', async () => {
     }
 });
 
+test('a command that does not finish on its own is refused', async () => {
+    const { tools } = await workspace();
+    const answer = await tools.execute('run_command', {
+        command: 'python',
+        args: JSON.stringify(['-m', 'http.server', '8000']),
+    });
+    assert.match(answer, /не запущена/);
+    assert.match(answer, /не заканчивается сама/);
+});
+
 test('the html of a page becomes readable text', () => {
     const text = htmlToText('<style>a{}</style><p>Hello &amp; bye</p>');
     assert.equal(text, 'Hello & bye');

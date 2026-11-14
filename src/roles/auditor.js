@@ -62,6 +62,8 @@ Rules:
   version that does not fit the stack.
 - The build: run it when it can be run, and report what it printed. A build that fails is the
   first issue of the report.
+- Do not start a server, a watcher or any other program that does not finish on its own: run
+  only the commands that end by themselves (a build, a test).
 - Every issue has a severity, a path, what is wrong and what to do about it. Sort the report by
   severity.
 - The verdict is \`pass\`, \`partial\` or \`fail\`. Do not soften the verdict to be polite: the

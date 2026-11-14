@@ -14,8 +14,8 @@
  * @depends node:path, node:fs/promises, roles/index, stages/architect, stages/workspace,
  *          agent/fs-tools, agent/paths, cli/install
  * @usedBy stages/index, stages/markup, stages/coding, pipeline
- * @exports SETUP_FILE, detectPackageManager, applySetup, setupReadiness, writeSetup,
- *          readSetup, setupStage
+ * @exports SETUP_FILE, detectPackageManager, ensureScaffold, hasEnvironment, applySetup,
+ *          setupReadiness, writeSetup, readSetup, setupStage, INSTALL_CORRECTION
  * @ai.tags stages, setup, dependencies
  * @ai.hint io
  * @ai.hint legacy-0.2
@@ -27,11 +27,23 @@ import { readFile, stat, writeFile } from 'node:fs/promises';
 import { runRole } from '../roles/index.js';
 import { writeTextFile } from '../agent/fs-tools.js';
 import { saveDependency } from '../cli/install.js';
+import { preparedScaffoldFiles, writePreparedScaffold } from '../generate/scaffold.js';
 import { architectureText } from './architect.js';
 import { runId, runFile, writeJsonFile, readJsonFile } from './workspace.js';
 
 /** The name of the file of the setup inside the directory of the run. */
 export const SETUP_FILE = 'setup.json';
+
+/**
+ * The correction of an installer that only described its work.
+ *
+ * The answer of the installer is the environment: the dependencies, the scripts and the files.
+ * An answer with none of them is a plan, not an environment.
+ * @type {string}
+ * @exports
+ * @ai.hint pure
+ */
+export const INSTALL_CORRECTION = 'Your answer names no dependency, no script and no file: that is a description of the work, not the work. Do it now — read the manifest of the project, add the dependencies and the scripts that the stack needs, and answer with them.';
 
 /** The lock files that tell which package manager the project uses. */
 const LOCK_FILES = Object.freeze([
@@ -78,6 +90,52 @@ async function readManifest(root) {
     } catch {
         return { manifest: null, text, exists: true };
     }
+}
+
+/**
+ * True when the answer of the installer holds an environment.
+ *
+ * The environment is the dependencies, the scripts and the files: an answer without them is a
+ * description of the work.
+ * @param {object} data
+ * @returns {boolean}
+ * @exports
+ * @ai.hint pure
+ */
+export function hasEnvironment(data = {}) {
+    const list = (value) => (Array.isArray(value) ? value.length : 0);
+    return list(data.dependencies) + list(data.scripts) + list(data.files) > 0;
+}
+
+/**
+ * The skeleton of the project: the manifest, the config of the bundler and the rules.
+ *
+ * A project without a manifest has no environment, and the environment is not a matter of
+ * taste: the code writes the skeleton itself, with the stack of the architect, instead of
+ * asking the model for it. A project that already has a manifest is left alone.
+ *
+ * @param {{ root: string, architecture?: object|null, kind?: string|null }} request
+ * @returns {Promise<{ written: string[], skipped: string[], scaffolded: boolean }>}
+ * @exports
+ * @ai.hint io
+ */
+export async function ensureScaffold({ root, architecture = null, kind = 'landing' } = {}) {
+    const exists = await stat(path.join(root, 'package.json'))
+        .then((info) => info.isFile())
+        .catch(() => false);
+    if (exists) return { written: [], skipped: ['package.json'], scaffolded: false };
+
+    const stack = architecture?.stack ?? {};
+    const files = preparedScaffoldFiles({
+        kind,
+        name: path.basename(root),
+        framework: stack.framework ?? 'vanilla',
+        scriptLanguage: stack.script ?? null,
+        styleLanguage: stack.style ?? null,
+        markup: stack.markup ?? null,
+    });
+    const result = await writePreparedScaffold(root, files);
+    return { ...result, scaffolded: true };
 }
 
 /**
@@ -288,12 +346,18 @@ export async function setupStage({
     const manager = await detectPackageManager(root);
     const brief = architecture ? architectureText(architecture) : '';
 
+    // The skeleton of the project first: the manifest, the bundler and the rules.
+    const scaffold = await ensureScaffold({ root, architecture });
+
     const blocks = [];
     if (task) blocks.push(String(task).trim());
     if (plan?.steps?.length) blocks.push(`The plan:\n${plan.steps.map((step) => `- ${step.id}: ${step.title}`).join('\n')}`);
     if (brief) blocks.push(brief);
+    if (scaffold.scaffolded) {
+        blocks.push(`The skeleton of the project is already written: ${scaffold.written.join(', ')}. Add what is missing: the dependencies, the scripts and the files that the stack needs.`);
+    }
 
-    const result = await runRole({
+    let result = await runRole({
         client,
         config,
         role: 'installer',
@@ -312,16 +376,55 @@ export async function setupStage({
         notify,
     });
 
+    // The installer that only described its work is asked to do it.
+    if (result.data && !hasEnvironment(result.data)) {
+        result = await runRole({
+            client,
+            config,
+            role: 'installer',
+            input: `${blocks.join('\n\n')}\n\n${INSTALL_CORRECTION}`,
+            context: {
+                task: String(task ?? ''),
+                step: plan?.steps?.[0] ?? null,
+                brief,
+                stack: config?.stack ?? {},
+                packageManager: manager,
+                project: root,
+            },
+            root,
+            env,
+            maxTurns: config?.stages?.setup?.maxTurns ?? null,
+            notify,
+        });
+    }
+
     if (!result.data) {
         const readiness = await setupReadiness(root, config);
+        // The skeleton is written even when the installer says nothing: the manifest and the
+        // bundler are the environment of the project.
+        const manifest = readiness.checks.find((item) => item.id === 'manifest')?.ok ?? false;
+        const empty = {
+            summary: '',
+            packageManager: manager,
+            dependencies: [],
+            scripts: [],
+            commands: [],
+            notes: '',
+            scaffold: { written: scaffold.written, skipped: scaffold.skipped },
+            applied: { dependencies: [], scripts: [], files: [], manifestChanged: false },
+            readiness,
+        };
+        const file = await writeSetup(root, config, run, empty);
         return {
             stage: 'setup',
-            ok: false,
-            setup: null,
+            ok: manifest,
+            setup: empty,
             applied: null,
             readiness,
-            file: null,
-            warnings: ['Установщик не вернул окружение.'],
+            file,
+            warnings: manifest
+                ? ['Установщик не вернул окружение: остался только каркас проекта.']
+                : ['Установщик не вернул окружение.'],
             turns: result.turns,
             usage: result.usage,
             runId: run,
@@ -339,6 +442,7 @@ export async function setupStage({
         scripts: Array.isArray(data.scripts) ? data.scripts : [],
         commands: Array.isArray(data.commands) ? data.commands : [],
         notes: String(data.notes ?? '').trim(),
+        scaffold: { written: scaffold.written, skipped: scaffold.skipped },
         applied: {
             dependencies: applied.dependencies,
             scripts: applied.scripts,

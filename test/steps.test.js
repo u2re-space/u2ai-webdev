@@ -150,7 +150,7 @@ test('a plan without a step of the role skips the stage', async () => {
         plan: PLAN,
         runId: 'run-1',
     });
-    assert.equal(result.ok, false);
+    assert.equal(result.ok, true);
     assert.equal(result.skipped, true);
     assert.ok(result.warnings[0].includes('planner'));
 });
@@ -178,6 +178,32 @@ test('the stage of the markup keeps the landmarks of the answer', async () => {
     assert.equal(result.ok, true);
     assert.deepEqual(result.steps[0].landmarks, ['header', 'main', 'footer']);
     assert.equal(await readFile(path.join(root, 'index.html'), 'utf8'), '<main></main>\n');
+});
+
+test('the stage of the markup reports the files that were not written', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-markup-missing-'));
+    // The role describes its work and writes nothing.
+    const client = fakeClient([schemaAnswer('markup', {
+        summary: 'I will start with the guides.',
+        files: [],
+        landmarks: [],
+        accessibility: [],
+        notes: '',
+    })]);
+
+    const result = await markupStage({
+        client,
+        config: { output: { work: './.tmp' } },
+        root,
+        task: 'Make a landing.',
+        plan: PLAN,
+        architecture: { summary: 'x', stack: { markup: 'html' }, modules: [], tokens: [], notes: '' },
+        runId: 'run-1',
+    });
+
+    // The step is not done: the file it names is not on the disk.
+    assert.equal(result.ok, false);
+    assert.match(result.warnings.join(' '), /index\.html/);
 });
 
 test('the stage of the code writes the files of the step', async () => {

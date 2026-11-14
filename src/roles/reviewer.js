@@ -72,6 +72,8 @@ Rules:
   serious is left; \`partial\` when most of the work is done and the rest is named;
   \`fail\` when the step is not done.
 - Do not fix the result yourself: the review reports, the other roles repair.
+- Do not start a server, a watcher or any other program that does not finish on its own: judge
+  the files of the project, and run only the commands that end by themselves (a build, a test).
 - Do not invent a requirement the task does not have. The review is about this task, in this
   project, at this step.
 

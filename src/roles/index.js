@@ -16,10 +16,13 @@
  *   answer without any tool, so the stage gets the data of the schema even after a long run of
  *   tool calls.
  *
+ *   A role of a step has to write the files of the step. An answer that names no file and that
+ *   wrote nothing is a description of the work, not the work: such a role is told to do it.
+ *
  * @depends openai/responses, agent/schemas, agent/skills, agent/docs, agent/tools, agent/pace
  * @usedBy stages/index, cli
  * @exports ROLES, ROLE_NAMES, resolveRole, buildInstructions, runRole, roleSchema, roleReason,
- *          SCHEMA_CORRECTION, FINAL_ANSWER
+ *          SCHEMA_CORRECTION, FINAL_ANSWER, WORK_CORRECTION
  * @ai.tags roles, agent
  * @ai.hint keep
  */
@@ -88,6 +91,32 @@ export const SCHEMA_CORRECTION = 'Your answer carried no data of the schema. Ans
  * @ai.hint pure
  */
 export const FINAL_ANSWER = 'The turns of the role are over. Do not call any tool any more: give the final answer of the role in the schema of the role now, with what you have.';
+
+/**
+ * The correction of a role that described its work instead of doing it.
+ *
+ * A role of a step has to write the files of the step. An answer that names no file and that
+ * wrote nothing is a plan, not a result: the role is told to do the work with its tools.
+ * @type {string}
+ * @exports
+ * @ai.hint pure
+ */
+export const WORK_CORRECTION = 'You have not done the work yet: your answer names no file, and nothing was written. Do the work now with the tools — read what you need, write the files of the step, and answer with their contents. Do not describe what you are going to do: the answer is the result of the work.';
+
+/** The tools that write into the project. */
+const WRITE_TOOLS = Object.freeze(['write_file', 'replace_text', 'copy_path', 'generate_svg']);
+
+/**
+ * A file of an answer that holds nothing: empty, or a marker of a work that is not done.
+ * @param {object} file
+ * @returns {boolean}
+ * @ai.hint pure
+ */
+function isEmptyFile(file) {
+    const content = String(file?.content ?? '');
+    if (!content.trim()) return true;
+    return /^\s*(?:\/\/|#|\/\*|<!--)?\s*(?:placeholder|todo|tbd|fixme|заглушка)\b[^\n]*$/i.test(content);
+}
 
 /**
  * The schema of the answer of a role.
@@ -219,6 +248,7 @@ export async function runRole({
     env = process.env,
     toolset = null,
     maxTurns = null,
+    requireFiles = false,
     signal = null,
     notify = () => {},
 }) {
@@ -240,7 +270,12 @@ export async function runRole({
     let stopped = 'completed';
     let answer = null;
     let corrected = false;
+    let correctedWork = false;
     let fallback = null;
+    // The files the step names: the role has to write them.
+    const wantedFiles = Array.isArray(context?.step?.files)
+        ? context.step.files.map((item) => String(item ?? '').trim()).filter(Boolean)
+        : [];
 
     /**
      * One call of the model: the request, the answer and the calls it asks for.
@@ -286,6 +321,23 @@ export async function runRole({
                 items.push({ role: 'user', content: [textPart(SCHEMA_CORRECTION)] });
                 continue;
             }
+
+            // The work of a step is the files it names. An answer without them is a
+            // description of the work: the role is told to do it.
+            const wrote = calls.some((call) => WRITE_TOOLS.includes(call.name));
+            const files = Array.isArray(answer?.data?.files) ? answer.data.files : [];
+            const rest = ['dependencies', 'scripts'].reduce((sum, key) => (
+                sum + (Array.isArray(answer?.data?.[key]) ? answer.data[key].length : 0)
+            ), 0);
+            const useful = files.filter((file) => !isEmptyFile(file)).length + rest;
+            const withoutWork = requireFiles && !wrote && useful === 0;
+            if (withoutWork && !correctedWork && turns < limit) {
+                correctedWork = true;
+                const list = wantedFiles.length ? ` The step names: ${wantedFiles.join(', ')}.` : '';
+                items.push({ role: 'user', content: [textPart(`${WORK_CORRECTION}${list}`)] });
+                continue;
+            }
+
             stopped = 'completed';
             break;
         }

@@ -81,6 +81,11 @@ report into the directory of the run and hands the result to the next one.
 | `audit` | Audit the project: the dead code, the duplicates, the unused assets. |
 | `learn` | Write the lessons of the run into the permanent memory. |
 
+The skeleton of the project is written by the code, not by the model: a project without a
+manifest gets `package.json`, the config of the bundler and the rules of the stack, with the
+stack of the architect. The installer then adds what is missing — the dependencies, the scripts,
+the files — and the stage checks the readiness of the project and says what is not there.
+
 `--route <stages>` chooses the stages the run goes through (the stages they need are added
 automatically), `--stop-after <stage>` (or `--stop-after=<stage>`) pauses the run on the
 border of a stage, and `--resume <id>` continues it later. The name of the stage of the pause
@@ -155,6 +160,15 @@ instead of the data of its schema is asked once more, and the last turn belongs 
 when the turns of the role run out, it is asked to give the answer alone, without any tool. A
 role that returns no data at all is reported with the reason: a refusal of the model, an error of
 the answer or the text it gave instead of the schema.
+
+A role of a step has to write the files of the step. An answer that names no file, that writes
+nothing, or that holds nothing but a placeholder is a description of the work, not the work:
+the role is told to do it, with the tools. The stage checks the files of the step on the disk
+afterwards, and a step whose files are missing is not called done.
+
+The command that does not finish on its own is refused: a server, a watcher or a tail would
+hold the run until the timeout. The default time of a command is 60 seconds, and the model may
+ask for more.
 
 The plan of the planner has to hold the work itself: a plan without steps is a plan of
 intentions ("first I will study the project"), and the stages of the run have nothing to do. The

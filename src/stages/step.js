@@ -13,7 +13,7 @@
  * @depends node:path, node:fs/promises, roles/index, agent/fs-tools, stages/workspace
  * @usedBy stages/markup, stages/coding, stages/styling
  * @exports STEPS_DIR, stepsForRole, applyFiles, stepReportPath, writeStepReport,
- *          readStepReport, runStepStage
+ *          readStepReport, missingFiles, runStepStage
  * @ai.tags stages, steps, files
  * @ai.hint io
  * @ai.hint legacy-0.2
@@ -21,6 +21,7 @@
  */
 
 import path from 'node:path';
+import { stat } from 'node:fs/promises';
 import { runRole, roleReason } from '../roles/index.js';
 import { writeTextFile } from '../agent/fs-tools.js';
 import { inputContext } from '../inputs/index.js';
@@ -142,6 +143,28 @@ export async function readStepReport(root, config = {}, id = null, stepId = 'ste
 }
 
 /**
+ * The files of a step that are not on the disk.
+ *
+ * A step names the files it touches. A file that is missing after the role has answered means
+ * that the work was not done, and the stage says so instead of calling the step done.
+ * @param {string} root
+ * @param {string[]} files
+ * @returns {Promise<string[]>}
+ * @exports
+ * @ai.hint io
+ */
+export async function missingFiles(root, files = []) {
+    const missing = [];
+    for (const rel of Array.isArray(files) ? files : []) {
+        const name = String(rel ?? '').trim();
+        if (!name) continue;
+        const found = await stat(path.join(root, name)).then((info) => info.isFile()).catch(() => false);
+        if (!found) missing.push(name);
+    }
+    return missing;
+}
+
+/**
  * Run one role over the steps of the plan that belong to it.
  *
  * @param {{ client: object, config?: object, root?: string, task?: string, role: string,
@@ -175,9 +198,11 @@ export async function runStepStage({
     const warnings = [];
 
     if (!steps.length) {
+        // The plan is the work: a stage whose role has no step has nothing to do. It is
+        // skipped and reported, but the run goes on — the rest of the stages still work.
         return {
             stage: role,
-            ok: false,
+            ok: true,
             skipped: true,
             steps: [],
             warnings: [`В плане нет шага для роли ${role}.`],
@@ -220,6 +245,7 @@ export async function runStepStage({
             root,
             env,
             maxTurns: config?.stages?.[role]?.maxTurns ?? null,
+            requireFiles: Boolean(step.files?.length),
             notify,
         });
         turns += result.turns;
@@ -233,10 +259,18 @@ export async function runStepStage({
             warnings.push(...applied.warnings);
         }
 
+        // The step is done when its files are on the disk: an answer without them is a
+        // description of the work, not the work.
+        const missing = await missingFiles(root, step.files ?? []);
+        const ok = Boolean(result.data) && !missing.length;
+        if (missing.length) {
+            warnings.push(`Шаг ${step.id}: файлы не написаны: ${missing.join(', ')}.`);
+        }
+
         const report = {
             stage: role,
             step: { id: step.id, title: step.title, files: step.files, criteria: step.criteria },
-            ok: Boolean(result.data),
+            ok,
             summary: String(data.summary ?? result.text ?? '').trim(),
             files,
             commands: Array.isArray(data.commands) ? data.commands : [],
