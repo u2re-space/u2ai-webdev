@@ -152,3 +152,18 @@ test('the built-in module of Sass is not a missing file', async () => {
     assert.deepEqual(missing, []);
     assert.equal(result.ok, true);
 });
+
+test('the styles of a package of the project are not a missing file', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-syntax-'));
+    await mkdir(path.join(root, 'scss'), { recursive: true });
+    await mkdir(path.join(root, 'node_modules', 'ui', 'scss'), { recursive: true });
+    await writeFile(path.join(root, 'scss', 'main.scss'), '@use "ui/scss/buttons";\n', 'utf8');
+    await writeFile(path.join(root, 'node_modules', 'ui', 'scss', '_buttons.scss'), '.a { color: red; }\n', 'utf8');
+    const empty = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-empty-'));
+
+    const missing = await missingStyleReferences(root, 'scss/main.scss');
+    const result = await checkFile(root, 'scss/main.scss', { env: { PATH: empty } });
+
+    assert.deepEqual(missing, []);
+    assert.equal(result.ok, true);
+});

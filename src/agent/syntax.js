@@ -183,6 +183,38 @@ export function styleImportCandidates(rel, ref) {
 }
 
 /**
+ * True when the name of a stylesheet is a package of the project.
+ *
+ * A project may use the styles of a package: `@use "bootstrap/scss/bootstrap"`. The file is
+ * in `node_modules`, not in the project, and nobody has to write it.
+ * @param {string} root
+ * @param {string} ref
+ * @returns {Promise<boolean>}
+ * @ai.hint io
+ */
+async function isPackageReference(root, ref) {
+    const name = String(ref ?? '').trim();
+    if (!name) return false;
+    const base = path.join(root, 'node_modules', ...name.split('/').filter(Boolean));
+    const dir = path.dirname(base);
+    const stem = path.basename(base);
+    const candidates = [
+        base,
+        `${base}.scss`,
+        `${base}.sass`,
+        path.join(dir, `_${stem}.scss`),
+        path.join(dir, `_${stem}.sass`),
+        path.join(base, '_index.scss'),
+        path.join(base, 'index.scss'),
+    ];
+    for (const candidate of candidates) {
+        const exists = await stat(candidate).then((info) => info.isFile()).catch(() => false);
+        if (exists) return true;
+    }
+    return false;
+}
+
+/**
  * The stylesheets that a stylesheet uses and that are not on the disk.
  *
  * A model writes an entry point that `@use`s five files and writes none of them: the page
@@ -212,6 +244,7 @@ export async function missingStyleReferences(root, rel, { content = null } = {})
                 break;
             }
         }
+        if (!found && await isPackageReference(root, ref)) continue;
         if (!found) out.push({ ref, expected: candidates[0] ?? ref });
     }
     return out;
