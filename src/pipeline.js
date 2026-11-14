@@ -89,6 +89,36 @@ function reportOf(result = {}) {
 }
 
 /**
+ * Run a stage under the wall-clock budget of the run.
+ *
+ * A stage that never comes back is a silent death: the terminal waits and waits, and nothing
+ * says that the run is over. The budget turns that silence into a failure with a name.
+ *
+ * @param {{ name: string, run: Function }} stage the stage to run
+ * @param {object} args the arguments of the stage
+ * @param {number} timeoutMs the budget of the stage, 0 for no budget
+ * @returns {Promise<object>} the result of the stage
+ * @exports
+ * @ai.hint io
+ */
+export async function runStage(stage, args, timeoutMs = 0) {
+    if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) {
+        return await stage.run(args);
+    }
+    let timer = null;
+    const budget = new Promise((_, reject) => {
+        timer = setTimeout(() => {
+            reject(new Error(`Стадия ${stage.name} не закончилась за ${Math.round(timeoutMs / 1000)} с.`));
+        }, timeoutMs);
+    });
+    try {
+        return await Promise.race([stage.run(args), budget]);
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+/**
  * Run the stages of a run.
  *
  * @param {{ client: object, config?: object, root?: string, task?: string, runId?: string|null,
@@ -210,6 +240,12 @@ export async function runPipeline({
     let error = null;
     let paused = false;
 
+    // The wall-clock budget of one stage. A stage that hangs fails loudly instead of waiting
+    // for ever: the run says which stage it was and how long it waited.
+    const stageTimeoutMs = Number.isSafeInteger(config?.limits?.stageTimeoutMs)
+        ? config.limits.stageTimeoutMs
+        : 0;
+
     for (const stage of list) {
         const record = done.get(stage.name);
         if (resume && record?.status === 'completed') {
@@ -236,7 +272,7 @@ export async function runPipeline({
         let result = null;
         try {
             const args = typeof stage.args === 'function' ? { ...ctx, ...stage.args(ctx) } : ctx;
-            result = await stage.run(args);
+            result = await runStage(stage, args, stageTimeoutMs);
         } catch (cause) {
             error = cause?.message ?? String(cause);
             warnings.push(`Стадия ${stage.name} упала: ${error}`);

@@ -149,6 +149,21 @@ const COMMANDS = Object.freeze({
  * @ai.hint io
  */
 export async function main(argv = []) {
+    // A run that dies must say so.
+    //
+    // A thinking model works for minutes, and the process may fall over somewhere deep inside
+    // the transport. Without this the terminal stays empty and the exit code is the only
+    // witness: a silent death is the hardest kind of failure to read.
+    process.on('unhandledRejection', (reason) => {
+        const message = reason?.message ?? String(reason ?? 'unknown');
+        process.stderr.write(`ai-webdev: unhandled rejection: ${message}\n`);
+        process.exitCode = EXIT.failure;
+    });
+    process.on('uncaughtException', (error) => {
+        process.stderr.write(`ai-webdev: uncaught exception: ${error?.message ?? error}\n`);
+        process.exitCode = EXIT.failure;
+    });
+
     const { command, args, flags, rest } = parseArgv(argv);
 
     try {

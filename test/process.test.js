@@ -351,6 +351,34 @@ test('a stage that fails stops the run and is written to the progress', async ()
     assert.equal(progress.stages[1].status, 'pending');
 });
 
+test('a stage that hangs fails with the name of the stage and the budget', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-timeout-'));
+    const stages = [
+        {
+            name: 'slow',
+            title: 'Slow',
+            dependsOn: [],
+            run: () => new Promise(() => {}),
+        },
+        { name: 'next', title: 'Next', dependsOn: ['slow'], run: async () => ({ ok: true }) },
+    ];
+
+    const result = await runPipeline({
+        client: { responses: { create: async () => ({ output: [] }) } },
+        config: { ...CONFIG, limits: { ...CONFIG.limits, stageTimeoutMs: 50 } },
+        root,
+        task: 'Make a landing.',
+        runId: 'run-1',
+        stages,
+    });
+
+    assert.equal(result.status, 'failed');
+    assert.match(result.error, /slow/);
+    assert.match(result.error, /не закончилась/);
+    // The stages after the slow one did not run.
+    assert.equal(result.stages.length, 1);
+});
+
 test('a resumed run reads the inputs and the pictures back', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-resume-'));
     const dir = path.join(root, '.tmp', 'run-1');

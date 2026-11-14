@@ -744,6 +744,10 @@ destination must not exist unless `overwrite` is asked for.
 - The vector graphics are SVG documents: they are written and checked as text, not redrawn.
 - There is no image generator in this package: the pictures are the work of the `ai-image` bridge.
 - A run that is interrupted keeps its progress on the disk and can be continued with `--resume`.
+- A stage that does not come back in `limits.stageTimeoutMs` (15 minutes by default) fails with
+  the name of the stage: a run that hangs says so instead of waiting for ever.
+- A crash outside the command — an unhandled rejection, an uncaught exception — is printed and
+  leaves the exit code of the failure: a silent death is the hardest kind of failure to read.
 
 ## Development
 
