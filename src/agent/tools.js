@@ -367,6 +367,8 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                     query: String(args.query ?? ''),
                     dir: String(args.path ?? '.'),
                     regex: Boolean(args.regex),
+                    inContent: !(args.inContent === 0 || args.inContent === false || args.inContent === '0'),
+                    glob: String(args.glob ?? ''),
                 });
                 return found.text;
             }

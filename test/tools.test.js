@@ -46,6 +46,32 @@ test('the toolset writes, reads and replaces a file', async () => {
     assert.equal(body, '<h1>hello</h1>');
 });
 
+test('the search greps the content, the names and the glob', async () => {
+    const { root, tools } = await workspace();
+    await tools.execute('write_file', { path: 'src/index.html', content: '<h1>hi</h1>\n' });
+    await tools.execute('write_file', { path: 'src/styles/main.scss', content: '.card { color: red; }\n' });
+
+    // The content: the grep.
+    const grep = await tools.execute('search_files', { query: 'color' });
+    assert.match(grep, /src\/styles\/main\.scss:1/);
+
+    // The names: the files themselves.
+    const names = await tools.execute('search_files', { query: 'main', inContent: false });
+    assert.match(names, /src\/styles\/main\.scss/);
+    assert.doesNotMatch(names, /src\/index\.html/);
+
+    // The glob cuts the files before they are read.
+    const scss = await tools.execute('search_files', { query: '.', regex: true, glob: '*.scss' });
+    assert.match(scss, /src\/styles\/main\.scss/);
+    assert.doesNotMatch(scss, /src\/index\.html/);
+
+    // The regex finds the content of the scripts and the styles.
+    const regex = await tools.execute('search_files', { query: '\\.(scss|html)$', regex: true, inContent: false });
+    assert.match(regex, /src\/index\.html/);
+    assert.match(regex, /src\/styles\/main\.scss/);
+    assert.ok(root);
+});
+
 test('a file that was read once is not read twice', async () => {
     const { tools } = await workspace();
     await tools.execute('write_file', { path: 'src/index.html', content: '<h1>hi</h1>' });

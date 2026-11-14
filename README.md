@@ -535,8 +535,9 @@ inputs again — the collection is deterministic, and the later stages need what
 
 A step of the plan that is already done is not done again: its report is on the disk and its
 files are still there, so the run continues with the work that exists. A file that was deleted
-after the step means the work is gone, and the step is done again. The run never asks a model
-to write the same file twice.
+after the step means the work is gone, and the step is done again. A file that is there, but
+holds something else than the answer of the role, means the answer was lost — the step is done
+again too. The run never asks a model to write the same file twice.
 
 The screenshot of the reference goes to the roles that copy the look — the markup, the styles
 and the vector graphics. The scripts, the icons and the other mechanical work get the numbers,
@@ -565,6 +566,18 @@ partials it `@use`s. The paths come from `list_files` and `search_files`: a path
 seen on the disk does not exist. The roles that write code check their work with the command
 of the project (`npm run build`, the test script) — the compiler sees the errors that the eye
 does not.
+
+The search is a grep and a find at the same time. By default it greps the text of the files and
+answers `path:line: text`; `inContent=0` matches the paths of the files and answers the paths
+themselves, and `glob` limits the files by their name (`*.scss`, `src/**/*.js`) before they are
+read. `regex` reads the query as a regular expression. A role that looks for a module of the
+script finds it by its name, and a role that looks for a rule of the styles finds it by its
+text.
+
+```
+· search_files "card" src/styles
+· search_files "main" inContent=0 glob=*.scss
+```
 
 ## The bridges to the sibling CLIs
 
