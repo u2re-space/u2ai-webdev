@@ -457,11 +457,15 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                 return await runProgram(parts[0], [...parts.slice(1), ...parseArgsList(args.args)], timeout);
             }
             case 'web_guidance': {
-                const ids = parseArgsList(args.ids);
-                const limit = Number.isSafeInteger(Number(args.limit)) && Number(args.limit) > 0
-                    ? Number(args.limit)
+                // The model sometimes passes the words of the search as the whole list of
+                // the arguments instead of an object with a `query`. The words are the
+                // search either way: a call that names a topic asks about the topic.
+                const call = Array.isArray(args) ? { query: args } : (args ?? {});
+                const ids = parseArgsList(call.ids);
+                const limit = Number.isSafeInteger(Number(call.limit)) && Number(call.limit) > 0
+                    ? Number(call.limit)
                     : 8;
-                const source = String(args.source ?? GUIDANCE_SOURCE.bundled).trim().toLowerCase();
+                const source = String(call.source ?? GUIDANCE_SOURCE.bundled).trim().toLowerCase();
                 if (ids.length) {
                     return await guidanceRetrieveText(ids, {
                         cwd: root,
@@ -469,7 +473,10 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                         source: source === GUIDANCE_SOURCE.cli ? GUIDANCE_SOURCE.cli : GUIDANCE_SOURCE.bundled,
                     });
                 }
-                return await guidanceSearchText(String(args.query ?? ''), {
+                const query = Array.isArray(call.query)
+                    ? call.query.map((item) => String(item)).join(' ')
+                    : String(call.query ?? '');
+                return await guidanceSearchText(query, {
                     limit,
                     source: source === GUIDANCE_SOURCE.cli ? GUIDANCE_SOURCE.cli : GUIDANCE_SOURCE.bundled,
                 });

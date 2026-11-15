@@ -566,6 +566,10 @@ interface read it with the tool `web_guidance`:
 | `web_guidance` with `query` | The search: the ids and the summaries of the guides that fit the words. |
 | `web_guidance` with `ids` | The retrieve: the whole text of the guides, by their ids. |
 
+The words of the search may come as a list as well: a model that passes `["navbar",
+"accessibility"]` gets the guides of the navbar and of the accessibility, not the catalog of
+all the guides.
+
 The guides are read from the disk of the package: no network, no npm, no waiting. The CLI of the
 upstream (`npx modern-web-guidance@latest search|retrieve`) is the fallback — for the guide that
 is newer than the bundle, and for the caller that asks for the CLI (`source: "cli"`).

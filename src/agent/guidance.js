@@ -436,6 +436,12 @@ export async function guidanceCatalogText() {
 
 /**
  * The program of the CLI of the upstream pack, with the arguments of the call.
+ *
+ * On Windows the program of npm is a batch file, and Node refuses to start a batch file
+ * without a shell. The command is therefore run through `cmd.exe`, and the arguments are
+ * given one by one: a single line with quotes inside it is mangled by the quoting of Node
+ * and by the rules of `cmd.exe` at the same time, and the answer of the tool becomes
+ * `'\"npx\"' is not recognized`.
  * @param {string[]} args
  * @returns {{ command: string, args: string[] }}
  * @ai.hint pure
@@ -445,12 +451,10 @@ function cliProgram(args) {
     if (process.platform !== 'win32') {
         return { command: 'npx', args: list };
     }
-    // On Windows the program of npm is a batch file, and Node refuses to start a batch
-    // file without a shell. The line is built here and every argument is quoted.
-    const line = ['npx', ...list]
-        .map((arg) => `"${String(arg).replace(/"/g, '')}"`)
-        .join(' ');
-    return { command: 'cmd.exe', args: ['/d', '/s', '/c', line] };
+    // `cmd.exe /c` takes the rest of the line as the command. The arguments of the call
+    // are checked before they are started: only the letters, the digits and the marks of
+    // a path are allowed, so an argument cannot become a command of the shell.
+    return { command: 'cmd.exe', args: ['/d', '/c', 'npx', ...list] };
 }
 
 /**

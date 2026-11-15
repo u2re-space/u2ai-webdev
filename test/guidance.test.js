@@ -82,6 +82,40 @@ test('the tool gives the search and the retrieve to the model', async () => {
     assert.match(catalog, /The guides of the pack/);
 });
 
+test('the words of the search may come as a list', async () => {
+    const toolset = createToolset({ root: process.cwd(), config: { tools: {} } });
+    const found = await toolset.execute('web_guidance', ['light dismiss dialog']);
+    assert.match(found, /light-dismiss-a-dialog|dialog/);
+    assert.doesNotMatch(found, /The guides of the pack/);
+});
+
+test('the CLI of the upstream is started without a line of quotes', async () => {
+    let seen = null;
+    const fake = (command, args) => {
+        seen = { command, args };
+        const child = new EventEmitter();
+        child.stdout = new EventEmitter();
+        child.stderr = new EventEmitter();
+        child.kill = () => {};
+        setImmediate(() => {
+            child.stdout.emit('data', 'ok');
+            child.emit('close', 0);
+        });
+        return child;
+    };
+
+    const result = await runGuidanceCli(['search', 'dialog'], { spawn: fake });
+
+    assert.equal(result.ok, true);
+    // The arguments go one by one: a single line with quotes inside it is mangled by the
+    // quoting of Node and by the rules of cmd.exe at the same time.
+    assert.ok(!seen.args.some((item) => String(item).includes('"')), JSON.stringify(seen.args));
+    if (process.platform === 'win32') {
+        assert.equal(seen.command, 'cmd.exe');
+        assert.deepEqual(seen.args.slice(0, 3), ['/d', '/c', 'npx']);
+    }
+});
+
 test('the path of the file of the CLI is read out of its answer', () => {
     const answer = 'Output (12.1 KB, 220 lines) saved to C:\\Temp\\mwg-guide-1.md to prevent CLI stdout truncation.';
     assert.equal(savedOutputPath(answer), 'C:\\Temp\\mwg-guide-1.md');
