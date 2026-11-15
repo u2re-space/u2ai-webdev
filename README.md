@@ -78,7 +78,7 @@ report into the directory of the run and hands the result to the next one.
 | `build` | Connect the styles: the entry point, the compilation, the links of the markup. |
 | `vector` | Draw the vector graphics as code: the SVG of the ornaments and the illustrations. |
 | `iconify` | Choose the icons of the interface and check that every one of them is on the disk. |
-| `review` | Review the result: the markup, the code, the styles and the accessibility. |
+| `review` | Review the result: the markup, the code, the styles and the accessibility — and repair what it finds. |
 | `audit` | Audit the project: the dead code, the duplicates, the unused assets. |
 | `learn` | Write the lessons of the run into the permanent memory. |
 
@@ -253,6 +253,21 @@ The plan of the planner has to hold the work itself: a plan without steps is a p
 intentions ("first I will study the project"), and the stages of the run have nothing to do. The
 planner is asked once more when its answer holds no steps, and the stage fails when the second
 answer holds none either.
+
+The review does not only report: it repairs. The reviewer names the file, the defect and the
+change that is asked for, and the role that owns that file — the role of the step of the plan
+that wrote it — is asked to make the change and write the file back. The step is reviewed
+again afterwards, so the verdict of the run says what the project looks like now. The repair
+is one round: a step that is still broken after it is reported, not repaired again. The
+repair can be turned off in the config:
+
+```json
+{
+  "stages": {
+    "review": { "repair": false }
+  }
+}
+```
 
 ## The inputs of a run
 

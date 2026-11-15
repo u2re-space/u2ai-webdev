@@ -225,7 +225,7 @@ export const defaults = {
     build: { enabled: true, maxTurns: 1 },
     vector: { enabled: true, maxTurns: 8 },
     iconify: { enabled: true, maxTurns: 8 },
-    review: { enabled: true, maxTurns: 12 },
+    review: { enabled: true, maxTurns: 12, repair: true },
     audit: { enabled: true, maxTurns: 8 },
     learn: { enabled: true, maxTurns: 8 },
   },

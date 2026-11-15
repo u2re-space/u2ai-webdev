@@ -10,13 +10,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 
 import {
     reviewVerdict,
     worstVerdict,
     readScreenshots,
     readReview,
+    issueOwner,
+    repairText,
     reviewStage,
 } from '../src/stages/review.js';
 import { readAudit, auditStage } from '../src/stages/audit.js';
@@ -136,7 +138,7 @@ test('the stage of the review judges every step and takes the worst verdict', as
 
     const result = await reviewStage({
         client,
-        config: { output: { work: './.tmp' } },
+        config: { output: { work: './.tmp' }, stages: { review: { repair: false } } },
         root,
         task: 'Make a landing.',
         plan: PLAN,
@@ -152,6 +154,123 @@ test('the stage of the review judges every step and takes the worst verdict', as
     const saved = await readReview(root, { output: { work: './.tmp' } }, 'run-1');
     assert.equal(saved.verdict, 'fail');
     assert.equal(saved.issues[0].path, 'src/main.js');
+});
+
+test('the owner of a file of an issue is the step that wrote it', () => {
+    const owner = issueOwner(PLAN, { path: 'src/main.js', message: 'x', requestedChange: 'y' });
+    assert.equal(owner.step.id, 'code-1');
+    assert.equal(owner.role, 'coder');
+
+    const markup = issueOwner(PLAN, { path: 'index.html', message: 'x', requestedChange: 'y' });
+    assert.equal(markup.role, 'markup');
+
+    // A file that no step names is guessed by its extension.
+    const unknown = issueOwner({ steps: [] }, { path: 'src/styles.scss', message: 'x', requestedChange: 'y' });
+    assert.equal(unknown.role, 'styler');
+});
+
+test('the request of the repair names the file, the defect and the change', () => {
+    const text = repairText({ id: 'code-1', files: ['src/main.js'] }, [{
+        severity: 'high',
+        path: 'src/main.js',
+        message: 'The entry does not run.',
+        requestedChange: 'Fix the import.',
+    }]);
+
+    assert.match(text, /src\/main\.js/);
+    assert.match(text, /The entry does not run\./);
+    assert.match(text, /Fix the import\./);
+    assert.match(text, /write the\s+file back under the same path/i);
+});
+
+test('the review repairs what it found and judges the result again', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-repair-'));
+    await mkdir(path.join(root, 'src'), { recursive: true });
+    await writeFile(path.join(root, 'src', 'main.js'), 'export const x = 1;\n', 'utf8');
+    const one = {
+        summary: 'A landing.',
+        steps: [
+            { id: 'code-1', title: 'Code', role: 'coder', dependsOn: [], files: ['src/main.js'], criteria: ['runs'] },
+        ],
+    };
+    let asked = null;
+    const client = fakeClient([
+        // The first pass: the review finds the defect.
+        schemaAnswer('review', {
+            verdict: 'fail',
+            scores: { fidelity: 40, completeness: 50, accessibility: 30, quality: 40 },
+            issues: [{
+                severity: 'high',
+                path: 'src/main.js',
+                message: 'The entry does not run.',
+                requestedChange: 'Fix the import.',
+            }],
+            summary: 'The code does not work.',
+            recommendations: [],
+        }),
+        // The repair: the role of the file writes it back.
+        (body) => {
+            asked = body;
+            return schemaAnswer('code', {
+                summary: 'The import is fixed.',
+                files: [{ path: 'src/main.js', content: "import './styles.scss';\n", language: 'javascript' }],
+                commands: [],
+                notes: '',
+            });
+        },
+        // The second pass: the step is judged again.
+        schemaAnswer('review', {
+            verdict: 'pass',
+            scores: { fidelity: 90, completeness: 100, accessibility: 80, quality: 85 },
+            issues: [],
+            summary: 'The code works now.',
+            recommendations: [],
+        }),
+    ]);
+
+    const result = await reviewStage({
+        client,
+        config: { output: { work: './.tmp' } },
+        root,
+        task: 'Make a landing.',
+        plan: one,
+        runId: 'run-1',
+    });
+
+    // The file of the defect is on the disk with the change that was asked for.
+    assert.match(await readFile(path.join(root, 'src', 'main.js'), 'utf8'), /import '\.\/styles\.scss'/);
+    // The role that owns the file was the one that was asked.
+    assert.match(asked.instructions, /You are the coder/);
+    assert.match(asked.instructions, /read the file, make the change, write the/i);
+    // The verdict is the verdict of the second pass.
+    assert.equal(result.verdict, 'pass');
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.issues, []);
+    assert.equal(result.repair.repaired.length, 1);
+    assert.equal(result.repair.repaired[0].role, 'coder');
+});
+
+test('the repair is off when the config says so', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-repair-off-'));
+    const client = fakeClient([schemaAnswer('review', {
+        verdict: 'fail',
+        scores: { fidelity: 40, completeness: 50, accessibility: 30, quality: 40 },
+        issues: [{ severity: 'high', path: 'src/main.js', message: 'The entry does not run.', requestedChange: 'Fix it.' }],
+        summary: 'The code does not work.',
+        recommendations: [],
+    })]);
+
+    const result = await reviewStage({
+        client,
+        config: { output: { work: './.tmp' }, stages: { review: { repair: false } } },
+        root,
+        task: 'Make a landing.',
+        plan: PLAN,
+        runId: 'run-1',
+    });
+
+    assert.equal(result.verdict, 'fail');
+    assert.equal(result.repair, null);
 });
 
 test('the review without a step to look at fails honestly', async () => {

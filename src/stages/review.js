@@ -13,7 +13,7 @@
  * @depends node:fs/promises, roles/index, openai/responses, stages/architect, stages/workspace
  * @usedBy stages/index, pipeline
  * @exports REVIEW_FILE, reviewVerdict, worstVerdict, readScreenshots, writeReview, readReview,
- *          reviewStage
+ *          issueOwner, repairText, repairIssues, reviewStage
  * @ai.tags stages, review
  * @ai.hint io
  * @ai.hint legacy-0.2
@@ -21,11 +21,13 @@
  */
 
 import { readFile } from 'node:fs/promises';
-import { runRole } from '../roles/index.js';
+import { runRole, roleReason } from '../roles/index.js';
 import { imagePart } from '../openai/responses.js';
 import { resolveInside } from '../agent/paths.js';
+import { checkFiles } from '../agent/syntax.js';
 import { readReferences } from '../inputs/references.js';
 import { architectureText } from './architect.js';
+import { applyFiles, filesByTool } from './step.js';
 import { runId, runFile, writeJsonFile, readJsonFile } from './workspace.js';
 
 /** The name of the file of the review inside the directory of the run. */
@@ -136,6 +138,172 @@ export async function readReview(root, config = {}, id = null) {
 }
 
 /**
+ * The step that owns the file of an issue, and the role that has to fix it.
+ *
+ * The reviewer names the path of the file and the change that is asked for. The role that
+ * wrote the file is the one that knows it: the role of the step of the plan that owns the
+ * file. When no step names the file, the role is guessed from the extension.
+ * @param {object|null} plan
+ * @param {object} issue
+ * @returns {{ step: object|null, role: string|null }}
+ * @exports
+ * @ai.hint pure
+ */
+export function issueOwner(plan, issue = {}) {
+    const rel = String(issue?.path ?? '').trim().replace(/\\/g, '/');
+    const steps = Array.isArray(plan?.steps) ? plan.steps : [];
+    for (const step of steps) {
+        const files = Array.isArray(step?.files) ? step.files : [];
+        if (files.some((file) => String(file ?? '').trim().replace(/\\/g, '/') === rel)) {
+            return { step, role: String(step?.role ?? '').trim() || null };
+        }
+    }
+    const ext = rel.slice(rel.lastIndexOf('.') + 1).toLowerCase();
+    const byExt = { scss: 'styler', sass: 'styler', css: 'styler', less: 'styler', js: 'coder', mjs: 'coder', html: 'markup' };
+    const role = byExt[ext] ?? null;
+    const step = steps.find((item) => String(item?.role ?? '').trim() === role) ?? null;
+    return { step, role };
+}
+
+/**
+ * The request that asks the role of the step to fix what the reviewer found.
+ *
+ * The reviewer names the file, what is wrong with it and the change that is asked for. The
+ * role that owns the file reads it, makes the change and writes the file back: a review
+ * that finds a defect and leaves it on the disk is a report, not a repair.
+ * @param {object} step
+ * @param {object[]} issues
+ * @returns {string}
+ * @exports
+ * @ai.hint pure
+ */
+export function repairText(step, issues = []) {
+    const list = Array.isArray(issues) ? issues : [];
+    const lines = list.map((issue) => [
+        `- file: ${issue?.path ?? 'unknown'}`,
+        `- severity: ${issue?.severity ?? 'medium'}`,
+        `- what is wrong: ${String(issue?.message ?? '').trim()}`,
+        `- what to do: ${String(issue?.requestedChange ?? '').trim()}`,
+    ].join('\n')).join('\n\n');
+    const files = Array.isArray(step?.files) ? step.files : [];
+    return [
+        `The review of the step ${step?.id ?? ''} found what has to be fixed. The review named the`,
+        'file, what is wrong with it and the change that is asked for:',
+        '',
+        lines,
+        '',
+        `The files of the step: ${files.join(', ') || 'not named'}.`,
+        '',
+        'Fix it now with the tools: read the file, make the change that is asked for, and write the',
+        'file back under the same path. Change the file, not the report: an answer that only says',
+        'what should be done leaves the defect on the disk. Keep the rest of the file as it is —',
+        'the repair is the change that is asked for, nothing else. Write the repaired file under the',
+        'same path as the broken one: a copy with another name leaves the broken file on the disk.',
+        'Do not answer until the file is on the disk.',
+    ].join('\n');
+}
+
+/**
+ * The repair of the issues that the review found.
+ *
+ * The issues are grouped by the role that owns the file, and every role is asked to fix its
+ * own: the role of the styles fixes the styles, the role of the code fixes the code. The
+ * files the roles wrote go on the disk, and they are checked: a repair that does not compile
+ * is a defect in a new place.
+ * @param {{ client: object, config?: object, root?: string, task?: string, plan?: object|null,
+ *   architecture?: object|null, issues?: object[], notify?: (event: object) => void,
+ *   env?: object }} request
+ * @returns {Promise<{ repaired: object[], written: string[], warnings: string[], errors: string[] }>}
+ * @exports
+ * @ai.hint io
+ */
+export async function repairIssues({
+    client,
+    config = {},
+    root = process.cwd(),
+    task = '',
+    plan = null,
+    architecture = null,
+    issues = [],
+    notify = () => {},
+    env = process.env,
+} = {}) {
+    const list = Array.isArray(issues) ? issues : [];
+    const repaired = [];
+    const written = [];
+    const warnings = [];
+    const errors = [];
+    if (!list.length) return { repaired, written, warnings, errors };
+
+    // The issues are grouped by the role that owns the file of the issue.
+    const groups = new Map();
+    for (const issue of list) {
+        const { step, role } = issueOwner(plan, issue);
+        const key = String(role ?? step?.id ?? 'unknown');
+        if (!groups.has(key)) groups.set(key, { step, role, issues: [] });
+        groups.get(key).issues.push(issue);
+    }
+
+    const brief = architecture ? architectureText(architecture) : '';
+    for (const group of groups.values()) {
+        if (!group.role) {
+            warnings.push(`Ремонт пропущен: у замечания нет владельца (${group.issues[0]?.path ?? 'файл'}).`);
+            continue;
+        }
+        const result = await runRole({
+            client,
+            config,
+            role: group.role,
+            input: repairText(group.step, group.issues),
+            context: {
+                task: String(task ?? ''),
+                step: group.step,
+                brief,
+                issues: group.issues,
+            },
+            root,
+            env,
+            maxTurns: config?.stages?.[group.role]?.maxTurns ?? null,
+            requireFiles: true,
+            notify,
+        });
+        if (!result.data) {
+            warnings.push(`Ремонт роли ${group.role} не удался: ${roleReason(result) || 'роль не вернула ответ'}.`);
+            errors.push(`${group.role}: ${roleReason(result) || 'роль не вернула ответ'}`);
+            continue;
+        }
+        const files = Array.isArray(result.data.files) ? result.data.files : [];
+        if (!files.length) {
+            warnings.push(`Ремонт роли ${group.role} не написал ни одного файла.`);
+            errors.push(`${group.role}: ни одного файла не написано`);
+            continue;
+        }
+        const applied = await applyFiles({ root, files, owned: filesByTool(result) });
+        warnings.push(...applied.warnings);
+        written.push(...applied.written);
+        if (applied.failed.length) {
+            warnings.push(`Ремонт роли ${group.role}: файлы не записаны: ${applied.failed.join(', ')}.`);
+            errors.push(`${group.role}: файлы не записаны: ${applied.failed.join(', ')}`);
+        }
+        // The repaired files have to compile: a repair that does not compile is a defect in
+        // a new place.
+        const checked = [...new Set([...applied.written, ...applied.replaced])].filter(Boolean);
+        const syntax = await checkFiles(root, checked, { env });
+        for (const error of syntax.errors) {
+            warnings.push(`Ремонт роли ${group.role}: ошибка синтаксиса в ${error.file}: ${error.message}`);
+            errors.push(`${error.file}: ${error.message}`);
+        }
+        repaired.push({
+            role: group.role,
+            step: group.step?.id ?? null,
+            issues: group.issues,
+            files: [...applied.written, ...applied.replaced],
+        });
+    }
+    return { repaired, written, warnings, errors };
+}
+
+/**
  * The stage of the review.
  *
  * @param {{ client: object, config?: object, root?: string, task?: string, plan?: object|null,
@@ -185,9 +353,14 @@ export async function reviewStage({
     const reference = await readReferences(root, inputs?.references ?? []);
     const warnings = [...shots.warnings, ...reference.warnings];
     const reviews = [];
-    const issues = [];
 
-    for (const step of steps) {
+    /**
+     * The review of one step of the plan.
+     * @param {object} step
+     * @returns {Promise<object>}
+     * @ai.hint io
+     */
+    const reviewOne = async (step) => {
         const blocks = [];
         if (task) blocks.push(String(task).trim());
         blocks.push([
@@ -230,15 +403,56 @@ export async function reviewStage({
             recommendations: Array.isArray(data.recommendations) ? data.recommendations : [],
         };
         if (!result.data) warnings.push(`Шаг ${step.id}: ревьюер не вернул ответ.`);
-        reviews.push(review);
-        issues.push(...review.issues);
+        return review;
+    };
+
+    for (const step of steps) reviews.push(await reviewOne(step));
+
+    // The review finds the defects. The repair fixes them: the role that owns the file is
+    // asked to make the change that the reviewer asked for, and the step is reviewed again.
+    // A review that finds a defect and leaves it on the disk is a report, not a repair.
+    const wanted = config?.stages?.review?.repair !== false;
+    let repair = null;
+    if (wanted) {
+        const found = reviews.flatMap((review) => review.issues);
+        if (found.length) {
+            repair = await repairIssues({
+                client,
+                config,
+                root,
+                task,
+                plan,
+                architecture,
+                issues: found,
+                notify,
+                env,
+            });
+            warnings.push(...repair.warnings);
+            // The steps that were repaired are judged again: the verdict of the run has to
+            // say what the project looks like now, not what it looked like before.
+            const dirty = new Set(found
+                .map((issue) => issueOwner(plan, issue).step?.id)
+                .filter(Boolean));
+            if (dirty.size) {
+                for (const [index, old] of reviews.entries()) {
+                    if (!dirty.has(old.step.id)) continue;
+                    const step = steps.find((item) => item.id === old.step.id);
+                    if (!step) continue;
+                    reviews[index] = await reviewOne(step);
+                }
+            }
+        }
     }
 
+    const issues = reviews.flatMap((review) => review.issues);
     const verdict = worstVerdict(reviews.map((review) => review.verdict));
     const review = {
         verdict,
         reviews,
         issues,
+        repair: repair
+            ? { repaired: repair.repaired, written: repair.written, errors: repair.errors }
+            : null,
         summary: `Шагов проверено: ${reviews.length}. Вердикт: ${verdict}.`,
     };
     const file = await writeReview(root, config, run, review);
@@ -249,6 +463,7 @@ export async function reviewStage({
         verdict,
         reviews,
         issues,
+        repair: review.repair,
         file,
         warnings,
         runId: run,

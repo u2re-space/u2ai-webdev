@@ -92,6 +92,7 @@ function validateStage(id, section, fail) {
     if (!(key in known)) fail(`${where}.${key}: неизвестное поле (допустимо: ${Object.keys(known).join(', ')})`);
   }
   if (!(Number.isSafeInteger(section.maxTurns) && section.maxTurns > 0)) fail(`${where}.maxTurns: целое > 0`);
+  if (section.repair != null && typeof section.repair !== 'boolean') fail(`${where}.repair: true | false`);
 }
 
 /**

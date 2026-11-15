@@ -48,6 +48,12 @@ export function instructions(context = {}) {
         ? 'The design direction, the measurements and the assets are in the task context. The markup has to match them: the regions, the order of the blocks and the names of the parts.'
         : '';
     const reference = referenceNote(context);
+    const repair = Array.isArray(context.issues) && context.issues.length
+        ? `The review of the step found what has to be fixed, and the request names the file, the
+defect and the change that is asked for. Fix it now: read the file, make the change, write the
+file back under the same path. The answer is the repaired file on the disk, never a description
+of the change.`
+        : '';
     return `You are the markup specialist of a web project. You write the structure of the
 page: the elements, the order, the names and the attributes that give the page its meaning.
 
@@ -57,6 +63,7 @@ ${brief}
 ${markup}
 ${design}
 ${reference}
+${repair}
 
 Rules:
 ${INPUTS_IN_CONTEXT}

@@ -49,6 +49,12 @@ export function instructions(context = {}) {
         ? 'The design direction, the palette and the measurements are in the task context. The styles have to match them: the colours, the type scale, the spacing and the sizes of the blocks.'
         : '';
     const reference = referenceNote(context);
+    const repair = Array.isArray(context.issues) && context.issues.length
+        ? `The review of the step found what has to be fixed, and the request names the file, the
+defect and the change that is asked for. Fix it now: read the file, make the change, write the
+file back under the same path. The answer is the repaired file on the disk, never a description
+of the change.`
+        : '';
     return `You are the styler of a web project. You write the CSS (or SCSS) of one step and you
 make the result look the way the design direction says.
 
@@ -58,6 +64,7 @@ ${brief}
 ${style}
 ${design}
 ${reference}
+${repair}
 
 Rules:
 ${INPUTS_IN_CONTEXT}

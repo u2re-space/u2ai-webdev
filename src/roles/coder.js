@@ -47,6 +47,12 @@ export function instructions(context = {}) {
         ? `The design direction, the palette and the measurements are in the task context. The code has to match them.`
         : '';
     const reference = referenceNote(context);
+    const repair = Array.isArray(context.issues) && context.issues.length
+        ? `The review of the step found what has to be fixed, and the request names the file, the
+defect and the change that is asked for. Fix it now: read the file, make the change, write the
+file back under the same path. The answer is the repaired file on the disk, never a description
+of the change.`
+        : '';
     return `You are the coder of a web project. You write the code of one step, in the files the
 step names, and you make it work.
 
@@ -55,6 +61,7 @@ ${step}
 ${stack}
 ${design}
 ${reference}
+${repair}
 
 Rules:
 ${INPUTS_IN_CONTEXT}
