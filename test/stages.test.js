@@ -4,7 +4,8 @@
  * @purpose The tests of the stages: the plan, the collection of the context, the architecture
  *          and the setup of the environment.
  * @depends node:test, node:path, node:fs/promises, stages/plan, stages/collect,
- *          stages/architect, stages/setup, stages/workspace, registry
+ *          stages/architect, stages/setup, stages/workspace, stages/roles, stages/markup,
+ *          stages/coding, stages/styling, stages/vector, stages/iconify, registry
  * @ai.tags test, stages
  */
 
@@ -19,7 +20,22 @@ import { collectStage, collectText, componentCards, readInputs } from '../src/st
 import { normalizeArchitecture, architectureText, architectStage } from '../src/stages/architect.js';
 import { detectPackageManager, applySetup, setupReadiness, setupStage, installDependencies, ensureStyleCompiler } from '../src/stages/setup.js';
 import { runId, runDirectory, sanitizeId } from '../src/stages/workspace.js';
+import { LIVE_ROLES, stageForRole } from '../src/stages/roles.js';
+import { role as markupRole } from '../src/stages/markup.js';
+import { role as codingRole } from '../src/stages/coding.js';
+import { role as stylingRole } from '../src/stages/styling.js';
+import { role as vectorRole } from '../src/stages/vector.js';
+import { role as iconifyRole } from '../src/stages/iconify.js';
 import { openRegistry } from '../src/registry.js';
+
+/** Стадии, которые берут шаги плана, и роль каждой из них. */
+const modules = {
+    markup: { role: markupRole },
+    coding: { role: codingRole },
+    styling: { role: stylingRole },
+    vector: { role: vectorRole },
+    iconify: { role: iconifyRole },
+};
 
 /**
  * A client that answers with the ready answers, one per call.
@@ -97,17 +113,56 @@ test('the plan is normalized: the ids are unique, the steps are sorted', () => {
         summary: 'A landing.',
         steps: [
             { id: 'b', title: 'Second', role: 'coder', dependsOn: ['a', 'nowhere'], files: ['index.html'] },
-            { id: 'a', title: 'First', role: 'planner' },
-            { id: 'a', title: 'Again', role: 'unknown-role' },
+            { id: 'a', title: 'First', role: 'markup' },
+            { id: 'a', title: 'Again', role: 'markup' },
         ],
         risks: ['the risk'],
     });
     assert.equal(plan.steps.length, 3);
     assert.deepEqual(plan.steps.map((step) => step.id), ['a', 'b', 'a-2']);
     assert.ok(plan.warnings.some((item) => /a-2/.test(item)));
-    assert.ok(plan.warnings.some((item) => /unknown-role/.test(item)));
     assert.ok(plan.warnings.some((item) => /nowhere/.test(item)));
     assert.deepEqual(plan.risks, ['the risk']);
+});
+
+test('a step of a role that no stage executes is given to the role that owns its files', () => {
+    const plan = normalizePlan({
+        summary: 'A landing.',
+        steps: [
+            { id: 'a', title: 'The badge', role: 'planner', files: ['assets/badge.svg'] },
+            { id: 'b', title: 'The page', role: 'planner', files: ['index.html'] },
+            { id: 'c', title: 'The script', role: 'reviewer', files: ['src/main.js'] },
+        ],
+    });
+    assert.deepEqual(plan.steps.map((step) => step.role), ['editor', 'markup', 'coder']);
+    assert.ok(plan.warnings.some((item) => /Шаг a: роль "planner" не исполняется/.test(item)));
+    assert.ok(plan.warnings.some((item) => /взята роль "editor"/.test(item)));
+});
+
+test('a step of a role that no stage executes leaves the plan when the role cannot be guessed', () => {
+    const plan = normalizePlan({
+        summary: 'A landing.',
+        steps: [
+            { id: 'a', title: 'The environment', role: 'installer', files: ['package.json', 'vite.config.js'] },
+            { id: 'b', title: 'The figures', role: 'planner', files: ['assets/chess-piece.png'] },
+            { id: 'c', title: 'Nothing', role: 'unknown-role' },
+        ],
+    });
+    assert.deepEqual(plan.steps, []);
+    assert.ok(plan.warnings.some((item) => /Шаг a:/.test(item) && /стадия setup/.test(item)));
+    assert.ok(plan.warnings.some((item) => /Шаг b:/.test(item) && /chess-piece\.png/.test(item)));
+    assert.ok(plan.warnings.some((item) => /Шаг c:/.test(item) && /unknown-role/.test(item)));
+});
+
+test('the live roles are the roles of the stages that take the steps', () => {
+    assert.deepEqual(
+        Object.keys(LIVE_ROLES).sort(),
+        Object.values(modules).map((module) => module.role).sort(),
+    );
+    for (const [stage, module] of Object.entries(modules)) {
+        assert.equal(LIVE_ROLES[module.role], stage, `the stage ${stage} runs the role ${module.role}`);
+        assert.equal(stageForRole(module.role), stage);
+    }
 });
 
 test('a cycle in the dependencies does not break the plan', () => {
@@ -132,7 +187,7 @@ test('the text of the plan names the steps and their criteria', () => {
 test('the plan of a run is written to the file of the run and read back', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-plan-'));
     const config = { output: { work: './.tmp' } };
-    const plan = normalizePlan({ summary: 'x', steps: [{ id: 'a', title: 'One' }] });
+    const plan = normalizePlan({ summary: 'x', steps: [{ id: 'a', title: 'One', role: 'markup' }] });
     const file = await writePlan(root, config, 'run-1', plan);
     assert.match(file, /\.tmp[\\/]run-1[\\/]plan\.json$/);
     const back = await readPlan(root, config, 'run-1');
@@ -162,6 +217,33 @@ test('the stage of the plan asks the planner and writes the plan', async () => {
     assert.match(result.file, /plan\.json$/);
     const saved = JSON.parse(await readFile(result.file, 'utf8'));
     assert.equal(saved.summary, 'A landing page.');
+});
+
+test('the stage of the plan says that a step of a dead role leaves the plan', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-plan-role-'));
+    const client = fakeClient([schemaAnswer('plan', {
+        summary: 'A landing page.',
+        steps: [
+            { id: 'a', title: 'The figures', role: 'planner', dependsOn: [], files: ['assets/chess-piece.png'], criteria: ['opens'] },
+            { id: 'b', title: 'The badge', role: 'planner', dependsOn: [], files: ['assets/badge.svg'], criteria: ['opens'] },
+        ],
+        risks: [],
+        questions: [],
+    })]);
+
+    const result = await planStage({
+        client,
+        config: { output: { work: './.tmp' }, stack: { frontendFramework: 'vanilla' } },
+        root,
+        task: 'Make a landing.',
+        runId: 'run-1',
+    });
+
+    // The step whose role cannot be guessed leaves the plan, and the report says why.
+    assert.deepEqual(result.plan.steps.map((step) => step.id), ['b']);
+    assert.match(result.warnings.join('\n'), /Шаг a:.*не исполняется ни одной стадией/s);
+    // The step whose files belong to a role is given to that role.
+    assert.equal(result.plan.steps[0].role, 'editor');
 });
 
 test('the correction of the planner does not offer the command that is gone', async () => {

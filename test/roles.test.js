@@ -3,7 +3,7 @@
  * @module test/roles
  * @purpose The tests of the roles: the resolution of a role, the instructions and the loop of
  *          the calls with the tools.
- * @depends node:test, node:http, roles/index, openai/client, config
+ * @depends node:test, node:http, roles/index, stages/roles, openai/client, config
  * @ai.tags test, roles
  */
 
@@ -15,6 +15,7 @@ import path from 'node:path';
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 
 import { ROLES, ROLE_NAMES, resolveRole, roleSchema, buildInstructions, runRole, roleReason } from '../src/roles/index.js';
+import { LIVE_ROLE_NAMES } from '../src/stages/roles.js';
 import { toolSpecs } from '../src/agent/tool-specs.js';
 import { createClient } from '../src/openai/client.js';
 import { defaults } from '../src/config.js';
@@ -228,6 +229,18 @@ test('the planner does not plan a drawn copy of a picture of the reference', () 
     assert.match(text, /stage `pictures` cuts them out/);
     // The direction of the design is not measured: the command is gone from the bridge.
     assert.doesNotMatch(text, /\["design"/);
+});
+
+test('the planner names the roles that the stages of the run execute', () => {
+    const text = ROLES.planner.instructions({});
+    for (const role of LIVE_ROLE_NAMES) {
+        assert.match(text, new RegExp(`\`${role}\``), `the role ${role} is not named to the planner`);
+    }
+    // The roles that work once for the whole run are not roles of a step.
+    for (const role of ['planner', 'installer', 'reviewer', 'auditor', 'architect']) {
+        assert.doesNotMatch(text, new RegExp(`\`${role}\` writes`), `the role ${role} may be planned as a step`);
+    }
+    assert.match(text, /never done/);
 });
 
 test('the roles that check their work have the tool of the command', () => {

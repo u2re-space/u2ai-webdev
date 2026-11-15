@@ -11,7 +11,7 @@
  *
  * @depends roles/index, stages/architect, stages/step, vector/svg, agent/fs-tools
  * @usedBy stages/index, pipeline
- * @exports polishSvgFiles, preparedVectorPlan, vectorStage
+ * @exports polishSvgFiles, preparedVectorPlan, role, vectorStage
  * @ai.tags stages, vector, svg
  * @ai.hint io
  * @ai.hint legacy-0.2
@@ -25,6 +25,9 @@ import { resolveInside } from '../agent/paths.js';
 import { architectureText } from './architect.js';
 import { runStepStage } from './step.js';
 import { optimizeSvg, validateSvg } from '../vector/svg.js';
+
+/** Роль, чьи шаги исполняет эта стадия. */
+export const role = 'editor';
 
 /**
  * Check and tidy the SVG files of a step.

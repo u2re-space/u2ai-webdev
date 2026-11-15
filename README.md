@@ -89,6 +89,19 @@ stack of the architect. The versions of the tools of the stack are pinned there 
 missing — the dependencies, the scripts, the files — and the stage checks the readiness of the
 project and says what is not there.
 
+The role of a step is the role that does it. Five roles take the steps of the plan: `markup`
+writes the markup, `coder` writes the scripts and the modules, `styler` writes the styles,
+`editor` draws the vector graphics, `iconifier` chooses the icons. The other roles work once
+for the whole run — the plan, the architecture, the environment, the review, the audit and the
+lessons are stages, not steps. A plan that names another role is a promise the run cannot keep,
+so the harness does not keep it silently: the role is guessed by the files of the step
+(`index.html` → `markup`, `styles.scss` → `styler`, `assets/badge.svg` → `editor`), and a step
+whose role cannot be guessed leaves the plan with a warning that says what happened. The files
+of the environment (`package.json`, `vite.config.js`, `.gitignore`) are not guessed: the stage
+`setup` prepares them for the whole run, and a step that asks a role to write them is dropped.
+The planner is told the five roles in its prompt and in the schema of its answer, so the plan of
+a model that listens names them from the start.
+
 The dependencies go on the disk by the code of the stage, not by the model: the stage reads the
 manifest and runs the package manager of the project (`npm install --no-audit --no-fund`), so a
 run that leaves the setup stage has a `node_modules` and not only a promise of one. The runner
@@ -243,6 +256,10 @@ turns.
 | `reviewer` | Review the result. |
 | `auditor` | Audit the project. |
 | `learner` | Write the lessons. |
+
+Five of them take the steps of the plan: `markup`, `coder`, `styler`, `editor` and
+`iconifier`. The other seven work once for the whole run, and a step of the plan may not name
+them.
 
 `--role <role>=<model>[:<effort>[:<max-effort>]]` gives a role its own model; the flag may be
 given many times. The config may override the model, the effort, the instructions and the tools of

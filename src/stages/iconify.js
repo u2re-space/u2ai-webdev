@@ -9,7 +9,7 @@
  *
  * @depends node:fs/promises, roles/index, stages/architect, stages/step, agent/paths
  * @usedBy stages/index, pipeline
- * @exports iconFiles, iconifyStage
+ * @exports iconFiles, role, iconifyStage
  * @ai.tags stages, icons
  * @ai.hint io
  * @ai.hint legacy-0.2
@@ -20,6 +20,9 @@ import { stat } from 'node:fs/promises';
 import { resolveInside } from '../agent/paths.js';
 import { architectureText } from './architect.js';
 import { runStepStage } from './step.js';
+
+/** Роль, чьи шаги исполняет эта стадия. */
+export const role = 'iconifier';
 
 /**
  * The files of the icons of an answer.

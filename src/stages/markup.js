@@ -10,7 +10,7 @@
  *
  * @depends roles/index, stages/architect, stages/step
  * @usedBy stages/index, pipeline
- * @exports markupStage
+ * @exports role, markupStage
  * @ai.tags stages, markup, accessibility
  * @ai.hint io
  * @ai.hint legacy-0.2
@@ -19,6 +19,9 @@
 
 import { architectureText } from './architect.js';
 import { runStepStage } from './step.js';
+
+/** Роль, чьи шаги исполняет эта стадия. */
+export const role = 'markup';
 
 /**
  * The stage of the markup.

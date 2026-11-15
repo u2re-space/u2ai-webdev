@@ -10,18 +10,20 @@
  *   The plan is written to the directory of the run (`.tmp/<id>/plan.json`), so the next stages
  *   and a resumed run read the same plan and do not drift.
  *
- * @depends node:path, roles/index, inputs/index, stages/workspace
+ * @depends node:path, roles/index, inputs/index, stages/workspace, stages/roles
  * @usedBy stages/index, stages/architect, pipeline
  * @exports PLAN_FILE, normalizePlan, orderSteps, planText, writePlan, readPlan, planStage
  * @ai.tags stages, plan
  * @ai.hint io
  * @ai.hint legacy-0.2
  * @changed 2026-11-13 Ported from the monolith: the plan is a file of the run, not a chat.
+ * @changed 2026-11-15 Роль шага проверяется: план не оставляет шагов, которые никто не сделает.
  */
 
-import { runRole, ROLE_NAMES, roleReason } from '../roles/index.js';
+import { runRole, roleReason } from '../roles/index.js';
 import { inputContext } from '../inputs/index.js';
 import { runId, runFile, writeJsonFile, readJsonFile } from './workspace.js';
+import { planRole } from './roles.js';
 
 /**
  * The name of the file of the plan inside the directory of the run. */
@@ -46,6 +48,9 @@ export const PLAN_CORRECTION = [
     'Then submit the plan with the tool `plan`: at least two concrete steps, each with an id,',
     'a title, the role that does it, the files it touches and the criteria that can be checked',
     'without a human.',
+    'The role of a step is one of: `markup`, `coder`, `styler`, `editor`, `iconifier`. The stages',
+    'of the run take the steps of these roles and of no others: a step with any other role is',
+    'never done.',
     'Do not answer in prose and do not describe what you are going to do later — the steps are',
     'the work.',
 ].join('\n');
@@ -104,6 +109,10 @@ export function orderSteps(steps = []) {
  *
  * Every field of a step has a default, the ids are unique, the dependencies that point to
  * nothing are dropped, and the steps are sorted in the order they may be done.
+ *
+ * The role of a step is the role that does it. A role that no stage executes is a step that
+ * nobody will do: the role is guessed by the files of the step, and a step whose role
+ * cannot be guessed leaves the plan with a warning.
  * @param {object} plan
  * @returns {{ summary: string, steps: object[], risks: string[], questions: string[], warnings: string[] }}
  * @exports
@@ -113,31 +122,33 @@ export function normalizePlan(plan = {}) {
     const warnings = [];
     const raw = Array.isArray(plan?.steps) ? plan.steps : [];
     const seen = new Map();
+    const steps = [];
 
-    const steps = raw.map((step, at) => {
-        const source = step && typeof step === 'object' ? step : {};
-        let id = String(source.id ?? '').trim() || `step-${at + 1}`;
-        if (seen.has(id)) {
-            const count = seen.get(id) + 1;
-            seen.set(id, count);
-            warnings.push(`Шаг с id "${id}" повторяется: он переименован в "${id}-${count}".`);
-            id = `${id}-${count}`;
-        } else {
-            seen.set(id, 1);
+    for (const [at, source] of raw.entries()) {
+        const item = source && typeof source === 'object' ? source : {};
+        const base = String(item.id ?? '').trim() || `step-${at + 1}`;
+        const count = seen.get(base) ?? 0;
+        let id = base;
+        if (count) {
+            id = `${base}-${count + 1}`;
+            warnings.push(`Шаг с id "${base}" повторяется: он переименован в "${id}".`);
         }
-        const role = String(source.role ?? '').trim().toLowerCase();
-        if (role && !ROLE_NAMES.includes(role)) {
-            warnings.push(`Шаг ${id}: роль "${role}" неизвестна, взята роль planner.`);
-        }
-        return {
+        // The role of the step decides who does it. A role that no stage takes is a promise
+        // the run cannot keep: the step is either given to the role that owns its files or
+        // it leaves the plan.
+        const resolved = planRole(item.role, item.files);
+        if (resolved.warning) warnings.push(`Шаг ${id}: ${resolved.warning}`);
+        if (resolved.dropped) continue;
+        seen.set(base, count + 1);
+        steps.push({
             id,
-            title: String(source.title ?? '').trim() || `Шаг ${id}`,
-            role: ROLE_NAMES.includes(role) ? role : 'planner',
-            dependsOn: lines(source.dependsOn),
-            files: lines(source.files),
-            criteria: lines(source.criteria),
-        };
-    });
+            title: String(item.title ?? '').trim() || `Шаг ${id}`,
+            role: resolved.role,
+            dependsOn: lines(item.dependsOn),
+            files: lines(item.files),
+            criteria: lines(item.criteria),
+        });
+    }
 
     const known = new Set(steps.map((step) => step.id));
     for (const step of steps) {

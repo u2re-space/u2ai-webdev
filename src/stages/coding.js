@@ -9,7 +9,7 @@
  *
  * @depends roles/index, stages/architect, stages/step
  * @usedBy stages/index, pipeline
- * @exports codingStage
+ * @exports role, codingStage
  * @ai.tags stages, coding
  * @ai.hint io
  * @ai.hint legacy-0.2
@@ -18,6 +18,9 @@
 
 import { architectureText } from './architect.js';
 import { runStepStage } from './step.js';
+
+/** Роль, чьи шаги исполняет эта стадия. */
+export const role = 'coder';
 
 /**
  * The stage of the code.

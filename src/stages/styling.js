@@ -14,7 +14,7 @@
  * @depends roles/index, stages/architect, stages/step, inputs/index, agent/markup-styles,
  *          stages/project-files
  * @usedBy stages/index, pipeline
- * @exports stylingStage, styleTokensText
+ * @exports role, stylingStage, styleTokensText
  * @ai.tags stages, styling, tokens
  * @ai.hint io
  * @ai.hint legacy-0.2
@@ -25,6 +25,9 @@ import { architectureText } from './architect.js';
 import { projectFiles } from './project-files.js';
 import { checkMarkupStyles } from '../agent/markup-styles.js';
 import { runStepStage } from './step.js';
+
+/** Роль, чьи шаги исполняет эта стадия. */
+export const role = 'styler';
 
 /**
  * The tokens of a stylesheet as the block of the custom properties.

@@ -2,7 +2,7 @@
  * @file src/roles/planner.js
  * @module roles/planner
  * @purpose The plan of the work: the steps, their order, their files and their criteria.
- * @depends roles/untrusted
+ * @depends roles/untrusted, stages/roles
  * @usedBy roles/index, stages/plan
  * @exports name, schema, tools, maxTurns, instructions
  * @ai.tags roles, plan
@@ -11,6 +11,7 @@
 
 import { UNTRUSTED } from './untrusted.js';
 import { INPUTS_IN_CONTEXT } from './inputs.js';
+import { LIVE_ROLE_NAMES } from '../stages/roles.js';
 
 /** The name of the role. */
 export const name = 'planner';
@@ -67,6 +68,14 @@ ${INPUTS_IN_CONTEXT}
   copy of it, and do not ask for an SVG of a logo, a badge or a photograph of the reference.
 - One step is one role's work. The steps are small enough to be done in one sitting and large
   enough to be worth a step. A step that needs two roles is two steps.
+- The role of a step is one of: ${LIVE_ROLE_NAMES.map((name) => `\`${name}\``).join(', ')}. The
+  stages of the run take the steps of these roles and of no others, so a step with any other
+  role is never done. \`markup\` writes the markup, \`coder\` writes the scripts and the modules,
+  \`styler\` writes the styles, \`editor\` draws the vector graphics, \`iconifier\` chooses the
+  icons.
+- The environment, the structure of the project, the measurement of the reference, the
+  preparation of the pictures of the reference and the review are not steps: the stages of the
+  run do them by themselves. Name the prepared pictures in the step that uses them.
 - The steps come in an order that can be executed: the markup before the styles, the setup
   before the code that needs the dependencies, the icons before the page that uses them.
 - Every step names the files it touches. The paths are relative to the root of the project.
