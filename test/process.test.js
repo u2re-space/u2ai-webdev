@@ -158,6 +158,11 @@ test('the registry of the stages knows the order and the dependencies', () => {
     assert.equal(order.warnings.length, 0);
     assert.ok(order.stages.findIndex((stage) => stage.name === 'markup')
         < order.stages.findIndex((stage) => stage.name === 'coding'));
+
+    // The pictures come after the plan: the plan is what measures the reference.
+    assert.deepEqual(stageDependencies('pictures'), ['plan']);
+    assert.ok(order.stages.findIndex((stage) => stage.name === 'plan')
+        < order.stages.findIndex((stage) => stage.name === 'pictures'));
 });
 
 test('a stage that is switched off is not in the list', () => {

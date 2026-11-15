@@ -68,8 +68,8 @@ report into the directory of the run and hands the result to the next one.
 | Stage | What it does |
 |---|---|
 | `collect` | Read the inputs of the project, the map of the project, the registry of the components, the skill packs and the memory. |
-| `pictures` | Prepare the crops of the reference that are pictures: the chess piece, the board, the badge. |
 | `plan` | Break the task into steps, each with its role, its files and its check. |
+| `pictures` | Prepare the crops of the reference that are pictures: the chess piece, the board, the badge. |
 | `architect` | Decide the structure of the project: the files, the modules and the order. |
 | `setup` | Prepare the environment: the scaffold, the dependencies and the entry points. |
 | `markup` | Write the markup of the pages. |
@@ -153,6 +153,18 @@ board, the badge. A crop is a rectangle of the screenshot, so the page around th
 still in the picture. The stage `pictures` gives those crops to the sibling CLI `ai-image`,
 which cuts the object out, and puts the result into `assets/import/`. The roles get the path of
 the prepared picture in the context of the run.
+
+The stage comes after the stage `plan`: the plan is what measures the reference, and the crops
+of a reference that was not measured yet do not exist. The sheet of the measurements is read
+again there, so the stages after it work with the numbers that are really on the disk.
+
+The sheet is not the only source of the crops. The measurer cuts the fragments before it writes
+the sheet, and a run that died in the middle leaves the fragments cut and no sheet at all.
+When the sheet names no crops, the fragments that are on the disk are taken: the list of the
+measurer (`<delivery>/stages/crops.json`) and, when there is no list, the files of the crops
+themselves (`<delivery>/crops/*.png`). The measurer says `asset` for a fragment that is worth
+reusing and `detail` for a fragment that is worth reading closely: an asset is a picture of this
+package, a detail is a piece of the screenshot and stays as it is.
 
 ```json
 {

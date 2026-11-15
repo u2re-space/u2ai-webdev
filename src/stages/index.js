@@ -75,22 +75,32 @@ export const STAGES = Object.freeze([
         apply: (ctx, result) => { ctx.inputs = result?.inputs ?? null; },
     },
     {
-        name: 'pictures',
-        title: 'Prepare the pictures',
-        dependsOn: ['collect'],
-        run: picturesStage,
-        args: (ctx) => ({ apply: ctx.apply !== false }),
-        apply: (ctx, result) => {
-            ctx.pictures = result?.pictures ?? [];
-            if (ctx.inputs) ctx.inputs = { ...ctx.inputs, pictures: ctx.pictures };
-        },
-    },
-    {
         name: 'plan',
         title: 'Plan the work',
         dependsOn: ['collect'],
         run: planStage,
         apply: (ctx, result) => { ctx.plan = result?.plan ?? null; },
+    },
+    {
+        name: 'pictures',
+        title: 'Prepare the pictures',
+        // The pictures come after the plan: the plan is what measures the reference, and the
+        // crops of a reference that was not measured yet do not exist.
+        dependsOn: ['plan'],
+        run: picturesStage,
+        args: (ctx) => ({ apply: ctx.apply !== false }),
+        apply: (ctx, result) => {
+            ctx.pictures = result?.pictures ?? [];
+            if (!ctx.inputs) return;
+            const next = { ...ctx.inputs, pictures: ctx.pictures };
+            // The measurer may have run after the collection: the sheet of the measurements is
+            // refreshed, so the stages after this one work with the numbers that are there.
+            if (result?.measurements) next.measurements = result.measurements;
+            if (result?.files?.measurements) {
+                next.files = { ...next.files, measurements: result.files.measurements };
+            }
+            ctx.inputs = next;
+        },
     },
     {
         name: 'architect',

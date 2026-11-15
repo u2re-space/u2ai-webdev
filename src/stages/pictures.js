@@ -12,11 +12,16 @@
  *   object stays. The result lands in the project, and the roles get the path of it in the
  *   context of the run.
  *
+ *   The sheet is not the only source of the crops: the measurer cuts the fragments before it
+ *   writes the sheet, and a run that died in the middle leaves the fragments on the disk.
+ *   When the sheet names no crops, the fragments that are on the disk are taken — an asset
+ *   that is already cut is prepared even when the sheet that would name it does not exist.
+ *
  *   A picture that cannot be prepared is not a reason to stop the run: the stage says what
  *   happened and the crop stays as it was.
  *
- * @depends node:path, node:fs/promises, inputs/crops, inputs/candidates, agent/bridges,
- *          agent/paths
+ * @depends node:path, node:fs/promises, inputs/crops, inputs/candidates, inputs/measurements,
+ *          inputs/measuredCrops, agent/bridges, agent/paths
  * @usedBy stages/index, pipeline
  * @exports picturesStage, pictureName, pictureCrops, pictureSubject, pictureKinds,
  *          PICTURES_FILE, picturesPath, writePictures, readPictures
@@ -24,12 +29,16 @@
  * @ai.hint io
  * @changed 2026-11-14 The crops of the reference are prepared with `ai-image`.
  * @changed 2026-11-15 The crops are looked for next to the sheet that was found.
+ * @changed 2026-11-15 The crops of the measurer are taken from the disk when the sheet names
+ *                       none: the fragments are cut before the sheet is written.
  */
 
 import path from 'node:path';
 import { mkdir, stat } from 'node:fs/promises';
 import { resolveCropFile, cropRelative } from '../inputs/crops.js';
-import { inputCandidates } from '../inputs/candidates.js';
+import { inputCandidates, findInput } from '../inputs/candidates.js';
+import { parseMeasurements } from '../inputs/measurements.js';
+import { measuredCrops } from '../inputs/measuredCrops.js';
 import { runBridge, bridgeEnabled } from '../agent/bridges.js';
 import { runFile, writeJsonFile, readJsonFile } from './workspace.js';
 
@@ -103,7 +112,7 @@ export function pictureName(crop) {
     const base = path.basename(String(crop ?? '').replace(/\\/g, '/')).replace(/\.[^.]+$/, '');
     return base
         .replace(/^\d+[-_]*/, '')
-        .replace(/^(region|element|crop)[-_]*/, '')
+        .replace(/^(region|element|crop|asset|detail|none)[-_]*/, '')
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-+|-+$/g, '')
@@ -182,7 +191,8 @@ export function pictureCrops(sheet, kinds = pictureKinds) {
  * @param {{ root?: string, config?: object, inputs?: object|null, env?: object,
  *   notify?: (event: object) => void, apply?: boolean, runId?: string|null }} request
  * @returns {Promise<{ stage: string, ok: boolean, skipped: boolean, pictures: object[],
- *   warnings: string[], text: string, file: string|null }>}
+ *   measurements?: object|null, files?: object|null, warnings: string[], text: string,
+ *   file: string|null }>}
  * @exports
  * @ai.hint io
  */
@@ -197,36 +207,67 @@ export async function picturesStage({
 } = {}) {
     const settings = config?.pictures ?? {};
     const warnings = [];
-    const sheet = inputs?.measurements ?? null;
 
     if (settings.enabled === false) {
         return skipped('Подготовка картинок выключена в конфиге.');
-    }
-    if (!sheet?.present) {
-        return skipped('Лист измерений не найден: обрезки не готовятся.');
     }
     if (!bridgeEnabled(config, 'ai-image')) {
         return skipped('Мост ai-image выключен: обрезки остаются как есть.');
     }
 
     const kinds = Array.isArray(settings.kinds) && settings.kinds.length ? settings.kinds : pictureKinds;
-    const crops = pictureCrops(sheet, kinds);
+    const workDir = String(config?.output?.work ?? '.tmp');
+    // Кандидаты листа измерений: в корне проекта и в каталоге измерителя.
+    const candidates = inputCandidates(config?.inputs?.measurements, 'measurements');
+
+    // Лист измерений: собранный или тот, что появился после сбора — измеритель работает в
+    // стадии плана, а план идёт после сбора.
+    let sheetFile = String(inputs?.files?.measurements ?? '') || String(candidates[0] ?? 'measurements.json');
+    let sheet = inputs?.measurements ?? null;
+    if (!sheet?.present) {
+        const found = await findInput(root, candidates);
+        if (found) {
+            sheet = parseMeasurements(found.text);
+            sheetFile = found.path;
+        }
+    }
+
+    // Обрезки: их называет лист. Когда лист не называет ни одного, берутся обрезки, которые
+    // уже лежат на диске: измеритель режет фрагменты раньше, чем пишет лист.
+    let crops = pictureCrops(sheet, kinds);
+    let cropDir = path.dirname(sheetFile);
+    let from = 'sheet';
+
     if (!crops.length) {
-        return skipped('В листе измерений нет обрезков-картинок.');
+        // Каталоги доставки измерителя: тот, где нашли лист, и те, что назвала конфигурация.
+        const dirs = [];
+        for (const dir of [cropDir, ...candidates.map((item) => path.dirname(item))]) {
+            const rel = String(dir ?? '').trim() || '.';
+            if (!dirs.includes(rel)) dirs.push(rel);
+        }
+        const found = await measuredCrops(root, { dirs });
+        if (found) {
+            crops = pictureCrops({ elements: found.crops }, kinds);
+            cropDir = found.dir;
+            from = 'disk';
+        }
+    }
+
+    if (!crops.length) {
+        return skipped(
+            sheet?.present
+                ? 'В листе измерений нет обрезков-картинок.'
+                : 'Лист измерений не найден и обрезков на диске нет: картинки не готовятся.',
+            { measurements: sheet, files: { measurements: sheet?.present ? sheetFile : null } },
+        );
     }
 
     const limit = Number.isSafeInteger(settings.max) && settings.max > 0 ? settings.max : 6;
-    // Лист, который нашли: обрезки лежат рядом с ним, а не в корне проекта.
-    const sheetFile = String(inputs?.files?.measurements
-        ?? inputCandidates(config?.inputs?.measurements, 'measurements')[0]
-        ?? 'measurements.json');
-    const sheetDir = path.dirname(sheetFile);
-    const workDir = String(config?.output?.work ?? '.tmp');
     const target = apply ? String(settings.dir ?? 'assets/import') : path.join(workDir, 'pictures');
 
     const pictures = [];
     for (const crop of crops.slice(0, limit)) {
-        const source = await resolveCropFile(root, crop.crop, { sheetDir, workDir });
+        const source = await resolveCropFile(root, crop.crop, { sheetDir: cropDir, workDir });
         if (!source) {
             warnings.push(`Обрезок не найден на диске: ${crop.crop}`);
             continue;
@@ -294,9 +335,11 @@ export async function picturesStage({
 
     const skippedRest = crops.length > limit ? [`Обрезков больше, чем лимит (${limit}).`] : [];
     const all = [...warnings, ...skippedRest];
-    const text = pictures.length
+    const note = from === 'disk' ? 'Обрезки взяты с диска: лист измерений их не назвал.' : '';
+    const list = pictures.length
         ? pictures.map((item) => `- ${item.name} (${item.kind}) → ${item.file}`).join('\n')
         : 'Картинки не подготовлены.';
+    const text = [note, list].filter(Boolean).join('\n');
 
     // The pictures go to the disk: a resumed run skips this stage and needs them.
     const file = await writePictures(root, config, id, pictures).catch((error) => {
@@ -309,6 +352,10 @@ export async function picturesStage({
         ok: true,
         skipped: pictures.length === 0,
         pictures,
+        // The sheet of the measurements, as it is on the disk now: the measurer may have run
+        // after the collection, and the stages after this one need the real numbers.
+        measurements: sheet,
+        files: { measurements: sheet?.present ? sheetFile : null },
         warnings: all,
         text,
         file,
@@ -318,10 +365,11 @@ export async function picturesStage({
 /**
  * The answer of a stage that has nothing to do.
  * @param {string} reason
+ * @param {object} [extra] the fields that are known anyway
  * @returns {{ stage: string, ok: boolean, skipped: boolean, pictures: object[], warnings: string[], text: string }}
  * @ai.hint pure
  */
-function skipped(reason) {
+function skipped(reason, extra = {}) {
     return {
         stage: 'pictures',
         ok: true,
@@ -329,5 +377,6 @@ function skipped(reason) {
         pictures: [],
         warnings: [reason],
         text: reason,
+        ...extra,
     };
 }

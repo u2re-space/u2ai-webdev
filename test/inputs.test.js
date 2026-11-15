@@ -4,7 +4,7 @@
  * @purpose The tests of the inputs: `DESIGN.md`, `measurements.json`, `palette.json`,
  *          `tokens.css`, the pictures and the instructions of the project.
  * @depends node:test, inputs/index, inputs/design-md, inputs/measurements, inputs/palette,
- *          inputs/tokens, inputs/assets, inputs/measured
+ *          inputs/tokens, inputs/assets, inputs/measured, inputs/measuredCrops
  * @ai.tags test, inputs
  */
 
@@ -21,6 +21,7 @@ import { parseTokensCss, tokenValue } from '../src/inputs/tokens.js';
 import { detectImageMime, listImages, readProjectInstructions } from '../src/inputs/assets.js';
 import { collectInputs, inputContext, inputSummary } from '../src/inputs/index.js';
 import { findMeasurement } from '../src/inputs/measured.js';
+import { measuredCrops, cropKind, cropNameOf } from '../src/inputs/measuredCrops.js';
 import { findReferences, readReferences } from '../src/inputs/references.js';
 import { defaults } from '../src/config.js';
 
@@ -305,6 +306,59 @@ test('a sheet older than the picture is stale', async () => {
     const found = await findMeasurement({ root, config, picture: 'ref.png' });
 
     assert.equal(found, null);
+});
+
+test('the crops of the measurer are found without the sheet', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-crops2-'));
+    await mkdir(path.join(root, 'measurements', 'stages'), { recursive: true });
+    await mkdir(path.join(root, 'measurements', 'crops'), { recursive: true });
+    await writeFile(path.join(root, 'measurements', 'stages', 'crops.json'), JSON.stringify({
+        crops: [
+            { name: 'brand-logo', kind: 'asset', crop: 'crops/01-asset-brand-logo.png', use: 'artwork' },
+            { name: 'hero-title', kind: 'detail', crop: 'crops/02-detail-hero-title.png' },
+        ],
+    }));
+
+    const found = await measuredCrops(root, { dirs: ['.', 'measurements'] });
+
+    assert.equal(found.dir, 'measurements');
+    assert.equal(found.crops.length, 2);
+    // The asset is a picture of this package, the detail is a piece of the screenshot.
+    assert.equal(found.crops[0].kind, 'image');
+    assert.equal(found.crops[1].kind, 'detail');
+    assert.equal(found.crops[0].crop, 'crops/01-asset-brand-logo.png');
+    assert.equal(found.crops[0].use, 'artwork');
+});
+
+test('the crops of the measurer are found by their files', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-crops3-'));
+    await mkdir(path.join(root, 'measurements', 'crops'), { recursive: true });
+    await writeFile(path.join(root, 'measurements', 'crops', '01-asset-brand-logo.png'), 'png');
+    await writeFile(path.join(root, 'measurements', 'crops', '05-detail-hero-title.png'), 'png');
+    await writeFile(path.join(root, 'measurements', 'crops', 'notes.txt'), 'text');
+
+    const found = await measuredCrops(root, { dirs: ['measurements'] });
+
+    assert.equal(found.crops.length, 2);
+    assert.equal(found.crops[0].name, 'brand-logo');
+    assert.equal(found.crops[0].kind, 'image');
+    assert.equal(found.crops[1].kind, 'detail');
+    // A file that is not a picture is not a crop.
+    assert.ok(!found.crops.some((item) => /notes/.test(item.crop)));
+});
+
+test('there are no crops when the measurer left none', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-crops4-'));
+    assert.equal(await measuredCrops(root, { dirs: ['measurements'] }), null);
+});
+
+test('the kind of a crop of the measurer is the kind of this package', () => {
+    assert.equal(cropKind('asset'), 'image');
+    assert.equal(cropKind('detail'), 'detail');
+    assert.equal(cropKind('none'), 'detail');
+    assert.equal(cropKind(''), 'image');
+    assert.equal(cropNameOf('crops/01-asset-brand-logo.png'), 'brand-logo');
+    assert.equal(cropNameOf('05-detail-hero-title.png'), 'hero-title');
 });
 
 test('the reference of the design is found by its name', async () => {

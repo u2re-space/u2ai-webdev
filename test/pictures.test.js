@@ -61,6 +61,43 @@ function config() {
     };
 }
 
+/**
+ * The stand-in for `ai-image`: it writes the file the stage asked for and remembers the call.
+ * @param {string} root the project directory
+ * @returns {Promise<{ bin: string, log: string }>} the path of the fake and of its log
+ */
+async function fakeImage(root) {
+    const log = path.join(root, 'call.json');
+    const bin = path.join(root, 'fake-ai-image.js');
+    await writeFile(bin, [
+        "import { writeFile } from 'node:fs/promises';",
+        'const args = process.argv.slice(2);',
+        "const out = args[args.indexOf('--out') + 1];",
+        `await writeFile(${JSON.stringify(log)}, JSON.stringify(args));`,
+        "await writeFile(out, 'prepared');",
+        "process.stdout.write('ok');",
+    ].join('\n'));
+    return { bin, log };
+}
+
+/**
+ * The crops of the measurer on the disk: the list of the fragments and the files themselves.
+ * @param {string} root the project directory
+ * @param {object[]} crops the crops of the measurer
+ * @returns {Promise<void>}
+ */
+async function writeMeasuredCrops(root, crops = []) {
+    await mkdir(path.join(root, 'measurements', 'stages'), { recursive: true });
+    await mkdir(path.join(root, 'measurements', 'crops'), { recursive: true });
+    await writeFile(
+        path.join(root, 'measurements', 'stages', 'crops.json'),
+        `${JSON.stringify({ crops }, null, 2)}\n`,
+    );
+    for (const crop of crops) {
+        await writeFile(path.join(root, 'measurements', crop.crop), 'png');
+    }
+}
+
 test('the name of a crop is its name without the extension', () => {
     assert.equal(cropName('crops/08-region-bishop-artwork.png'), '08-region-bishop-artwork');
     assert.equal(cropName(''), '');
@@ -285,4 +322,121 @@ test('the stage of the pictures skips itself when there is no sheet', async () =
     assert.equal(result.ok, true);
     assert.equal(result.pictures.length, 0);
     assert.match(result.text, /Лист измерений/);
+});
+
+test('the crops of the measurer are prepared when the sheet names none', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-pictures-disk-'));
+    await writeMeasuredCrops(root, [
+        { name: 'brand-logo', kind: 'asset', crop: 'crops/01-asset-brand-logo.png', use: 'artwork' },
+        { name: 'hero-title', kind: 'detail', crop: 'crops/02-detail-hero-title.png', use: 'text block' },
+    ]);
+    const { bin, log } = await fakeImage(root);
+
+    const result = await picturesStage({
+        root,
+        config: config(),
+        inputs: { measurements: { present: false } },
+        env: { ...process.env, AI_IMAGE_BIN: bin },
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.pictures.length, 1);
+    // The asset is a picture, the detail is a piece of the screenshot.
+    assert.equal(result.pictures[0].name, 'brand-logo');
+    assert.equal(result.pictures[0].kind, 'image');
+    assert.equal(result.pictures[0].file, 'assets/import/brand-logo.png');
+    assert.equal(result.pictures[0].source, 'measurements/crops/01-asset-brand-logo.png');
+    assert.equal(result.pictures[0].use, 'artwork');
+
+    // The bridge was asked once: the detail is not a picture.
+    const call = JSON.parse(await readFile(log, 'utf8'));
+    assert.equal(call[1], 'measurements/crops/01-asset-brand-logo.png');
+    assert.match(result.text, /Обрезки взяты с диска/);
+});
+
+test('the crops are found by their files when the measurer left no list', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-pictures-files-'));
+    await mkdir(path.join(root, 'measurements', 'crops'), { recursive: true });
+    await writeFile(path.join(root, 'measurements', 'crops', '01-asset-brand-logo.png'), 'png');
+    await writeFile(path.join(root, 'measurements', 'crops', '05-detail-hero-title.png'), 'png');
+    const { bin } = await fakeImage(root);
+
+    const result = await picturesStage({
+        root,
+        config: config(),
+        inputs: { measurements: { present: false } },
+        env: { ...process.env, AI_IMAGE_BIN: bin },
+    });
+
+    assert.equal(result.pictures.length, 1);
+    assert.equal(result.pictures[0].file, 'assets/import/brand-logo.png');
+});
+
+test('the sheet wins over the crops of the disk', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-pictures-sheet-'));
+    await writeMeasuredCrops(root, [
+        { name: 'brand-logo', kind: 'asset', crop: 'crops/01-asset-brand-logo.png' },
+    ]);
+    // The crop of the sheet is on the disk too: the sheet is the source of the crops.
+    await writeFile(path.join(root, 'measurements', 'crops', '08-region-bishop-artwork.png'), 'png');
+    const { bin } = await fakeImage(root);
+
+    const result = await picturesStage({
+        root,
+        config: config(),
+        inputs: { measurements: sheet(), files: { measurements: 'measurements/measurements.json' } },
+        env: { ...process.env, AI_IMAGE_BIN: bin },
+    });
+
+    assert.equal(result.pictures.length, 1);
+    assert.equal(result.pictures[0].name, 'black chess bishop');
+    assert.equal(result.pictures[0].file, 'assets/import/bishop-artwork.png');
+});
+
+test('the sheet that appeared after the collection is read again', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-pictures-fresh-'));
+    await mkdir(path.join(root, 'measurements', 'crops'), { recursive: true });
+    await writeFile(path.join(root, 'measurements', 'crops', '08-region-bishop-artwork.png'), 'png');
+    await writeFile(path.join(root, 'measurements', 'measurements.json'), JSON.stringify({
+        source: 'landing.png',
+        unit: 'px',
+        elements: [
+            { name: 'black chess bishop', kind: 'image', crop: 'crops/08-region-bishop-artwork.png' },
+        ],
+        regions: [],
+    }));
+    const { bin } = await fakeImage(root);
+
+    const result = await picturesStage({
+        root,
+        config: config(),
+        inputs: { measurements: { present: false } },
+        env: { ...process.env, AI_IMAGE_BIN: bin },
+    });
+
+    assert.equal(result.pictures.length, 1);
+    assert.equal(result.pictures[0].file, 'assets/import/bishop-artwork.png');
+    // The stages after this one get the sheet that is really on the disk.
+    assert.equal(result.measurements.present, true);
+    assert.equal(result.measurements.source, 'landing.png');
+    assert.equal(result.files.measurements, 'measurements/measurements.json');
+});
+
+test('the crop of the disk that is already prepared is not prepared again', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-pictures-disk-old-'));
+    await writeMeasuredCrops(root, [
+        { name: 'brand-logo', kind: 'asset', crop: 'crops/01-asset-brand-logo.png' },
+    ]);
+    await mkdir(path.join(root, 'assets', 'import'), { recursive: true });
+    await writeFile(path.join(root, 'assets', 'import', 'brand-logo.png'), 'prepared before');
+
+    const result = await picturesStage({
+        root,
+        config: config(),
+        inputs: { measurements: { present: false } },
+        env: { ...process.env, AI_IMAGE_BIN: path.join(root, 'nothing-here.js') },
+    });
+
+    assert.equal(result.pictures.length, 1);
+    assert.equal(result.pictures[0].bytes, 'prepared before'.length);
 });
