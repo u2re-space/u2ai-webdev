@@ -303,6 +303,16 @@ Five of them take the steps of the plan: `markup`, `coder`, `styler`, `editor` a
 `iconifier`. The other seven work once for the whole run, and a step of the plan may not name
 them.
 
+The three roles that write the frontend — `markup`, `coder` and `styler` — also get the standard
+of the frontend work (`src/roles/web-development.js`): the rules that hold for every file, the
+rules of the markup and the rules of the styles. The standard is the one of the platform of
+today: the cascade is held by the cascade layers (`@layer reset, base, theme, layout,
+components, utilities;`) and not by the specificity, the rules of a block live in a native
+nesting, the reset names the elements and not `*`, the component asks the space it is given with
+a container query and not with the width of the window, and the features that are behind a flag
+or only in a draft stay withheld. The styler gets the rules of the styles, the markup and the
+coder get the rules of the markup.
+
 `--role <role>=<model>[:<effort>[:<max-effort>]]` gives a role its own model; the flag may be
 given many times. The config may override the model, the effort, the instructions and the tools of
 any role, and may add roles of its own.

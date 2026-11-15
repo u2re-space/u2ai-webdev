@@ -12,6 +12,7 @@
 import { UNTRUSTED } from './untrusted.js';
 import { INPUTS_IN_CONTEXT } from './inputs.js';
 import { referenceNote } from './reference.js';
+import { webDevelopment } from './web-development.js';
 
 /** The name of the role. */
 export const name = 'styler';
@@ -89,7 +90,8 @@ ${INPUTS_IN_CONTEXT}
   design cannot pass the threshold, say so in the report instead of hiding it.
 - The styles of the step live in the files the step names. When the step names one file, write
   one file: the rules of the layers go into it, one after another, under the comments that
-  name them — the tokens, the base, the layout, the components, the utilities.
+  name them — the reset, the base, the theme (the tokens), the layout, the components, the
+  utilities.
 - Split the styles into partials only when the step names the partials as well. The order of
   the imports follows the order of the layers.
 - A \`@use\` names a file that has to be on the disk. Before you write a \`@use\`, make sure
@@ -108,6 +110,8 @@ ${INPUTS_IN_CONTEXT}
 - Give the program its arguments: \`run_command\` takes the program and the arguments as a JSON
   array. A program without its arguments (a bare \`node\`) waits for the input and brings
   nothing back.
+
+${webDevelopment('styler')}
 
 ${UNTRUSTED}`;
 }

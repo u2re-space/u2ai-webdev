@@ -15,6 +15,7 @@ import path from 'node:path';
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 
 import { ROLES, ROLE_NAMES, resolveRole, roleSchema, buildInstructions, runRole, roleReason } from '../src/roles/index.js';
+import { WEB_DEVELOPMENT, webDevelopment } from '../src/roles/web-development.js';
 import { LIVE_ROLE_NAMES } from '../src/stages/roles.js';
 import { toolSpecs } from '../src/agent/tool-specs.js';
 import { createClient } from '../src/openai/client.js';
@@ -198,6 +199,62 @@ test('the effort of a stage is pulled down to what the model takes', async () =>
     } finally {
         await api.close();
     }
+});
+
+test('the frontend roles get the standard of the work', () => {
+    for (const name of ['markup', 'coder', 'styler']) {
+        const text = ROLES[name].instructions({});
+        assert.match(text, /The standard of the frontend work/, `the role ${name} has no standard`);
+        assert.match(text, /The file is finished/);
+    }
+    // The layers and the nesting are the rules of the styles.
+    const styler = ROLES.styler.instructions({});
+    assert.match(styler, /@layer reset, base, theme, layout, components, utilities;/);
+    assert.match(styler, /The native nesting groups the rules/);
+    // The roles that do not write the frontend do not get the standard.
+    for (const name of ['planner', 'installer', 'learner']) {
+        assert.doesNotMatch(ROLES[name].instructions({}), /The standard of the frontend work/);
+    }
+});
+
+test('a role gets the part of the standard that concerns its craft', () => {
+    const coder = ROLES.coder.instructions({});
+    assert.match(coder, /Semantic HTML5/);
+    assert.doesNotMatch(coder, /grid-template-areas/);
+
+    const styler = ROLES.styler.instructions({});
+    assert.match(styler, /grid-template-areas/);
+    assert.doesNotMatch(styler, /Semantic HTML5/);
+
+    // The whole standard is available for whoever asks for it.
+    assert.match(WEB_DEVELOPMENT, /Semantic HTML5/);
+    assert.match(WEB_DEVELOPMENT, /grid-template-areas/);
+});
+
+test('the standard holds the rules of the platform of today', () => {
+    const text = webDevelopment('styler');
+    // The cascade is held by the layers and not by the specificity.
+    assert.match(text, /The cascade is held by the layers/);
+    assert.match(text, /`:where\(\.button\)` has no specificity/);
+    // The component asks the space it is given.
+    assert.match(text, /@container card \(inline-size > 400px\)/);
+    // The logical properties and the reset without `*`.
+    assert.match(text, /margin-inline-start/);
+    assert.match(text, /A reset on `\*` cannot be beaten by a web component/);
+    // The experiments of the platform stay withheld.
+    assert.match(text, /experiment is not a feature/);
+});
+
+test('the standard keeps the rules of the monolith that still hold', () => {
+    for (const text of [WEB_DEVELOPMENT, webDevelopment('coder'), webDevelopment('styler')]) {
+        // The file is finished.
+        assert.match(text, /No `<!-- add more items here -->`/);
+        // No framework that was not asked for.
+        assert.match(text, /No CSS framework \(Tailwind, Bootstrap\)/);
+        // The names say what the thing is.
+        assert.match(text, /The names say what the thing is/);
+    }
+    assert.match(WEB_DEVELOPMENT, /Accessibility \(WCAG AA\)/);
 });
 
 test('the roles that read the project are told that the inputs are already in the context', () => {

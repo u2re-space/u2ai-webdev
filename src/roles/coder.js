@@ -12,6 +12,7 @@
 import { UNTRUSTED } from './untrusted.js';
 import { INPUTS_IN_CONTEXT } from './inputs.js';
 import { referenceNote } from './reference.js';
+import { webDevelopment } from './web-development.js';
 
 /** The name of the role. */
 export const name = 'coder';
@@ -92,6 +93,8 @@ ${INPUTS_IN_CONTEXT}
 - When a command has to run for the step to work, name it in \`commands\` with the program and
   the arguments, not as a shell line.
 - Finish with a report: the files, what each of them does now, and what the reader has to know.
+
+${webDevelopment('coder')}
 
 ${UNTRUSTED}`;
 }

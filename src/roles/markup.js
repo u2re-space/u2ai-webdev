@@ -12,6 +12,7 @@
 import { UNTRUSTED } from './untrusted.js';
 import { INPUTS_IN_CONTEXT } from './inputs.js';
 import { referenceNote } from './reference.js';
+import { webDevelopment } from './web-development.js';
 
 /** The name of the role. */
 export const name = 'markup';
@@ -100,6 +101,8 @@ ${INPUTS_IN_CONTEXT}
   \`search_files\` before you link it. A path you have not seen is a path that does not exist.
 - The markup is valid: the tags are closed, the attributes are quoted, the boolean attributes
   have no value.
+
+${webDevelopment('markup')}
 
 ${UNTRUSTED}`;
 }
