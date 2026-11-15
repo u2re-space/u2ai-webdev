@@ -569,6 +569,16 @@ ai-webdev jobs list
 A run that was interrupted keeps its progress: the next run with `--resume <id>` continues at the
 stage it has not finished.
 
+The run names itself before the first stage — `Run 20261113-142530` — and a run that falls
+prints the command of its continuation, with everything the run needs (the config, the
+essence, the picture, the kind and the model):
+
+```
+Run 20261113-142530
+…
+Продолжить: ai-webdev run --resume 20261113-142530 --config .webdev.config.json --input what-needs.md --image landing.png --kind landing
+```
+
 The state of the run lives on the disk with it:
 
 | File | What it holds |

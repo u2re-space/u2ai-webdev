@@ -21,6 +21,7 @@
 import { createClient } from '../openai/client.js';
 import { runPipeline, resumePipeline } from '../pipeline.js';
 import { STAGES, STAGE_NAMES, stageByName, stageDependencies, enabledStages } from '../stages/index.js';
+import { runId as makeRunId } from '../stages/workspace.js';
 import { ENUMS } from '../config/constants.js';
 import { stageReferences } from '../generate/references.js';
 import { UsageError } from './errors.js';
@@ -311,6 +312,36 @@ export function stageReportText(result = {}) {
 }
 
 /**
+ * The command that continues a run.
+ *
+ * A run that fell has to be continued, and the command of the continuation repeats everything
+ * the run needs: the config, the essence of the task, the picture of the task, the kind and
+ * the model. The id is the name of the run: the stages that are done are skipped, and the
+ * stage that fell is done again.
+ * @param {{ runId?: string, flags?: Record<string, any>, configPath?: string|null }} options
+ * @returns {string}
+ * @exports
+ * @ai.hint pure
+ */
+export function resumeCommand({ runId = '', flags = {}, configPath = null } = {}) {
+    const id = String(runId ?? '').trim();
+    if (!id) return '';
+    const parts = ['ai-webdev', 'run', '--resume', id];
+    const config = configPath ?? stringFlag(flags, 'config');
+    if (config) parts.push('--config', String(config));
+    for (const name of ['input', 'image']) {
+        for (const item of pathListFlag(flags, name)) parts.push(`--${name}`, item);
+    }
+    const kind = stringFlag(flags, 'kind');
+    if (kind) parts.push('--kind', kind);
+    const model = stringFlag(flags, 'model');
+    if (model) parts.push('--model', model);
+    const effort = stringFlag(flags, 'effort');
+    if (effort) parts.push('--effort', effort);
+    return parts.join(' ');
+}
+
+/**
  * Run the pipeline of the stages.
  *
  * @param {{ config: object, cwd: string, args?: string[], flags?: object, renderer?: object,
@@ -335,7 +366,9 @@ export async function runCommand(ctx) {
 
     const stages = routeStages(flags);
     const stopAfter = stopAfterStage(flags, stages, config);
-    const runId = stringFlag(flags, 'id') ?? resumeId;
+    // The id of the run is made here, not in the pipeline: the run has to name itself before
+    // the first stage, so that a run that falls can be continued by its id.
+    const runId = stringFlag(flags, 'id') ?? resumeId ?? makeRunId();
 
     const controller = new AbortController();
     const onInterrupt = () => controller.abort();
@@ -376,6 +409,9 @@ export async function runCommand(ctx) {
             }
         }
     };
+    // The run names itself before the first stage: a run that falls or is closed can be
+    // continued by its id, and the id has to be known before it falls.
+    renderer?.note?.(`Run ${runId}`);
     // The events of the transport reach the renderer: the wait of a thinking model, the
     // retries of a failed host.
     const client = await createClient({ config, env, signal: controller.signal, onEvent: notify });
@@ -400,7 +436,17 @@ export async function runCommand(ctx) {
         for (const warning of report.warnings ?? []) renderer?.warning?.(warning);
         renderer?.progress?.(report.progress);
         renderer?.summary?.(report);
-        if (report.status === 'failed') return 1;
+        if (report.status === 'failed') {
+            // A fallen run is continued, not started again: the command of the continuation
+            // is named with everything the run needs.
+            const command = resumeCommand({
+                runId: report.runId ?? runId,
+                flags,
+                configPath: stringFlag(flags, 'config'),
+            });
+            if (command) renderer?.note?.(`Продолжить: ${command}`);
+            return 1;
+        }
         if (report.status === 'paused') {
             renderer?.note?.(`Прогон остановлен после стадии «${stopAfter}». Продолжить: ai-webdev run --resume ${report.runId}`);
             return 0;

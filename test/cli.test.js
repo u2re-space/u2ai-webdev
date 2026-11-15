@@ -17,7 +17,7 @@ import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 import { EXIT, VALUE_FLAGS, parseArgv } from '../src/cli.js';
-import { configOverrides, parseRoleSpecs, expandRoute, routeStages, splitKind, stopAfterStage } from '../src/cli/run.js';
+import { configOverrides, parseRoleSpecs, expandRoute, routeStages, splitKind, stopAfterStage, resumeCommand } from '../src/cli/run.js';
 import { createRenderer, detectMode } from '../src/cli/renderer.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -190,6 +190,28 @@ test('a resume without the id of the run is a usage error', async () => {
     const result = await cli(['run', '--resume']);
     assert.equal(result.code, EXIT.usage);
     assert.match(result.stderr, /--resume: нужен идентификатор прогона\./);
+});
+
+test('the command of the continuation repeats what the run needs', () => {
+    const command = resumeCommand({
+        runId: '20261115-064700',
+        flags: {
+            config: '.webdev.config.json',
+            input: ['what-needs.md'],
+            image: ['landing.png'],
+            kind: 'landing',
+            model: 'moonshotai/kimi-k3.1-pro',
+            effort: 'xhigh',
+        },
+    });
+    assert.match(command, /ai-webdev run --resume 20261115-064700/);
+    assert.match(command, /--config \.webdev\.config\.json/);
+    assert.match(command, /--input what-needs\.md/);
+    assert.match(command, /--image landing\.png/);
+    assert.match(command, /--kind landing/);
+    assert.match(command, /--model moonshotai\/kimi-k3\.1-pro/);
+    assert.match(command, /--effort xhigh/);
+    assert.equal(resumeCommand({ runId: '' }), '');
 });
 
 test('an unknown stage of the route is a usage error', async () => {
