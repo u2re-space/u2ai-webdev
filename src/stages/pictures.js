@@ -15,18 +15,21 @@
  *   A picture that cannot be prepared is not a reason to stop the run: the stage says what
  *   happened and the crop stays as it was.
  *
- * @depends node:path, node:fs/promises, inputs/crops, agent/bridges, agent/paths
+ * @depends node:path, node:fs/promises, inputs/crops, inputs/candidates, agent/bridges,
+ *          agent/paths
  * @usedBy stages/index, pipeline
  * @exports picturesStage, pictureName, pictureCrops, pictureSubject, pictureKinds,
  *          PICTURES_FILE, picturesPath, writePictures, readPictures
  * @ai.tags stages, pictures, images
  * @ai.hint io
  * @changed 2026-11-14 The crops of the reference are prepared with `ai-image`.
+ * @changed 2026-11-15 The crops are looked for next to the sheet that was found.
  */
 
 import path from 'node:path';
 import { mkdir, stat } from 'node:fs/promises';
 import { resolveCropFile, cropRelative } from '../inputs/crops.js';
+import { inputCandidates } from '../inputs/candidates.js';
 import { runBridge, bridgeEnabled } from '../agent/bridges.js';
 import { runFile, writeJsonFile, readJsonFile } from './workspace.js';
 
@@ -213,7 +216,10 @@ export async function picturesStage({
     }
 
     const limit = Number.isSafeInteger(settings.max) && settings.max > 0 ? settings.max : 6;
-    const sheetFile = String(config?.inputs?.measurements ?? 'measurements.json');
+    // Лист, который нашли: обрезки лежат рядом с ним, а не в корне проекта.
+    const sheetFile = String(inputs?.files?.measurements
+        ?? inputCandidates(config?.inputs?.measurements, 'measurements')[0]
+        ?? 'measurements.json');
     const sheetDir = path.dirname(sheetFile);
     const workDir = String(config?.output?.work ?? '.tmp');
     const target = apply ? String(settings.dir ?? 'assets/import') : path.join(workDir, 'pictures');

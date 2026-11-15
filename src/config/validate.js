@@ -376,7 +376,11 @@ export function validateConfig(config) {
     if (!(key in defaults.inputs)) fail(`inputs.${key}: неизвестное поле (допустимо: ${Object.keys(defaults.inputs).join(', ')})`);
   }
   for (const key of ['designMd', 'measurements', 'palette', 'tokens']) {
-    if (typeof c.inputs[key] !== 'string' || !c.inputs[key].trim()) fail(`inputs.${key}: непустая строка`);
+    const value = c.inputs[key];
+    const list = Array.isArray(value) ? value : [value];
+    if (!list.length || list.some((item) => typeof item !== 'string' || !item.trim())) {
+      fail(`inputs.${key}: непустая строка или список непустых строк`);
+    }
   }
   if (typeof c.inputs.projectInstructions !== 'boolean') fail('inputs.projectInstructions: true | false');
   const extra = c.inputs.extra ?? [];

@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtemp, mkdir, readFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 
 import { createToolset, htmlToText, BLOCKING_COMMANDS } from '../src/agent/tools.js';
 import { runBridge } from '../src/agent/bridges.js';
@@ -131,6 +131,65 @@ test('a bridge that is missing does not throw', async () => {
     assert.equal(result.skipped, false);
     assert.equal(result.ok, false);
     assert.ok(result.reason);
+});
+
+test('the measurer is not run again when the sheet is on the disk', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-measured-'));
+    await mkdir(path.join(root, 'measurements'), { recursive: true });
+    await writeFile(path.join(root, 'landing.png'), 'png');
+    await writeFile(path.join(root, 'measurements', 'measurements.json'), JSON.stringify({
+        source: 'landing.png',
+        unit: 'px',
+        elements: [{ name: 'hero', kind: 'box', box: { x: 0, y: 0, width: 100, height: 50 } }],
+        regions: [{ name: 'hero', kind: 'section' }],
+    }, null, 2));
+
+    const config = structuredClone(defaults);
+    // The measurer is not there: if the tool called it, the answer would be about the bridge.
+    config.bridges.measure.command = 'ai-measure-does-not-exist';
+    const facts = new Map();
+    const context = { set: async (key, value) => { facts.set(key, value); } };
+    const tools = createToolset({ root, config, context });
+
+    const answer = await tools.execute('call_ai_measure', { args: '["measure", "landing.png"]' });
+
+    assert.match(answer, /уже измерена/);
+    assert.match(answer, /measurements\/measurements\.json/);
+    // The run knows it: the roles after this one do not measure the picture again.
+    assert.equal(facts.get('measurements').file, 'measurements/measurements.json');
+});
+
+test('a picture without a sheet is measured', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-unmeasured-'));
+    await writeFile(path.join(root, 'landing.png'), 'png');
+
+    const config = structuredClone(defaults);
+    config.bridges.measure.enabled = false;
+    const tools = createToolset({ root, config });
+
+    const answer = await tools.execute('call_ai_measure', { args: '["measure", "landing.png"]' });
+
+    assert.match(answer, /Мост ai-measure выключен/);
+});
+
+test('the sheet of the measurements does not answer the design', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-design-'));
+    await mkdir(path.join(root, 'measurements'), { recursive: true });
+    await writeFile(path.join(root, 'landing.png'), 'png');
+    await writeFile(path.join(root, 'measurements', 'measurements.json'), JSON.stringify({
+        source: 'landing.png',
+        unit: 'px',
+        elements: [],
+        regions: [],
+    }, null, 2));
+
+    const config = structuredClone(defaults);
+    config.bridges.measure.enabled = false;
+    const tools = createToolset({ root, config });
+
+    const answer = await tools.execute('call_ai_measure', { args: '["design", "landing.png"]' });
+
+    assert.match(answer, /Мост ai-measure выключен/);
 });
 
 test('fetch_url reads the text of a page', async () => {

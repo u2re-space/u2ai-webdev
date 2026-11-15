@@ -328,12 +328,17 @@ export const defaults = {
   /**
    * The files a run may read as its input: the design direction, the sheet of
    * measurements, the palette and the tokens.
+   *
+   * Every path is a list of candidates: the first file that is there is the input of the
+   * run. The root of the project comes first, and the directory of the measurer comes
+   * second: the measurer writes its delivery into `measurements/`, and the run has to
+   * find it there — otherwise it measures the same picture again.
    */
   inputs: {
-    designMd: 'DESIGN.md',
-    measurements: 'measurements.json',
-    palette: 'palette.json',
-    tokens: 'tokens.css',
+    designMd: ['DESIGN.md', 'measurements/DESIGN.md'],
+    measurements: ['measurements.json', 'measurements/measurements.json'],
+    palette: ['palette.json', 'measurements/palette.json'],
+    tokens: ['tokens.css', 'measurements/tokens.css'],
     /**
      * The files with the essence of the task: the notes the run reads before it starts.
      *

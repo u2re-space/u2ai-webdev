@@ -4,7 +4,7 @@
  * @purpose The tests of the inputs: `DESIGN.md`, `measurements.json`, `palette.json`,
  *          `tokens.css`, the pictures and the instructions of the project.
  * @depends node:test, inputs/index, inputs/design-md, inputs/measurements, inputs/palette,
- *          inputs/tokens, inputs/assets
+ *          inputs/tokens, inputs/assets, inputs/measured
  * @ai.tags test, inputs
  */
 
@@ -12,7 +12,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, utimes } from 'node:fs/promises';
 
 import { parseDesignMd, parseTokensBlock, conflictsBetween } from '../src/inputs/design-md.js';
 import { parseMeasurements, pxToRem } from '../src/inputs/measurements.js';
@@ -20,6 +20,7 @@ import { parsePalette, contrastRatio, paletteTokens } from '../src/inputs/palett
 import { parseTokensCss, tokenValue } from '../src/inputs/tokens.js';
 import { detectImageMime, listImages, readProjectInstructions } from '../src/inputs/assets.js';
 import { collectInputs, inputContext, inputSummary } from '../src/inputs/index.js';
+import { findMeasurement } from '../src/inputs/measured.js';
 import { findReferences, readReferences } from '../src/inputs/references.js';
 import { defaults } from '../src/config.js';
 
@@ -225,6 +226,85 @@ test('a missing input is a warning, not an error', async () => {
     const summary = inputSummary(collected);
     assert.equal(summary.design, false);
     assert.ok(summary.warnings.some((line) => line.includes('DESIGN.md')));
+});
+
+test('the delivery of the measurer is found in the directory of the measurer', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-inputs3-'));
+    await mkdir(path.join(root, 'measurements'), { recursive: true });
+    await writeFile(path.join(root, 'measurements', 'measurements.json'), JSON.stringify(MEASUREMENTS, null, 2));
+    await writeFile(path.join(root, 'measurements', 'palette.json'), JSON.stringify(PALETTE, null, 2));
+
+    const config = structuredClone(defaults);
+    const collected = await collectInputs({ root, config, task: 'x' });
+
+    assert.equal(inputSummary(collected).measurements, true);
+    assert.equal(inputSummary(collected).palette, true);
+    assert.equal(collected.files.measurements, 'measurements/measurements.json');
+    assert.equal(collected.files.palette, 'measurements/palette.json');
+});
+
+test('the config may name one path of an input', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-inputs4-'));
+    await writeFile(path.join(root, 'sheet.json'), JSON.stringify(MEASUREMENTS, null, 2));
+
+    const config = structuredClone(defaults);
+    config.inputs.measurements = 'sheet.json';
+    const collected = await collectInputs({ root, config, task: 'x' });
+
+    assert.equal(inputSummary(collected).measurements, true);
+    assert.equal(collected.files.measurements, 'sheet.json');
+});
+
+test('the warning of a missing input names every candidate', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-inputs5-'));
+    const config = structuredClone(defaults);
+    const collected = await collectInputs({ root, config, task: 'x' });
+
+    const warning = collected.warnings.find((line) => line.includes('sheet of the measurements'));
+    assert.ok(warning);
+    assert.match(warning, /measurements\.json/);
+    assert.match(warning, /measurements\/measurements\.json/);
+});
+
+test('the sheet of the measurements is found on the disk', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-sheet-'));
+    await mkdir(path.join(root, 'measurements'), { recursive: true });
+    await writeFile(path.join(root, 'ref.png'), 'png');
+    await writeFile(path.join(root, 'measurements', 'measurements.json'), JSON.stringify(MEASUREMENTS, null, 2));
+
+    const config = structuredClone(defaults);
+    const found = await findMeasurement({ root, config, picture: 'ref.png' });
+
+    assert.equal(found.path, 'measurements/measurements.json');
+    assert.equal(found.elements, 1);
+    assert.equal(found.regions, 1);
+});
+
+test('the sheet of another picture is not the answer', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-sheet2-'));
+    await mkdir(path.join(root, 'measurements'), { recursive: true });
+    await writeFile(path.join(root, 'ref.png'), 'png');
+    await writeFile(path.join(root, 'measurements', 'measurements.json'), JSON.stringify(MEASUREMENTS, null, 2));
+
+    const config = structuredClone(defaults);
+    const found = await findMeasurement({ root, config, picture: 'other.png' });
+
+    assert.equal(found, null);
+});
+
+test('a sheet older than the picture is stale', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-sheet3-'));
+    await mkdir(path.join(root, 'measurements'), { recursive: true });
+    await writeFile(path.join(root, 'measurements', 'measurements.json'), JSON.stringify(MEASUREMENTS, null, 2));
+    const picture = path.join(root, 'ref.png');
+    await writeFile(picture, 'png');
+    const later = new Date(Date.now() + 60_000);
+    await utimes(picture, later, later);
+
+    const config = structuredClone(defaults);
+    const found = await findMeasurement({ root, config, picture: 'ref.png' });
+
+    assert.equal(found, null);
 });
 
 test('the reference of the design is found by its name', async () => {

@@ -139,6 +139,20 @@ test('the validation of the bridges names the bridge', () => {
     assert.throws(() => validateConfig(unknown), /Конфигурация: bridges\.sketch: неизвестный мост/);
 });
 
+test('the paths of the inputs may be a list of candidates', () => {
+    const config = cloneDefaults();
+    config.inputs.measurements = ['sheet.json', 'measurements/measurements.json'];
+    assert.doesNotThrow(() => validateConfig(config));
+
+    const empty = cloneDefaults();
+    empty.inputs.measurements = [];
+    assert.throws(() => validateConfig(empty), /Конфигурация: inputs\.measurements: непустая строка или список непустых строк/);
+
+    const broken = cloneDefaults();
+    broken.inputs.palette = ['palette.json', ''];
+    assert.throws(() => validateConfig(broken), /Конфигурация: inputs\.palette: непустая строка или список непустых строк/);
+});
+
 test('the merge keeps the fields of the default that the user did not touch', () => {
     const merged = mergeSources({ stack: { frontendFramework: 'react' } });
     assert.equal(merged.stack.frontendFramework, 'react');

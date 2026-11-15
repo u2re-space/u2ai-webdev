@@ -72,6 +72,7 @@ ${INPUTS_IN_CONTEXT}
 - If the measurements of the reference are missing or thin, measure the reference yourself with
   the \`call_ai_measure\` tool: \`["measure", "landing.png"]\` for the sizes and the positions,
   \`["design", "landing.png"]\` for the look. The tokens and the grid then follow the picture.
+  The tool answers with the sheet that is already on the disk instead of measuring again.
 - Keep the structure as small as the task allows. A module that holds one function and is used
   once is a function.
 

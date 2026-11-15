@@ -10,12 +10,14 @@
  *   which win over the document.
  *
  * @depends node:path, node:fs/promises, inputs/design-md, inputs/measurements, inputs/palette,
- *          inputs/tokens, inputs/assets, inputs/references, config/paths
+ *          inputs/tokens, inputs/assets, inputs/references, inputs/candidates, config/paths
  * @usedBy stages/collect, stages/index
  * @exports collectEssence, collectInputs, inputContext, inputSummary, mergeInputs
  * @ai.tags inputs, context
  * @ai.hint io
  * @changed 2026-11-15 The essence of the task: the files of `inputs.extra` (`--input`).
+ * @changed 2026-11-15 The paths of the inputs are lists of candidates: the first file that
+ *                       is there is the input, and the found path is kept.
  */
 
 import path from 'node:path';
@@ -26,6 +28,7 @@ import { parsePalette, paletteTokens } from './palette.js';
 import { parseTokensCss, cssConflicts } from './tokens.js';
 import { collectAssetFiles, readProjectInstructions } from './assets.js';
 import { findReferences } from './references.js';
+import { findInput, inputCandidates } from './candidates.js';
 
 /**
  * Read a file of the project, when it is there.
@@ -74,11 +77,24 @@ export async function collectEssence(root, files = [], task = '') {
 }
 
 /**
+ * The warning about an input that is not there: the candidates are named, so the user
+ * knows where the file may live.
+ * @param {string} name what the input is
+ * @param {string[]} candidates the paths that were tried
+ * @returns {string}
+ * @ai.hint pure
+ */
+function missing(name, candidates) {
+    return `The ${name} was not found (tried: ${candidates.join(', ')}).`;
+}
+
+/**
  * Collect the inputs of a run.
  *
  * The paths come from the config: `inputs.designMd`, `inputs.measurements`, `inputs.palette`,
- * `inputs.tokens` and `inputs.extra` — the files with the essence of the task. A missing
- * file is not an error: the part is simply absent, and the report says so.
+ * `inputs.tokens` and `inputs.extra` — the files with the essence of the task. Every path
+ * is a list of candidates, and the first file that is there is the input. A missing file is
+ * not an error: the part is simply absent, and the report says so.
  * @param {{ root: string, config?: object, task?: string }} options
  * @returns {Promise<object>} the collected inputs
  * @exports
@@ -88,23 +104,27 @@ export async function collectInputs({ root, config = {}, task = '' } = {}) {
     const inputs = config.inputs ?? {};
     const warnings = [];
 
-    const designText = await readOptional(root, inputs.designMd ?? 'DESIGN.md');
-    const design = parseDesignMd(designText ?? '');
-    if (!design.present && inputs.designMd) warnings.push(`The file ${inputs.designMd} was not found.`);
+    const designCandidates = inputCandidates(inputs.designMd, 'designMd');
+    const designFile = await findInput(root, designCandidates);
+    const design = parseDesignMd(designFile?.text ?? '');
+    if (!designFile) warnings.push(missing('design document', designCandidates));
 
-    const measurementText = await readOptional(root, inputs.measurements ?? 'measurements.json');
-    const measurements = parseMeasurements(measurementText ?? '');
-    if (!measurements.present && inputs.measurements) warnings.push(`The file ${inputs.measurements} was not found.`);
+    const measurementCandidates = inputCandidates(inputs.measurements, 'measurements');
+    const measurementFile = await findInput(root, measurementCandidates);
+    const measurements = parseMeasurements(measurementFile?.text ?? '');
+    if (!measurementFile) warnings.push(missing('sheet of the measurements', measurementCandidates));
     warnings.push(...measurements.warnings);
 
-    const paletteText = await readOptional(root, inputs.palette ?? 'palette.json');
-    const palette = parsePalette(paletteText ?? '');
-    if (!palette.present && inputs.palette) warnings.push(`The file ${inputs.palette} was not found.`);
+    const paletteCandidates = inputCandidates(inputs.palette, 'palette');
+    const paletteFile = await findInput(root, paletteCandidates);
+    const palette = parsePalette(paletteFile?.text ?? '');
+    if (!paletteFile) warnings.push(missing('palette', paletteCandidates));
     warnings.push(...palette.warnings);
 
-    const tokensText = await readOptional(root, inputs.tokens ?? 'tokens.css');
-    const tokens = parseTokensCss(tokensText ?? '');
-    if (!tokens.present && inputs.tokens) warnings.push(`The file ${inputs.tokens} was not found.`);
+    const tokensCandidates = inputCandidates(inputs.tokens, 'tokens');
+    const tokensFile = await findInput(root, tokensCandidates);
+    const tokens = parseTokensCss(tokensFile?.text ?? '');
+    if (!tokensFile) warnings.push(missing('tokens of the stylesheet', tokensCandidates));
     warnings.push(...tokens.warnings);
 
     // The tokens of the stylesheet win; the other sources are compared with them.
@@ -146,6 +166,12 @@ export async function collectInputs({ root, config = {}, task = '' } = {}) {
         instructions,
         assets,
         references,
+        files: {
+            design: designFile?.path ?? null,
+            measurements: measurementFile?.path ?? null,
+            palette: paletteFile?.path ?? null,
+            tokens: tokensFile?.path ?? null,
+        },
         warnings,
     };
 }
@@ -189,6 +215,7 @@ export function mergeInputs(stored = null, fresh = null) {
         ...stored,
         essence,
         references,
+        files: { ...(stored.files ?? {}), ...(fresh.files ?? {}) },
         warnings: [...(fresh.warnings ?? []), ...(stored.warnings ?? [])],
     };
 }

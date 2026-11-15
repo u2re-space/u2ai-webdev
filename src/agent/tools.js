@@ -9,12 +9,13 @@
  * `ai-measure`), which run as subprocesses.
  *
  * @depends node:path, node:child_process, agent/fs-tools, agent/project-backup, agent/assets,
- *          agent/bridges, agent/tool-specs, agent/paths, agent/run-map
+ *          agent/bridges, agent/tool-specs, agent/paths, agent/run-map, inputs/measured
  * @exports createToolset, toolSpecs, enabledToolNames, mcpToolEntries, htmlToText,
  *          BLOCKING_COMMANDS, WINDOWS_EXTENSIONS, quoteWindowsArg, findProgram, killTree
  * @ai.tags tools, agent
  * @ai.hint keep
  * @changed 2026-11-15 Карта прогона и кэш контекста отвечают на чтения и поиск.
+ * @changed 2026-11-15 `call_ai_measure` не запускает измеритель, если лист уже есть.
  */
 
 import path from 'node:path';
@@ -30,6 +31,7 @@ import { guidanceSearchText, guidanceRetrieveText, GUIDANCE_SOURCE } from './gui
 import { runProgram as runProgramIn } from './programs.js';
 import { isInside, resolveInside } from './paths.js';
 import { mapFiles } from './run-map.js';
+import { findMeasurement } from '../inputs/measured.js';
 
 export { toolSpecs, enabledToolNames } from './tool-specs.js';
 export { WINDOWS_EXTENSIONS, quoteWindowsArg, findProgram, killTree } from './programs.js';
@@ -83,6 +85,59 @@ function parseNames(value) {
         }
     }
     return text.split(',').map((item) => item.trim()).filter(Boolean);
+}
+
+/**
+ * The picture of the arguments of a bridge: the first argument that names an image.
+ *
+ * The command itself ("measure", "design") is not a picture, and the flags are not either.
+ * @param {string[]} args the arguments of the bridge
+ * @returns {string} the path of the picture, or an empty string
+ * @ai.hint pure
+ */
+function pictureOf(args = []) {
+    for (const item of args) {
+        const value = String(item ?? '').trim();
+        if (!value || value.startsWith('-')) continue;
+        if (/\.(png|jpe?g|webp|gif|svg|avif|bmp)$/i.test(value)) return value;
+    }
+    return '';
+}
+
+/**
+ * The command of the arguments of a bridge: the first argument that is not a flag and not
+ * a picture.
+ * @param {string[]} args the arguments of the bridge
+ * @returns {string} the name of the command, or an empty string
+ * @ai.hint pure
+ */
+function commandOf(args = []) {
+    for (const item of args) {
+        const value = String(item ?? '').trim();
+        if (!value || value.startsWith('-')) continue;
+        if (/\.(png|jpe?g|webp|gif|svg|avif|bmp)$/i.test(value)) continue;
+        return value;
+    }
+    return '';
+}
+
+/**
+ * The number of things with the right form of the word: 1 элемент, 2 элемента, 5 элементов.
+ * @param {number} count
+ * @param {string} one the form of one
+ * @param {string} few the form of two, three, four
+ * @param {string} many the form of five and more
+ * @returns {string}
+ * @ai.hint pure
+ */
+function counted(count, one, few, many) {
+    const n = Math.abs(Number(count) || 0);
+    const tail = n % 100;
+    if (tail >= 11 && tail <= 14) return `${n} ${many}`;
+    const last = n % 10;
+    if (last === 1) return `${n} ${one}`;
+    if (last >= 2 && last <= 4) return `${n} ${few}`;
+    return `${n} ${many}`;
 }
 
 /**
@@ -383,6 +438,48 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
     }
 
     /**
+     * Померить картинку — но только если листа измерений на диске ещё нет.
+     *
+     * Измеритель медленный и дорогой: ответ на вопрос «что в картинке» уже лежит на диске,
+     * и повторный запуск не добавляет ничего. Факт попадает в контекст прогона, чтобы
+     * следующие роли знали, что картинка измерена.
+     * @param {object} args the arguments of the tool
+     * @returns {Promise<string>}
+     */
+    async function callMeasure(args) {
+        const list = parseArgsList(args.args);
+        const picture = pictureOf(list);
+        const known = commandOf(list) === 'measure'
+            ? await findMeasurement({ root, config, picture })
+            : null;
+        if (known) {
+            await rememberMeasurement(known);
+            const elements = counted(known.elements, 'элемент', 'элемента', 'элементов');
+            const regions = counted(known.regions, 'регион', 'региона', 'регионов');
+            return `Картинка уже измерена: ${known.path} (${elements}, ${regions}). Измеритель повторно не запускается.`;
+        }
+        const answer = await callBridge('ai-measure', args);
+        const fresh = await findMeasurement({ root, config, picture });
+        if (fresh) await rememberMeasurement(fresh);
+        return answer;
+    }
+
+    /**
+     * Запомнить в контексте прогона, что картинка измерена.
+     * @param {{ path: string, source: string, elements: number, regions: number, rules: number }} found
+     * @returns {Promise<void>}
+     */
+    async function rememberMeasurement(found) {
+        await context?.set?.('measurements', {
+            file: found.path,
+            source: found.source,
+            elements: found.elements,
+            regions: found.regions,
+            rules: found.rules,
+        });
+    }
+
+    /**
      * Run one tool by name.
      * @param {string} name
      * @param {object} args
@@ -676,7 +773,7 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
             case 'call_ai_decompose':
                 return await callBridge('ai-decompose', args);
             case 'call_ai_measure':
-                return await callBridge('ai-measure', args);
+                return await callMeasure(args);
             case 'call_ai_image':
                 return await callBridge('ai-image', args);
             default:

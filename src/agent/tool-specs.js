@@ -383,7 +383,9 @@ export const TOOL_SPECS = Object.freeze({
             + 'This CLI has no measurer of its own: the work is delegated to @u2ai/measurer. '
             + 'The args are the arguments of the CLI as strings, e.g. ["measure", "landing.png"] for the '
             + 'measurements of a reference, ["design", "landing.png"] for the design direction, '
-            + '["palette", "landing.png"] for the colours.',
+            + '["palette", "landing.png"] for the colours. '
+            + 'If the picture is already measured, the tool answers with the sheet that is on the disk '
+            + 'and does not run the measurer again.',
         parameters: {
             type: 'object',
             properties: {

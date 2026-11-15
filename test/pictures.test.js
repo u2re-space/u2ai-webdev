@@ -174,6 +174,35 @@ test('the stage of the pictures prepares the crops with the bridge of the images
     assert.equal(call.includes('--image-model'), false);
 });
 
+test('the stage of the pictures works with the sheet that was found', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-pictures-found-'));
+    await mkdir(path.join(root, 'measurements', 'crops'), { recursive: true });
+    await writeFile(path.join(root, 'measurements', 'crops', '08-region-bishop-artwork.png'), 'png');
+
+    const log = path.join(root, 'call.json');
+    const fake = path.join(root, 'fake-ai-image.js');
+    await writeFile(fake, [
+        "import { writeFile } from 'node:fs/promises';",
+        "const args = process.argv.slice(2);",
+        "const out = args[args.indexOf('--out') + 1];",
+        `await writeFile(${JSON.stringify(log)}, JSON.stringify(args));`,
+        "await writeFile(out, 'prepared');",
+    ].join('\n'));
+
+    const settings = config();
+    settings.inputs.measurements = ['measurements.json', 'measurements/measurements.json'];
+    const result = await picturesStage({
+        root,
+        config: settings,
+        inputs: { measurements: sheet(), files: { measurements: 'measurements/measurements.json' } },
+        env: { ...process.env, AI_IMAGE_BIN: fake },
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.pictures.length, 1);
+    assert.equal(result.pictures[0].file, 'assets/import/bishop-artwork.png');
+});
+
 test('the model of the pictures goes to the bridge when the config names it', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-pictures-model-'));
     await mkdir(path.join(root, 'measurements', 'crops'), { recursive: true });

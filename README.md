@@ -299,6 +299,21 @@ A run reads the direction of the design from the project itself:
 | `.ai/refs/`, `.ai/assets/` | The pictures: the references, the crops, the assets. |
 | the reference itself | The screenshot of the design, attached to the request of the roles. |
 
+Every path of the table is a list of candidates: the root of the project comes first, and the
+directory of the measurer comes second. The measurer writes its delivery into
+`measurements/` — `measurements.json`, `palette.json`, `tokens.css`, `DESIGN.md` — and the run
+finds it there. Without that, the run would measure the same picture again. The paths live in
+the config (`inputs.designMd`, `inputs.measurements`, `inputs.palette`, `inputs.tokens`), and a
+path may be a list of candidates of its own:
+
+```json
+{
+  "inputs": {
+    "measurements": ["measurements.json", "measurements/measurements.json"]
+  }
+}
+```
+
 The values of `tokens.css` win over the document and over the palette. A conflict between the
 sources is reported, never resolved silently.
 
@@ -343,6 +358,13 @@ the tool `call_ai_measure` and may measure the reference themselves when the mea
 project are missing or thin — `["measure", "landing.png"]` for the sizes and the positions,
 `["design", "landing.png"]` for the look, `["palette", "landing.png"]` for the colours. The tool
 is switched off with `tools.external_measure: false` in the config.
+
+The tool looks at the disk before it calls the measurer. A sheet that is already there answers
+the question as well as a new run: the tool answers with the path of the sheet and the number of
+its elements and regions, and the measurer is not started. The sheet has to belong to the
+picture — the field `source` says which one — and it has to be newer than the picture itself, so
+a changed picture is measured again. The fact goes into the context of the run, and the roles
+after that one know that the picture is measured.
 
 ## Configuration
 

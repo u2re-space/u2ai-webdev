@@ -59,7 +59,8 @@ ${INPUTS_IN_CONTEXT}
 - If the task names a reference picture and the project has no measurements of it, measure it
   first with the \`call_ai_measure\` tool: \`["measure", "landing.png"]\` for the sizes and the
   positions, \`["design", "landing.png"]\` for the look. The plan then works on real numbers
-  instead of guesses.
+  instead of guesses. The tool answers with the sheet that is already on the disk instead of
+  measuring again — read that answer, do not measure the same picture twice.
 - One step is one role's work. The steps are small enough to be done in one sitting and large
   enough to be worth a step. A step that needs two roles is two steps.
 - The steps come in an order that can be executed: the markup before the styles, the setup
