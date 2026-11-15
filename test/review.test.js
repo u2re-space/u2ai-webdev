@@ -23,7 +23,8 @@ import {
     stylePairIssues,
     reviewStage,
 } from '../src/stages/review.js';
-import { readAudit, auditStage } from '../src/stages/audit.js';
+import { readAudit, auditStage, auditContext, auditListing, buildReport, AUDIT_CORRECTION } from '../src/stages/audit.js';
+import { instructions as auditorInstructions } from '../src/roles/auditor.js';
 import { parseLessons, readLessons, learnStage } from '../src/stages/learn.js';
 
 /**
@@ -85,6 +86,35 @@ function textAnswer(text) {
         output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text }] }],
         output_text: text,
     };
+}
+
+/**
+ * The prompt of the stage: the text of the request of the model.
+ * @param {object} body
+ * @returns {string}
+ * @ai.hint pure
+ */
+function promptOf(body) {
+    const items = Array.isArray(body?.input) ? body.input : [];
+    return items
+        .flatMap((item) => (Array.isArray(item?.content) ? item.content : []))
+        .map((part) => String(part?.text ?? ''))
+        .join('\n');
+}
+
+/**
+ * The answer of the auditor: a report of the project.
+ * @returns {object}
+ * @ai.hint pure
+ */
+function auditAnswer() {
+    return schemaAnswer('review', {
+        verdict: 'partial',
+        scores: { fidelity: 60, completeness: 70, accessibility: 50, quality: 65 },
+        issues: [{ severity: 'medium', path: 'main.js', message: 'The bundle is heavy.', requestedChange: 'Split the vendor.' }],
+        summary: 'The project works but is slow.',
+        recommendations: ['Split the bundle.'],
+    });
 }
 
 const PLAN = {
@@ -632,6 +662,159 @@ test('the audit looks at the project as a whole', async () => {
 
     const saved = await readAudit(root, { output: { work: './.tmp' } }, 'run-1');
     assert.equal(saved.verdict, 'partial');
+});
+
+test('the audit sees the files that are on the disk', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-audit2-'));
+    await writeFile(path.join(root, 'package.json'), '{"name":"landing"}', 'utf8');
+    await writeFile(path.join(root, 'vite.config.js'), 'export default {};', 'utf8');
+    await writeFile(path.join(root, 'main.js'), 'console.log(1);', 'utf8');
+    await mkdir(path.join(root, 'src'), { recursive: true });
+    await writeFile(path.join(root, 'src', 'main.js'), 'console.log(2);', 'utf8');
+
+    const bodies = [];
+    const client = fakeClient([(body) => {
+        bodies.push(body);
+        return auditAnswer();
+    }]);
+
+    const result = await auditStage({
+        client,
+        // The model is pinned to a JSON answer: it never calls a tool, and the truth has to
+        // be in the context.
+        config: { output: { work: './.tmp' }, model: 'minimax/minimax-m3.1-flash' },
+        root,
+        task: 'Make a landing.',
+        plan: PLAN,
+        runId: 'run-1',
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(bodies.length, 1);
+
+    const prompt = promptOf(bodies[0]);
+    assert.match(prompt, /The project on the disk/);
+    assert.match(prompt, /package\.json/);
+    assert.match(prompt, /vite\.config\.js/);
+    assert.match(prompt, /src\/main\.js/);
+
+    // The report says what the auditor saw.
+    assert.equal(result.audit.seen.files > 0, true);
+    assert.equal(result.audit.seen.tools, 0);
+    assert.ok(result.warnings.some((item) => /не вызывает инструменты/.test(item)));
+});
+
+test('the audit knows the build of the project and the design of the task', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-audit3-'));
+    const bodies = [];
+    const client = fakeClient([(body) => {
+        bodies.push(body);
+        return auditAnswer();
+    }]);
+
+    await auditStage({
+        client,
+        config: { output: { work: './.tmp' }, model: 'minimax/minimax-m3.1-flash' },
+        root,
+        task: 'Make a landing.',
+        plan: PLAN,
+        inputs: {
+            task: 'Make a landing.',
+            design: { present: true, tokens: [{ name: '--color-bg', value: '#ffffff' }], typography: [], spacing: [], components: [], layout: [] },
+            palette: { present: true, colors: [{ token: '--color-bg', hex: '#ffffff' }] },
+        },
+        build: {
+            markup: 'index.html',
+            script: 'main.js',
+            vite: true,
+            entry: 'styles.scss',
+            styles: ['styles.scss'],
+            links: ['styles.css'],
+            errors: [],
+            missing: [],
+        },
+        runId: 'run-1',
+    });
+
+    const prompt = promptOf(bodies[0]);
+    assert.match(prompt, /The build of the project/);
+    assert.match(prompt, /index\.html/);
+    assert.match(prompt, /main\.js/);
+    assert.match(prompt, /# The design of the task/);
+    assert.match(prompt, /--color-bg/);
+});
+
+test('the auditor that read nothing is asked again', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-audit4-'));
+    const bodies = [];
+    const client = fakeClient([
+        (body) => {
+            bodies.push(body);
+            return auditAnswer();
+        },
+        (body) => {
+            bodies.push(body);
+            return auditAnswer();
+        },
+    ]);
+
+    const result = await auditStage({
+        client,
+        config: { output: { work: './.tmp' } },
+        root,
+        task: 'Make a landing.',
+        plan: PLAN,
+        runId: 'run-1',
+    });
+
+    // The model may call the tools: it is asked once more, and the schema moves into the
+    // channel of the tools.
+    assert.equal(bodies.length, 2);
+    assert.match(promptOf(bodies[1]), /You have not looked at the project/);
+    assert.ok(result.warnings.some((item) => /был спрошен ещё раз/.test(item)));
+});
+
+test('the report of the build says what the build did', () => {
+    const text = buildReport({
+        markup: 'index.html',
+        script: 'main.js',
+        vite: true,
+        entry: 'styles.scss',
+        styles: ['styles.scss'],
+        links: ['styles.css'],
+        errors: [{ file: 'styles.scss', message: 'Expected "}"' }],
+        missing: ['styles.css'],
+    });
+    assert.match(text, /The build of the project/);
+    assert.match(text, /styles\.scss: Expected "\}"/);
+    assert.match(text, /styles\.css/);
+    assert.equal(buildReport(null), '');
+});
+
+test('the context of the audit holds the listing, the build and the design', () => {
+    const text = auditContext({
+        listing: { text: 'index.html  (8.7 KB)', count: 1, truncated: false },
+        build: { markup: 'index.html', styles: ['styles.scss'], links: [], errors: [] },
+        design: '# Task\nMake a landing.',
+    });
+    assert.match(text, /The project on the disk/);
+    assert.match(text, /index\.html  \(8\.7 KB\)/);
+    assert.match(text, /The build of the project/);
+    assert.match(text, /# The design of the task/);
+});
+
+test('the listing of the audit does not fall over an empty project', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-audit5-'));
+    const listing = await auditListing(root);
+    assert.equal(listing.count, 0);
+    assert.ok(listing.text.length > 0);
+});
+
+test('the auditor is told to read the project before the verdict', () => {
+    const prompt = auditorInstructions({ task: 'Make a landing.', design: '# Task' });
+    assert.match(prompt, /Read the project before the verdict/);
+    assert.match(prompt, /run_command/);
+    assert.match(prompt, /The design of the task is in the task context/);
 });
 
 test('the lessons of the learner are parsed out of the text', () => {

@@ -8,6 +8,7 @@
  * @exports name, schema, tools, maxTurns, instructions
  * @ai.tags roles, audit
  * @ai.hint pure
+ * @changed 2026-11-15 The auditor reads the project and runs the build before the verdict.
  */
 
 import { UNTRUSTED } from './untrusted.js';
@@ -28,7 +29,7 @@ export const maxTurns = 10;
 
 /**
  * The instructions of the role.
- * @param {{ task?: string, project?: string, stack?: object, design?: string }} [context]
+ * @param {{ task?: string, project?: string, stack?: object, design?: string|boolean }} [context]
  * @returns {string}
  * @exports
  * @ai.hint pure
@@ -39,7 +40,7 @@ export function instructions(context = {}) {
         ? `The stack of the project: ${context.stack.frontendFramework ?? 'vanilla'}, ${context.stack.markupLanguage ?? 'html'}, ${context.stack.styleLanguage ?? 'scss'}, ${context.stack.scriptLanguage ?? 'javascript'}.`
         : '';
     const design = context.design
-        ? 'The design direction is in the task context. The result is measured against it.'
+        ? 'The design of the task is in the task context: the measurements, the palette and the tokens of it. The result is measured against them.'
         : '';
     return `You are the auditor of a web project. You look at the whole project, not at one
 step, and you report what is wrong with it.
@@ -49,6 +50,11 @@ ${stack}
 ${design}
 
 Rules:
+- Read the project before the verdict: list the files with \`list_files\`, read the ones that
+  matter with \`read_file\`, and run the build of the project with \`run_command\`. The listing
+  of the project is in the task context: every path in it exists, and a path outside of it
+  does not. A report that calls a missing entry point a defect, or that names a file that
+  was never there, is worse than no report at all.
 - The guides of the platform are the yardstick of the audit: look one up with the
   \`web_guidance\` tool when you judge the accessibility, the performance or the motion.
 - The structure: the dead files, the modules that do one thing in three places, the names that

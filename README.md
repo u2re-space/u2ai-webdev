@@ -172,6 +172,16 @@ are not rewritten to fit the new names. The names of the classes are a contract,
 request of the repair says so to every role. `"checkStyles": false` turns the check off, and
 the stage `styling` warns about the same mismatch while the styles are still being written.
 
+The audit sees the project as it is. The auditor gets the fresh listing of the files of the
+project, the report of the build of the stage and the design of the task as the text it is —
+not as a flag that says "there is a design". An auditor that sees nothing but the task
+describes a project that does not exist: it calls a missing `package.json` a defect of a
+project that has one. The auditor is told to read the project and to run the build before it
+gives the verdict, and a model that answered without a single call is asked once more, with
+the schema in the channel of the tools. A model that is pinned to a JSON answer
+(`schemaChannel: format`) never calls a tool: for it the truth is the context, and the report
+of the audit says how many files were on the disk and how many calls the auditor made.
+
 ### The pictures of the reference
 
 The sheet of the measurements names the crops of the reference: the chess piece, the wooden
