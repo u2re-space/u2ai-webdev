@@ -258,6 +258,19 @@ export async function runPipeline({
         ? config.limits.stageTimeoutMs
         : 0;
 
+    /**
+     * The budget of one stage. A stage may ask for a budget of its own: the review with a
+     * repair reads every step, repairs what it finds and reads the repaired steps again,
+     * and that takes longer than the stages that write the files.
+     * @param {string} name
+     * @returns {number}
+     * @ai.hint pure
+     */
+    const budgetOf = (name) => {
+        const own = config?.stages?.[name]?.timeoutMs;
+        return Number.isSafeInteger(own) && own > 0 ? own : stageTimeoutMs;
+    };
+
     for (const stage of list) {
         const record = done.get(stage.name);
         if (resume && record?.status === 'completed' && !asked.has(stage.name)) {
@@ -289,7 +302,7 @@ export async function runPipeline({
         let result = null;
         try {
             const args = typeof stage.args === 'function' ? { ...ctx, ...stage.args(ctx) } : ctx;
-            result = await runStage(stage, args, stageTimeoutMs);
+            result = await runStage(stage, args, budgetOf(stage.name));
         } catch (cause) {
             error = cause?.message ?? String(cause);
             warnings.push(`Стадия ${stage.name} упала: ${error}`);

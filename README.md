@@ -136,6 +136,16 @@ border of a stage, and `--resume <id>` continues it later. The name of the stage
 is not case sensitive, and it is checked against the stages of the run: a stage that is out
 of the route or switched off is a usage error, not a pause that never comes.
 
+The review repairs what it finds. The issues are grouped by the file they name, and the role
+that wrote the file is asked to fix it: the role of the styles fixes the styles, the role of
+the code fixes the code. The repaired files are compiled, and the steps that were repaired are
+reviewed again — the verdict of the run has to say what the project looks like now. What the
+first repair did not close is named again and repaired again: `stages.review.repairRounds`
+(two passes by default) says how many passes the repair gets, and the second pass says to the
+role that the last repair did not close the defect. `"repair": false` turns the repair off,
+and the review then only reports. The findings go to the disk before the repair starts, so a
+repair that runs out of time does not take the findings with it.
+
 ### The pictures of the reference
 
 The sheet of the measurements names the crops of the reference: the chess piece, the wooden
@@ -257,9 +267,10 @@ answer holds none either.
 The review does not only report: it repairs. The reviewer names the file, the defect and the
 change that is asked for, and the role that owns that file — the role of the step of the plan
 that wrote it — is asked to make the change and write the file back. The step is reviewed
-again afterwards, so the verdict of the run says what the project looks like now. The repair
-is one round: a step that is still broken after it is reported, not repaired again. The
-repair can be turned off in the config:
+again afterwards, so the verdict of the run says what the project looks like now. What the
+first repair did not close is named again and repaired again: `stages.review.repairRounds`
+(two rounds by default) says how many rounds the repair gets. The repair can be turned off in
+the config:
 
 ```json
 {
@@ -356,7 +367,8 @@ everything else stays on the defaults.
   "pace": { "mode": "auto", "speed": 50, "quality": 50 },
   "stages": {
     "plan": { "enabled": true, "maxTurns": 12 },
-    "collect": { "enabled": true, "maxTurns": 8 }
+    "collect": { "enabled": true, "maxTurns": 8 },
+    "review": { "enabled": true, "repair": true, "repairRounds": 2, "timeoutMs": 3600000 }
   },
   "bridges": {
     "decompose": { "enabled": true },
@@ -432,7 +444,7 @@ The sections of the file:
 | `stack` | The stack the generator writes for: the framework, the markup, the styles, the script, the icons. |
 | `agent` | The knobs of the run: `fidelity`, `creativity`, `platform`, `kind`, `approve`, `extract`. |
 | `pace` | The dials of the team: `speed`, `quality` and the per-stage dials. |
-| `stages` | Every stage: `enabled` and `maxTurns`. |
+| `stages` | Every stage: `enabled`, `maxTurns` and `timeoutMs` (the budget of the stage; it wins over `limits.stageTimeoutMs`). The stage `review` also has `repair` and `repairRounds`. |
 | `output` | Where the artifacts go: `dir` (`.ai/`) and `work` (`.tmp/`). |
 | `inputs` | The names of the input files: the design, the measurements, the palette, the tokens, the files of the essence (`extra`) and the reference. |
 | `pictures` | The crops of the reference that are prepared: the kinds, the command of `ai-image`, the subject, the model, the directory, the limit. |
@@ -820,7 +832,8 @@ destination must not exist unless `overwrite` is asked for.
 - There is no image generator in this package: the pictures are the work of the `ai-image` bridge.
 - A run that is interrupted keeps its progress on the disk and can be continued with `--resume`.
 - A stage that does not come back in `limits.stageTimeoutMs` (15 minutes by default) fails with
-  the name of the stage: a run that hangs says so instead of waiting for ever.
+  the name of the stage: a run that hangs says so instead of waiting for ever. A stage that needs
+  more time asks for it: `stages.<id>.timeoutMs` wins over the budget of the run.
 - A crash outside the command — an unhandled rejection, an uncaught exception — is printed and
   leaves the exit code of the failure: a silent death is the hardest kind of failure to read.
 

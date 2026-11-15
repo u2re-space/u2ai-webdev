@@ -93,6 +93,12 @@ function validateStage(id, section, fail) {
   }
   if (!(Number.isSafeInteger(section.maxTurns) && section.maxTurns > 0)) fail(`${where}.maxTurns: целое > 0`);
   if (section.repair != null && typeof section.repair !== 'boolean') fail(`${where}.repair: true | false`);
+  if (section.repairRounds != null && !(Number.isSafeInteger(section.repairRounds) && section.repairRounds >= 0)) {
+    fail(`${where}.repairRounds: целое >= 0`);
+  }
+  if (section.timeoutMs != null && !(Number.isSafeInteger(section.timeoutMs) && section.timeoutMs > 0)) {
+    fail(`${where}.timeoutMs: целое > 0`);
+  }
 }
 
 /**

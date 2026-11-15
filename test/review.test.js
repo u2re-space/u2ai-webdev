@@ -183,6 +183,18 @@ test('the request of the repair names the file, the defect and the change', () =
     assert.match(text, /write the\s+file back under the same path/i);
 });
 
+test('the request of the second repair says that the first one did not work', () => {
+    const text = repairText({ id: 'code-1', files: ['src/main.js'] }, [{
+        severity: 'high',
+        path: 'src/main.js',
+        message: 'The entry does not run.',
+        requestedChange: 'Fix the import.',
+    }], { again: true });
+
+    assert.match(text, /last repair did not close the defect/i);
+    assert.match(text, /Read it again/i);
+});
+
 test('the review repairs what it found and judges the result again', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-repair-'));
     await mkdir(path.join(root, 'src'), { recursive: true });
@@ -248,6 +260,175 @@ test('the review repairs what it found and judges the result again', async () =>
     assert.deepEqual(result.issues, []);
     assert.equal(result.repair.repaired.length, 1);
     assert.equal(result.repair.repaired[0].role, 'coder');
+});
+
+test('the findings are on the disk before the repair starts', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-repair-disk-'));
+    await mkdir(path.join(root, 'src'), { recursive: true });
+    await writeFile(path.join(root, 'src', 'main.js'), 'export const x = 1;\n', 'utf8');
+    const one = {
+        summary: 'A landing.',
+        steps: [
+            { id: 'code-1', title: 'Code', role: 'coder', dependsOn: [], files: ['src/main.js'], criteria: ['runs'] },
+        ],
+    };
+    let onDisk = null;
+    const client = fakeClient([
+        schemaAnswer('review', {
+            verdict: 'fail',
+            scores: { fidelity: 40, completeness: 50, accessibility: 30, quality: 40 },
+            issues: [{
+                severity: 'high',
+                path: 'src/main.js',
+                message: 'The entry does not run.',
+                requestedChange: 'Fix the import.',
+            }],
+            summary: 'The code does not work.',
+            recommendations: [],
+        }),
+        async () => {
+            // The repair has not started yet: the findings are already on the disk.
+            onDisk = JSON.parse(await readFile(path.join(root, '.tmp', 'run-1', 'review.json'), 'utf8'));
+            return schemaAnswer('code', {
+                summary: 'The import is fixed.',
+                files: [{ path: 'src/main.js', content: "import './styles.scss';\n", language: 'javascript' }],
+                commands: [],
+                notes: '',
+            });
+        },
+        schemaAnswer('review', {
+            verdict: 'pass',
+            scores: { fidelity: 90, completeness: 100, accessibility: 80, quality: 85 },
+            issues: [],
+            summary: 'The code works now.',
+            recommendations: [],
+        }),
+    ]);
+
+    await reviewStage({
+        client,
+        config: { output: { work: './.tmp' } },
+        root,
+        task: 'Make a landing.',
+        plan: one,
+        runId: 'run-1',
+    });
+
+    assert.equal(onDisk.verdict, 'fail');
+    assert.equal(onDisk.issues.length, 1);
+    assert.equal(onDisk.issues[0].path, 'src/main.js');
+});
+
+test('the review repairs again what the first repair did not fix', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-repair-again-'));
+    await mkdir(path.join(root, 'src'), { recursive: true });
+    await writeFile(path.join(root, 'src', 'main.js'), 'export const x = 1;\n', 'utf8');
+    const one = {
+        summary: 'A landing.',
+        steps: [
+            { id: 'code-1', title: 'Code', role: 'coder', dependsOn: [], files: ['src/main.js'], criteria: ['runs'] },
+        ],
+    };
+    const issue = {
+        severity: 'high',
+        path: 'src/main.js',
+        message: 'The entry does not run.',
+        requestedChange: 'Fix the import.',
+    };
+    const found = schemaAnswer('review', {
+        verdict: 'fail',
+        scores: { fidelity: 40, completeness: 50, accessibility: 30, quality: 40 },
+        issues: [issue],
+        summary: 'The code does not work.',
+        recommendations: [],
+    });
+    const repair = () => schemaAnswer('code', {
+        summary: 'The import is fixed.',
+        files: [{ path: 'src/main.js', content: "import './styles.scss';\n", language: 'javascript' }],
+        commands: [],
+        notes: '',
+    });
+    let repairs = 0;
+    const client = fakeClient([
+        found,
+        () => { repairs++; return repair(); },
+        // The step is judged again and the defect is still there.
+        found,
+        () => { repairs++; return repair(); },
+        schemaAnswer('review', {
+            verdict: 'pass',
+            scores: { fidelity: 90, completeness: 100, accessibility: 80, quality: 85 },
+            issues: [],
+            summary: 'The code works now.',
+            recommendations: [],
+        }),
+    ]);
+
+    const result = await reviewStage({
+        client,
+        config: { output: { work: './.tmp' } },
+        root,
+        task: 'Make a landing.',
+        plan: one,
+        runId: 'run-1',
+    });
+
+    // The role that owns the file was asked twice: the first repair did not close the defect.
+    assert.equal(repairs, 2);
+    assert.equal(result.verdict, 'pass');
+    assert.equal(result.repair.repaired.length, 2);
+});
+
+test('the repair stops when the rounds are over', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-repair-rounds-'));
+    await mkdir(path.join(root, 'src'), { recursive: true });
+    await writeFile(path.join(root, 'src', 'main.js'), 'export const x = 1;\n', 'utf8');
+    const one = {
+        summary: 'A landing.',
+        steps: [
+            { id: 'code-1', title: 'Code', role: 'coder', dependsOn: [], files: ['src/main.js'], criteria: ['runs'] },
+        ],
+    };
+    const found = schemaAnswer('review', {
+        verdict: 'fail',
+        scores: { fidelity: 40, completeness: 50, accessibility: 30, quality: 40 },
+        issues: [{
+            severity: 'high',
+            path: 'src/main.js',
+            message: 'The entry does not run.',
+            requestedChange: 'Fix the import.',
+        }],
+        summary: 'The code does not work.',
+        recommendations: [],
+    });
+    let repairs = 0;
+    const client = fakeClient([
+        found,
+        () => {
+            repairs++;
+            return schemaAnswer('code', {
+                summary: 'The import is fixed.',
+                files: [{ path: 'src/main.js', content: "import './styles.scss';\n", language: 'javascript' }],
+                commands: [],
+                notes: '',
+            });
+        },
+        found,
+    ]);
+
+    const result = await reviewStage({
+        client,
+        config: { output: { work: './.tmp' }, stages: { review: { repairRounds: 1 } } },
+        root,
+        task: 'Make a landing.',
+        plan: one,
+        runId: 'run-1',
+    });
+
+    // One round, one repair: the defect that is still there is named in the verdict.
+    assert.equal(repairs, 1);
+    assert.equal(result.verdict, 'fail');
+    assert.equal(result.issues.length, 1);
 });
 
 test('the repair is off when the config says so', async () => {

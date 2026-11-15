@@ -190,11 +190,13 @@ const STAGE_OF_ROLE = Object.freeze({
  * that finds a defect and leaves it on the disk is a report, not a repair.
  * @param {object} step
  * @param {object[]} issues
+ * @param {{ again?: boolean }} [options] `again` says that the last repair did not close
+ *   the defect: the role has to look at the file once more
  * @returns {string}
  * @exports
  * @ai.hint pure
  */
-export function repairText(step, issues = []) {
+export function repairText(step, issues = [], { again = false } = {}) {
     const list = Array.isArray(issues) ? issues : [];
     const lines = list.map((issue) => [
         `- file: ${issue?.path ?? 'unknown'}`,
@@ -209,6 +211,11 @@ export function repairText(step, issues = []) {
         '',
         lines,
         '',
+        ...(again
+            ? ['The last repair did not close the defect: the file on the disk is still broken.',
+                'Read it again and make the change that is asked for — not the same change again.']
+            : []),
+        ...(again ? [''] : []),
         `The files of the step: ${files.join(', ') || 'not named'}.`,
         '',
         'Fix it now with the tools: read the file, make the change that is asked for, and write the',
@@ -229,7 +236,7 @@ export function repairText(step, issues = []) {
  * is a defect in a new place.
  * @param {{ client: object, config?: object, root?: string, task?: string, plan?: object|null,
  *   architecture?: object|null, issues?: object[], notify?: (event: object) => void,
- *   env?: object }} request
+ *   env?: object, again?: boolean }} request
  * @returns {Promise<{ repaired: object[], written: string[], warnings: string[], errors: string[] }>}
  * @exports
  * @ai.hint io
@@ -244,6 +251,7 @@ export async function repairIssues({
     issues = [],
     notify = () => {},
     env = process.env,
+    again = false,
 } = {}) {
     const list = Array.isArray(issues) ? issues : [];
     const repaired = [];
@@ -271,7 +279,7 @@ export async function repairIssues({
             client,
             config,
             role: group.role,
-            input: repairText(group.step, group.issues),
+            input: repairText(group.step, group.issues, { again }),
             context: {
                 task: String(task ?? ''),
                 step: group.step,
@@ -425,15 +433,36 @@ export async function reviewStage({
 
     for (const step of steps) reviews.push(await reviewOne(step));
 
+    // The findings of the first pass go to the disk before the repair starts: a repair that
+    // runs out of time must not take the findings with it.
+    const snapshot = (repair) => {
+        const issues = reviews.flatMap((review) => review.issues);
+        const verdict = worstVerdict(reviews.map((review) => review.verdict));
+        return {
+            verdict,
+            reviews,
+            issues,
+            repair: repair ?? null,
+            summary: `Шагов проверено: ${reviews.length}. Вердикт: ${verdict}.`,
+        };
+    };
+    await writeReview(root, config, run, snapshot(null));
+
     // The review finds the defects. The repair fixes them: the role that owns the file is
     // asked to make the change that the reviewer asked for, and the step is reviewed again.
     // A review that finds a defect and leaves it on the disk is a report, not a repair.
+    // The repair may need more than one pass: what the role wrote is read again, and the
+    // defects that are still there are named again and repaired again.
     const wanted = config?.stages?.review?.repair !== false;
-    let repair = null;
+    const rounds = Number.isSafeInteger(config?.stages?.review?.repairRounds)
+        ? Math.max(0, config.stages.review.repairRounds)
+        : 2;
+    const repairs = [];
     if (wanted) {
-        const found = reviews.flatMap((review) => review.issues);
-        if (found.length) {
-            repair = await repairIssues({
+        for (let round = 0; round < rounds; round++) {
+            const found = reviews.flatMap((review) => review.issues);
+            if (!found.length) break;
+            const repair = await repairIssues({
                 client,
                 config,
                 root,
@@ -443,43 +472,44 @@ export async function reviewStage({
                 issues: found,
                 notify,
                 env,
+                again: round > 0,
             });
             warnings.push(...repair.warnings);
+            repairs.push(repair);
             // The steps that were repaired are judged again: the verdict of the run has to
             // say what the project looks like now, not what it looked like before.
             const dirty = new Set(found
                 .map((issue) => issueOwner(plan, issue).step?.id)
                 .filter(Boolean));
-            if (dirty.size) {
-                for (const [index, old] of reviews.entries()) {
-                    if (!dirty.has(old.step.id)) continue;
-                    const step = steps.find((item) => item.id === old.step.id);
-                    if (!step) continue;
-                    reviews[index] = await reviewOne(step);
-                }
+            if (!dirty.size) break;
+            for (const [index, old] of reviews.entries()) {
+                if (!dirty.has(old.step.id)) continue;
+                const step = steps.find((item) => item.id === old.step.id);
+                if (!step) continue;
+                reviews[index] = await reviewOne(step);
             }
+            // The findings of the pass go to the disk as well: the next pass starts from
+            // what the last one saw.
+            await writeReview(root, config, run, snapshot(null));
         }
     }
 
-    const issues = reviews.flatMap((review) => review.issues);
-    const verdict = worstVerdict(reviews.map((review) => review.verdict));
-    const review = {
-        verdict,
-        reviews,
-        issues,
-        repair: repair
-            ? { repaired: repair.repaired, written: repair.written, errors: repair.errors }
-            : null,
-        summary: `Шагов проверено: ${reviews.length}. Вердикт: ${verdict}.`,
-    };
+    const repair = repairs.length
+        ? {
+            repaired: repairs.flatMap((item) => item.repaired),
+            written: [...new Set(repairs.flatMap((item) => item.written))],
+            errors: repairs.flatMap((item) => item.errors),
+        }
+        : null;
+    const review = snapshot(repair);
     const file = await writeReview(root, config, run, review);
 
     return {
         stage: 'review',
-        ok: verdict !== 'fail',
-        verdict,
-        reviews,
-        issues,
+        ok: review.verdict !== 'fail',
+        verdict: review.verdict,
+        reviews: review.reviews,
+        issues: review.issues,
         repair: review.repair,
         file,
         warnings,

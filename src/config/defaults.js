@@ -213,21 +213,24 @@ export const defaults = {
   },
 
   // --- stages -----------------------------------------------------------------
+  // A stage may ask for a budget of its own: `timeoutMs` wins over `limits.stageTimeoutMs`.
+  // The review with a repair asks for more time than the stages that write the files: it
+  // reads every step, repairs what it finds and reads the repaired steps again.
   stages: {
-    plan: { enabled: true, maxTurns: 12 },
-    collect: { enabled: true, maxTurns: 8 },
-    pictures: { enabled: true, maxTurns: 4 },
-    architect: { enabled: true, maxTurns: 16 },
-    setup: { enabled: true, maxTurns: 8 },
-    markup: { enabled: true, maxTurns: 16 },
-    coding: { enabled: true, maxTurns: 24 },
-    styling: { enabled: true, maxTurns: 16 },
-    build: { enabled: true, maxTurns: 1 },
-    vector: { enabled: true, maxTurns: 8 },
-    iconify: { enabled: true, maxTurns: 8 },
-    review: { enabled: true, maxTurns: 12, repair: true },
-    audit: { enabled: true, maxTurns: 8 },
-    learn: { enabled: true, maxTurns: 8 },
+    plan: { enabled: true, maxTurns: 12, timeoutMs: null },
+    collect: { enabled: true, maxTurns: 8, timeoutMs: null },
+    pictures: { enabled: true, maxTurns: 4, timeoutMs: null },
+    architect: { enabled: true, maxTurns: 16, timeoutMs: null },
+    setup: { enabled: true, maxTurns: 8, timeoutMs: null },
+    markup: { enabled: true, maxTurns: 16, timeoutMs: null },
+    coding: { enabled: true, maxTurns: 24, timeoutMs: null },
+    styling: { enabled: true, maxTurns: 16, timeoutMs: null },
+    build: { enabled: true, maxTurns: 1, timeoutMs: null },
+    vector: { enabled: true, maxTurns: 8, timeoutMs: null },
+    iconify: { enabled: true, maxTurns: 8, timeoutMs: null },
+    review: { enabled: true, maxTurns: 12, repair: true, repairRounds: 2, timeoutMs: null },
+    audit: { enabled: true, maxTurns: 8, timeoutMs: null },
+    learn: { enabled: true, maxTurns: 8, timeoutMs: null },
   },
 
   /** Where the artifacts of a run are written, relative to cwd. */

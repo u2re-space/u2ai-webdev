@@ -415,6 +415,38 @@ test('a stage that hangs fails with the name of the stage and the budget', async
     assert.equal(result.stages.length, 1);
 });
 
+test('a stage may ask for a budget of its own', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-timeout-own-'));
+    const stages = [
+        {
+            name: 'slow',
+            title: 'Slow',
+            dependsOn: [],
+            run: () => new Promise(() => {}),
+        },
+    ];
+
+    const started = Date.now();
+    const result = await runPipeline({
+        client: { responses: { create: async () => ({ output: [] }) } },
+        config: {
+            ...CONFIG,
+            limits: { ...CONFIG.limits, stageTimeoutMs: 600_000 },
+            stages: { slow: { timeoutMs: 100 } },
+        },
+        root,
+        task: 'Make a landing.',
+        runId: 'run-1',
+        stages,
+    });
+
+    // The budget of the stage won over the budget of the run.
+    assert.equal(result.status, 'failed');
+    assert.match(result.error, /slow/);
+    assert.match(result.error, /не закончилась/);
+    assert.ok(Date.now() - started < 10_000);
+});
+
 test('a resumed run reads the inputs and the pictures back', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-resume-'));
     const dir = path.join(root, '.tmp', 'run-1');
