@@ -77,3 +77,4 @@ export * from './agent/quality.js';
 export * from './openai/client.js';
 export * from './openai/responses.js';
 export * from './model/profiles.js';
+export * from './model/trust.js';

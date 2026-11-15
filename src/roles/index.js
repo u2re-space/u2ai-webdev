@@ -19,7 +19,8 @@
  *   A role of a step has to write the files of the step. An answer that names no file and that
  *   wrote nothing is a description of the work, not the work: such a role is told to do it.
  *
- * @depends openai/responses, agent/schemas, agent/skills, agent/docs, agent/tools, agent/pace
+ * @depends openai/responses, agent/schemas, agent/skills, agent/docs, agent/tools, agent/pace,
+ *          model/profiles, model/trust
  * @usedBy stages/index, cli
  * @exports ROLES, ROLE_NAMES, resolveRole, buildInstructions, runRole, roleSchema, roleReason,
  *          SCHEMA_CORRECTION, FINAL_ANSWER, WORK_CORRECTION, WORK_ORDER, syntaxCorrection,
@@ -36,6 +37,8 @@ import { documentationForRole } from '../agent/docs.js';
 import { sourcesBlock } from '../agent/sources.js';
 import { createToolset } from '../agent/tools.js';
 import { effortFor } from '../agent/pace.js';
+import { getModelProfile, snapEffort } from '../model/profiles.js';
+import { houseModel } from '../model/trust.js';
 
 import * as untrusted from './untrusted.js';
 import * as planner from './planner.js';
@@ -214,7 +217,14 @@ export function roleSchema(role) {
  * The effective definition of a role: the built-in one, changed by the config.
  *
  * The chain of the config is `roles.<name>` and then `roles.default`; a field that is null in
- * both falls back to the built-in value.
+ * both falls back to the built-in value. The model has one link more: the model of the house
+ * for the role (`model/trust`) sits between the pin of the role and the pin of the default
+ * role, so a role that has its own model of the house keeps it — and a role that names its
+ * own model in the config keeps that one.
+ *
+ * The effort is pulled down to what the model really takes: the Kimi has no levels above
+ * `medium`, so the markup — a Kimi job — works on `medium` however deep the profile of the
+ * stages asks.
  * @param {string} role
  * @param {object} [config]
  * @returns {{ name: string, schema: string|null, tools: string[], maxTurns: number,
@@ -244,16 +254,27 @@ export function resolveRole(role, config = {}) {
     const tools = pick('tools', base.tools);
     const maxTurns = pick('maxTurns', base.maxTurns);
     const roleEffort = pick('effort', null);
-    const effort = roleEffort
+    const asked = roleEffort
         ? effortFor({ config, role: key, effort: roleEffort })
         : effortFor({ config, role: key });
+
+    // The model of the role: the pin of the role wins, then the model of the house for the
+    // role, then the pin of the default role, then the model of the run. A role that names
+    // its own model is never moved.
+    const ownModel = own.model !== null && own.model !== undefined ? own.model : null;
+    const fallbackModel = fallback.model !== null && fallback.model !== undefined ? fallback.model : null;
+    const model = ownModel ?? houseModel(key) ?? fallbackModel ?? (config?.model ?? null);
+
+    // The effort is pulled down to what the model really takes: a model with a lower ceiling
+    // refuses the level above it. The Kimi, for one, has no levels above `medium`.
+    const effort = snapEffort(asked, getModelProfile(model, config)) ?? asked;
 
     return {
         name: key,
         schema: base.schema ?? null,
         tools: Array.isArray(tools) ? tools : base.tools,
         maxTurns: Number.isInteger(maxTurns) && maxTurns > 0 ? maxTurns : base.maxTurns,
-        model: pick('model', config?.model ?? null),
+        model,
         effort,
         summary: pick('summary', config?.reasoning?.summary ?? null),
         temperature: pick('temperature', config?.temperature ?? null),

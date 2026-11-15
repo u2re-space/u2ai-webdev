@@ -589,6 +589,31 @@ it for the Gemini and for every other model.
 }
 ```
 
+### The markup is a Kimi job
+
+One role of the house has its own model: the markup — the stage `markup` and the role `markup`
+— answers on the Kimi K3.1 Pro, whatever the model of the run is. The Kimi builds the structure
+of the page faster and more surely than the Gemini 4 Hydrogen, and it answers in a fraction of
+the time.
+
+The chain of the model of a role is: the pin of the role (`roles.markup.model` or the flag
+`--role markup=<model>`), then the model of the house for the role, then the pin of the default
+role (`roles.default.model`), then the model of the run. The pin of the role wins over
+everything, so a run that wants another model for the markup says so:
+
+```bash
+ai-webdev run "<task>" --role markup=google/gemini-4-hydrogen
+```
+
+The Kimi has no levels of the effort above `medium` — the answer of the same question costs the
+same seconds there — so the markup works on `medium` however deep the profile of the stages
+asks. The role also answers with its tools instead of a pinned JSON answer: a model that is
+pinned to a JSON answer never calls a tool, it describes the work instead of doing it.
+
+The vector stage — the role `editor` — has no model of its own yet: nobody drew a vector
+picture well with any of the models of the house, so the stage keeps the model of the run
+until there is a verdict.
+
 The effort of a run is not one number for everybody. `reasoning.effort` is the ceiling of the
 run, and `reasoning.stageEffort` says what every stage asks for:
 

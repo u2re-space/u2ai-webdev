@@ -155,28 +155,32 @@ test('a role is resolved from the config', () => {
 test('the effort of a role comes from the profile of the stages', () => {
     const config = structuredClone(defaults);
     config.reasoning.effort = 'xhigh';
-    // The markup and the styles carry the look of the reference: they get the deepest
-    // reasoning; the rest of the stages work on `high`.
-    assert.equal(resolveRole('markup', config).effort, 'xhigh');
+    // The styles carry the look of the reference: they get the deepest reasoning; the scripts
+    // and the mechanical work get the cheapest one. The planner and the architect stay in
+    // between: they decide, but they do not build.
     assert.equal(resolveRole('styler', config).effort, 'xhigh');
     assert.equal(resolveRole('coder', config).effort, 'high');
     assert.equal(resolveRole('planner', config).effort, 'high');
     assert.equal(resolveRole('architect', config).effort, 'high');
     assert.equal(resolveRole('installer', config).effort, 'high');
 
+    // The markup is a Kimi job, and the Kimi has no levels above `medium`: the markup works on
+    // `medium` however deep the profile of the stages asks.
+    assert.equal(resolveRole('markup', config).effort, 'medium');
+
     // The effort of the run is the ceiling: a stage never works above it.
     config.reasoning.effort = 'medium';
-    assert.equal(resolveRole('markup', config).effort, 'medium');
+    assert.equal(resolveRole('styler', config).effort, 'medium');
     assert.equal(resolveRole('coder', config).effort, 'medium');
 
     // The effort of the role itself wins over the profile.
-    config.roles.markup.effort = 'high';
-    assert.equal(resolveRole('markup', config).effort, 'high');
+    config.roles.styler.effort = 'high';
+    assert.equal(resolveRole('styler', config).effort, 'high');
 
     // A profile that is turned off leaves every role with the effort of the run.
-    config.roles.markup.effort = null;
+    config.roles.styler.effort = null;
     config.reasoning.stageEffort = null;
-    assert.equal(resolveRole('markup', config).effort, 'medium');
+    assert.equal(resolveRole('styler', config).effort, 'medium');
     assert.equal(resolveRole('coder', config).effort, 'medium');
 });
 
@@ -331,6 +335,9 @@ test('a role that answers with the schema and writes nothing is told to work, an
     try {
         const config = structuredClone(defaults);
         config.model = 'minimax/minimax-m3.1-flash';
+        // The markup is a Kimi job by default; the pin of the role keeps the model of the
+        // test, and with it the pinned JSON answer of MiniMax.
+        config.roles.markup.model = 'minimax/minimax-m3.1-flash';
         config.backends = [{ baseURL: api.url, apiKey: 'test-key' }];
         config.reasoning.effort = 'low';
         const client = await createClient({ config, env });
