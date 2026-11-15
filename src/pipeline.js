@@ -40,6 +40,7 @@ import { readStepReports } from './stages/step.js';
 import { readInputs } from './stages/collect.js';
 import { collectInputs, mergeInputs } from './inputs/index.js';
 import { readPictures } from './stages/pictures.js';
+import { publishRun } from './stages/publish.js';
 import { createProgress, recordStep, readProgress, writeProgress } from './agent/work-plan.js';
 import { openMemory, memoryContext, memoryFile } from './memory.js';
 import { defaultHome } from './config/paths.js';
@@ -442,6 +443,14 @@ export async function runPipeline({
     else progress = { ...progress, status: 'failed' };
 
     const file = await writeProgress(root, config, run, progress);
+
+    // The contract of the project: what this run made and where it lies. The other systems
+    // of the house read it to find the work of this one.
+    try {
+        await publishRun(root, config, progress);
+    } catch (cause) {
+        warnings.push(`Контракт проекта не записан: ${cause?.message ?? cause}`);
+    }
 
     // The finished task goes into the memory of the project.
     const taskText = String(task ?? '').trim() || String(progress?.task ?? '').trim();

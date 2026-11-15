@@ -28,8 +28,9 @@
 
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile } from 'node:fs/promises';
 import { workRoot, sanitizeId } from '../stages/workspace.js';
+import { workRel, writeFileAtomic } from '../shared/house.js';
 
 /** Имя каталога контекста внутри каталога прогона. */
 export const CONTEXT_DIR = 'context';
@@ -88,8 +89,7 @@ export function contextDirectory(root, config = {}, runId = '') {
  * @ai.hint pure
  */
 export function contextRel(root, config = {}, runId = '') {
-    const work = String(config?.output?.work ?? './.tmp').replace(/^\.\//, '').replace(/\/$/, '');
-    return `${work}/${sanitizeId(runId)}/${CONTEXT_DIR}`;
+    return `${workRel(config)}/${sanitizeId(runId)}/${CONTEXT_DIR}`;
 }
 
 /**
@@ -229,7 +229,7 @@ export async function openContext({
      */
     const saveState = async () => {
         state.updatedAt = new Date().toISOString();
-        await writeFile(path.join(dir, STATE_FILE), `${JSON.stringify(state, null, 2)}\n`, 'utf8');
+        await writeFileAtomic(path.join(dir, STATE_FILE), `${JSON.stringify(state, null, 2)}\n`);
     };
 
     const context = {
@@ -429,10 +429,9 @@ export async function openContext({
             if (!cache) return;
             try {
                 await mkdir(path.join(dir, CACHE_DIR), { recursive: true });
-                await writeFile(
+                await writeFileAtomic(
                     path.join(dir, CACHE_DIR, `${cacheKeyFor(key)}.json`),
                     `${JSON.stringify(value ?? null)}\n`,
-                    'utf8',
                 );
             } catch { /* кэш, который не пишется, только замедляет */ }
         },
@@ -512,7 +511,7 @@ export async function openContext({
                 }
                 await mkdir(dir, { recursive: true });
                 const file = path.join(dir, NOTES_FILE);
-                await writeFile(file, lines.join('\n'), 'utf8');
+                await writeFileAtomic(file, lines.join('\n'));
                 return file;
             } catch {
                 return null;

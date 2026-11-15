@@ -449,7 +449,7 @@ export async function runCommand(ctx) {
     renderer?.note?.(`Run ${runId}`);
     // The events of the transport reach the renderer: the wait of a thinking model, the
     // retries of a failed host.
-    const client = await createClient({ config, env, signal: controller.signal, onEvent: notify });
+    const client = await createClient({ config, env, root: cwd, signal: controller.signal, onEvent: notify });
 
     try {
         const request = {
@@ -511,7 +511,7 @@ export async function planCommand(ctx) {
     if (!task) throw new UsageError('Укажите задачу: ai-webdev plan "сделать лендинг".');
 
     const notify = (event) => renderer?.event?.(event);
-    const client = await createClient({ config, env, onEvent: notify });
+    const client = await createClient({ config, env, root: cwd, onEvent: notify });
     try {
         const report = await runPipeline({
             client,

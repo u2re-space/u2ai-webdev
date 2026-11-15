@@ -17,7 +17,8 @@
  */
 
 import path from 'node:path';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
+import { houseDir, writeFileAtomic } from '../shared/house.js';
 import { fidelityContract, effectiveFidelity, fidelityInstructions } from './fidelity.js';
 import { platformInstructions, resolvePlatform } from './platform.js';
 import {
@@ -202,10 +203,8 @@ export function buildGenerationBrief({
  * @ai.hint io
  */
 export async function writeGenerationManifest(root, manifest) {
-    const dir = path.join(root, '.ai');
-    await mkdir(dir, { recursive: true });
-    const file = path.join(dir, 'generation.json');
-    await writeFile(file, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+    const file = path.join(houseDir(root), 'generation.json');
+    await writeFileAtomic(file, `${JSON.stringify(manifest, null, 2)}\n`);
     return file;
 }
 
@@ -217,7 +216,7 @@ export async function writeGenerationManifest(root, manifest) {
  * @ai.hint io
  */
 export async function readGenerationManifest(root) {
-    const file = path.join(root, '.ai', 'generation.json');
+    const file = path.join(houseDir(root), 'generation.json');
     const text = await readFile(file, 'utf8').catch(() => null);
     if (text === null) return null;
     try {

@@ -161,7 +161,7 @@ export const defaults = {
   logging: {
     enabled: false,
     /** Where the records are written, relative to the working directory. */
-    dir: '.tmp/api',
+    dir: '.ai/logs/api',
   },
 
   // --- limits ---------------------------------------------------------------
@@ -293,10 +293,18 @@ export const defaults = {
 
   /** Where the artifacts of a run are written, relative to cwd. */
   output: {
-    /** The project artifacts: .ai/ by default. */
+    /** The house of the project: .ai/ by default. */
     dir: './.ai',
-    /** The working directory of a run: .tmp/ by default. */
-    work: './.tmp',
+    /**
+     * The working directory of a run: `.ai/tmp/` by default.
+     *
+     * The state of a run lives in the house and dies with the run: `.ai/tmp/<run id>/`.
+     * The path may be moved away, but it is one path, and it is computed in one place —
+     * `shared/house.js`.
+     */
+    work: './.ai/tmp',
+    /** The assets of the house: the pictures, the decorations, the crops. */
+    assets: './.ai/assets',
   },
 
   // --- контекст прогона -------------------------------------------------------

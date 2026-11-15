@@ -21,6 +21,7 @@
 import path from 'node:path';
 import { readdir, stat } from 'node:fs/promises';
 import { NOISY_DIRS, toPosix } from '../agent/paths.js';
+import { HOUSE_WORK } from '../shared/house.js';
 
 /**
  * The name of a crop: the file name without the extension.
@@ -82,7 +83,7 @@ export async function resolveCropFile(root, crop, { sheetDir = '', workDir = '',
     }
 
     const name = path.basename(wanted);
-    const bases = [path.join(path.resolve(root), workDir || '.tmp'), path.resolve(root)];
+    const bases = [path.join(path.resolve(root), workDir || HOUSE_WORK), path.resolve(root)];
     for (const base of bases) {
         const found = await findByName(base, name, depth);
         if (found) return found;

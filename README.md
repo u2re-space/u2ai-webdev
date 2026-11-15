@@ -435,7 +435,9 @@ A run reads the direction of the design from the project itself:
 Every path of the table is a list of candidates: the root of the project comes first, and the
 directory of the measurer comes second. The measurer writes its delivery into
 `measurements/` — `measurements.json`, `palette.json`, `tokens.css`, `DESIGN.md` — and the run
-finds it there. Without that, the run would measure the same picture again. The paths live in
+finds it there. Without that, the run would measure the same picture again. The run asks the
+contract of the project first (`.ai/manifest.json` says where every system put its work) and
+only then the paths of the config, so a delivery that moved is still found. The paths live in
 the config (`inputs.designMd`, `inputs.measurements`, `inputs.palette`, `inputs.tokens`), and a
 path may be a list of candidates of its own:
 
@@ -678,7 +680,7 @@ The sections of the file:
 | `agent` | The knobs of the run: `fidelity`, `creativity`, `platform`, `kind`, `approve`, `extract`. |
 | `pace` | The dials of the team: `speed`, `quality` and the per-stage dials. |
 | `stages` | Every stage: `enabled`, `maxTurns` and `timeoutMs` (the budget of the stage; it wins over `limits.stageTimeoutMs`). The stage `review` also has `repair` and `repairRounds`. |
-| `output` | Where the artifacts go: `dir` (`.ai/`) and `work` (`.tmp/`). |
+| `output` | Where the artifacts go: `dir` (`.ai/`), `work` (`.ai/tmp/`) and `assets` (`.ai/assets/`). |
 | `inputs` | The names of the input files: the design, the measurements, the palette, the tokens, the files of the essence (`extra`) and the reference. |
 | `pictures` | The crops of the reference that are prepared: the kinds, the command of `ai-image`, the subject, the model, the directory, the limit. |
 | `memory` | The permanent memory: the file, the scope, the limit, the summaries of the files, the finished tasks. |
@@ -749,10 +751,67 @@ is the same picture every time. The record says how big it was. The log is off b
 on with the directory:
 
 ```json
-{ "logging": { "enabled": true, "dir": ".tmp/api" } }
+{ "logging": { "enabled": true, "dir": ".ai/logs/api" } }
 ```
 
-or with `AI_WEBDEV_LOG_DIR=.tmp/api`.
+or with `AI_WEBDEV_LOG_DIR=.ai/logs/api`.
+
+## The house of the project
+
+Every project has one directory of its own: `.ai/`. Everything a run makes that is not the
+product itself lives there, and nowhere else.
+
+```
+.ai/
+  tmp/<run-id>/     the state of the run: the plan, the progress, the context, the map
+  assets/           the assets of the house: the pictures, the decorations, the crops
+  logs/api/         the log of the API calls
+  manifest.json     the contract of the project: what every system made and where it lies
+```
+
+The state of a run dies with the run: a new run never reads the state of the old one, and the
+old one never gets in the way of the new one. The `output.work` of the config may move the
+state elsewhere, but there is only one path, and it is computed in one place — the house.
+
+The product stays where the user expects it. The site is in the root of the project, the
+delivery of the measurer is in `measurements/`, the delivery of the decomposer is in
+`decomposition/`. The house keeps the state, the assets and the contract, and it does not
+move the product.
+
+The contract is how the systems of the house find each other. Every system signs its own part
+of `.ai/manifest.json` and never touches the part of another one:
+
+```json
+{
+  "manifestVersion": 1,
+  "updatedAt": "2026-11-15T03:41:02.113Z",
+  "systems": {
+    "measurer": {
+      "delivery": "measurements/",
+      "artifacts": {
+        "measurements": "measurements/measurements.json",
+        "palette": "measurements/palette.json",
+        "tokens": "measurements/tokens.css"
+      },
+      "updatedAt": "2026-11-15T03:40:58.002Z"
+    },
+    "webdev": {
+      "delivery": ".",
+      "artifacts": { "site": "." },
+      "updatedAt": "2026-11-15T03:52:11.417Z"
+    }
+  }
+}
+```
+
+The paths are relative to the project and with forward slashes: the contract is read on another
+machine and another system, and the path has to mean the same thing there. A run reads the
+contract first and only then the old paths of the config, so a project made before the contract
+still works.
+
+The files of the house are written whole: the bytes go to a file next to the target and the
+target is replaced by a rename. A reader never sees half of a file, and a run that dies in the
+middle leaves the old file and not a broken one.
 
 ## The write policy
 
@@ -809,7 +868,7 @@ run did, what it decided and the answers its tools already gave. The context liv
 directory of the run — `<output.work>/<id>/context/` — and dies with it.
 
 ```
-.tmp/<id>/context/
+.ai/tmp/<id>/context/
   journal.ndjson   что происходило, по одной записи на строку, в порядке событий
   state.json       что прогон знает сейчас: картинки, стадии, факты
   cache/           ответы, которые инструменты уже давали, чтобы не спрашивать дважды
@@ -852,7 +911,7 @@ read from the disk again — the map never serves a stale file.
 The search knows three scopes: `path` looks at the names of the files, `content` at their text,
 `symbol` at the names the code declares, `all` at everything.
 
-The map does not read everything: it skips `.tmp`, `node_modules`, `.git` and the files with
+The map does not read everything: it skips `.ai`, `node_modules`, `.git` and the files with
 secrets, it holds at most 2000 files, and a file longer than 400 lines or bigger than 32 KiB is
 marked `partial` — for such a file the search goes to the disk.
 
@@ -893,7 +952,7 @@ is newer than the bundle, and for the caller that asks for the CLI (`source: "cl
 ## The process of a run
 
 A run may be paused and continued: the plan, the progress and the reports live on the disk, in the
-directory of the run (`.tmp/<id>/` by default, the id is the time).
+directory of the run (`.ai/tmp/<id>/` by default, the id is the time).
 
 ```bash
 ai-webdev run "make a landing" --stop-after plan     # pause after the plan

@@ -43,6 +43,7 @@ import { parseMeasurements } from '../inputs/measurements.js';
 import { measuredCrops } from '../inputs/measuredCrops.js';
 import { runBridge, bridgeEnabled } from '../agent/bridges.js';
 import { runFile, writeJsonFile, readJsonFile } from './workspace.js';
+import { workRel } from '../shared/house.js';
 
 /** The file of the run that holds the prepared pictures. */
 export const PICTURES_FILE = 'pictures.json';
@@ -218,7 +219,7 @@ export async function picturesStage({
     }
 
     const kinds = Array.isArray(settings.kinds) && settings.kinds.length ? settings.kinds : pictureKinds;
-    const workDir = String(config?.output?.work ?? '.tmp');
+    const workDir = workRel(config);
     // Кандидаты листа измерений: в корне проекта и в каталоге измерителя.
     const candidates = inputCandidates(config?.inputs?.measurements, 'measurements');
 

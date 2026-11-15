@@ -28,7 +28,7 @@ import { parsePalette, paletteTokens } from './palette.js';
 import { parseTokensCss, cssConflicts } from './tokens.js';
 import { collectAssetFiles, readProjectInstructions } from './assets.js';
 import { findReferences } from './references.js';
-import { findInput, inputCandidates } from './candidates.js';
+import { findInput, findContractInput, inputCandidates } from './candidates.js';
 
 /**
  * Read a file of the project, when it is there.
@@ -105,24 +105,24 @@ export async function collectInputs({ root, config = {}, task = '' } = {}) {
     const warnings = [];
 
     const designCandidates = inputCandidates(inputs.designMd, 'designMd');
-    const designFile = await findInput(root, designCandidates);
+    const designFile = await findContractInput(root, 'design', designCandidates);
     const design = parseDesignMd(designFile?.text ?? '');
     if (!designFile) warnings.push(missing('design document', designCandidates));
 
     const measurementCandidates = inputCandidates(inputs.measurements, 'measurements');
-    const measurementFile = await findInput(root, measurementCandidates);
+    const measurementFile = await findContractInput(root, 'measurements', measurementCandidates);
     const measurements = parseMeasurements(measurementFile?.text ?? '');
     if (!measurementFile) warnings.push(missing('sheet of the measurements', measurementCandidates));
     warnings.push(...measurements.warnings);
 
     const paletteCandidates = inputCandidates(inputs.palette, 'palette');
-    const paletteFile = await findInput(root, paletteCandidates);
+    const paletteFile = await findContractInput(root, 'palette', paletteCandidates);
     const palette = parsePalette(paletteFile?.text ?? '');
     if (!paletteFile) warnings.push(missing('palette', paletteCandidates));
     warnings.push(...palette.warnings);
 
     const tokensCandidates = inputCandidates(inputs.tokens, 'tokens');
-    const tokensFile = await findInput(root, tokensCandidates);
+    const tokensFile = await findContractInput(root, 'tokens', tokensCandidates);
     const tokens = parseTokensCss(tokensFile?.text ?? '');
     if (!tokensFile) warnings.push(missing('tokens of the stylesheet', tokensCandidates));
     warnings.push(...tokens.warnings);
@@ -147,6 +147,7 @@ export async function collectInputs({ root, config = {}, task = '' } = {}) {
         root,
         dirs: [
             ...(config.output?.dir ? [path.join(config.output.dir, 'refs')] : []),
+            ...(config.output?.assets ? [config.output.assets] : []),
             ...(config.output?.dir ? [path.join(config.output.dir, 'assets')] : []),
             ...(config.output?.work ? [config.output.work] : []),
         ],

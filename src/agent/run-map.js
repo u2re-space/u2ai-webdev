@@ -30,8 +30,9 @@
  */
 
 import path from 'node:path';
-import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, stat } from 'node:fs/promises';
 import { workRoot, sanitizeId } from '../stages/workspace.js';
+import { workRel, writeFileAtomic } from '../shared/house.js';
 
 /** Имя карты внутри каталога прогона. */
 export const RUN_MAP_FILE = 'map.json';
@@ -39,8 +40,8 @@ export const RUN_MAP_FILE = 'map.json';
 /** Версия формата карты. */
 export const RUN_MAP_VERSION = 1;
 
-/** Каталоги, в которые карта не заходит. */
-const NOISY = /^(?:\.git|node_modules|\.tmp|\.hg|\.svn|dist|build|coverage|\.next|\.nuxt|\.cache|\.venv|venv|__pycache__|target)$/i;
+/** Каталоги, в которые карта не заходит: дом проекта (`.ai`) и старый рабочий каталог. */
+const NOISY = /^(?:\.git|node_modules|\.ai|\.tmp|\.hg|\.svn|dist|build|coverage|\.next|\.nuxt|\.cache|\.venv|venv|__pycache__|target)$/i;
 
 /** Файлы, которые карта не читает. */
 const SECRET = /^(?:\.env(?:\..*)?|\.npmrc|\.netrc|\.pypirc|credentials(?:\..*)?|secrets?(?:\..*)?|.*\.(?:pem|key|p12|pfx|jks|keystore))$/i;
@@ -92,8 +93,7 @@ export function runMapFile(root, config = {}, runId = '') {
  * @ai.hint pure
  */
 export function runMapRel(root, config = {}, runId = '') {
-    const work = String(config?.output?.work ?? './.tmp').replace(/^\.\//, '').replace(/\/$/, '');
-    return `${work}/${sanitizeId(runId)}/${RUN_MAP_FILE}`;
+    return `${workRel(config)}/${sanitizeId(runId)}/${RUN_MAP_FILE}`;
 }
 
 /**
@@ -266,7 +266,7 @@ export async function buildRunMap({
 export async function saveRunMap({ root, config = {}, runId = '', map }) {
     const file = runMapFile(root, config, runId);
     await mkdir(path.dirname(file), { recursive: true });
-    await writeFile(file, `${JSON.stringify(map, null, 2)}\n`, 'utf8');
+    await writeFileAtomic(file, `${JSON.stringify(map, null, 2)}\n`);
     return file;
 }
 

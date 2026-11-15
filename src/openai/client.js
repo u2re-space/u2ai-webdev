@@ -174,7 +174,7 @@ const WAIT_INTERVAL_MS = 20_000;
  * @param {{ config: object, env?: object, signal?: AbortSignal|null, onEvent?: Function|null }} opts
  * @returns {Promise<object>}
  */
-export async function createClient({ config, env = process.env, signal = null, onEvent = null } = {}) {
+export async function createClient({ config, env = process.env, signal = null, onEvent = null, root = process.cwd() } = {}) {
     const transport = createHttp({
         // A thinking model may work for minutes without a word: a short idle timeout
         // throws the reasoning away and asks the same question again.
@@ -187,8 +187,10 @@ export async function createClient({ config, env = process.env, signal = null, o
     const announce = (event) => { try { onEvent?.(event); } catch { /* an observer never breaks a request */ } };
 
     // The log of the calls: one JSON record per request, with the whole chain of hosts.
+    // The records live in the house of the project: `.ai/logs/api/`.
     const logger = createApiLogger({
         dir: config?.logging?.enabled ? (config?.logging?.dir ?? null) : null,
+        cwd: root,
     });
 
     /**

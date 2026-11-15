@@ -13,10 +13,11 @@
  */
 
 import path from 'node:path';
-import { readFile, writeFile, mkdir, stat, lstat, readdir, unlink, copyFile, cp, open } from 'node:fs/promises';
+import { readFile, mkdir, stat, lstat, readdir, unlink, copyFile, cp, open } from 'node:fs/promises';
 import { resolveInside, isInside, isForbiddenDirName, isProtectedFileName, NOISY_DIRS } from './paths.js';
 import { formatBytes } from '../util/text.js';
 import { saveProjectBackup } from './project-backup.js';
+import { writeFileAtomic } from '../shared/house.js';
 
 const utf8 = new TextDecoder('utf-8', { fatal: true });
 
@@ -292,7 +293,7 @@ export async function writeTextFile({ root, file, content, overwrite = true, max
         projectBackup = await saveProjectBackup({ root, rel, abs, slot: backupSlot || 'write' });
     }
     await mkdir(path.dirname(abs), { recursive: true });
-    await writeFile(abs, content, 'utf8');
+    await writeFileAtomic(abs, content);
     return { rel, bytes: Buffer.byteLength(content), created: !existing, backupPath, projectBackup };
 }
 
@@ -327,7 +328,7 @@ export async function replaceInFile({ root, file, search, replacement, all = fal
     const updated = all ? text.split(search).join(replacement) : text.replace(search, () => replacement);
     const backupPath = await backup(abs, rel, backupDir);
     const projectBackup = await saveProjectBackup({ root, rel, abs, slot: backupSlot || 'write' });
-    await writeFile(abs, updated, 'utf8');
+    await writeFileAtomic(abs, updated);
     return { rel, replacements: all ? count : 1, bytes: Buffer.byteLength(updated), backupPath, projectBackup };
 }
 

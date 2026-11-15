@@ -11,9 +11,10 @@
  * @changed 2026-10-15 Symbol scan moved to agent/map-scan.js. Records keep JSDoc purpose, params, and tags.
  */
 import path from 'node:path';
-import { readdir, readFile, writeFile, mkdir, stat, open } from 'node:fs/promises';
+import { readdir, readFile, mkdir, stat, open } from 'node:fs/promises';
 import { NOISY_DIRS, isProtectedFileName, isForbiddenDirName } from './paths.js';
 import { extractSymbols, mayHaveImports, resolveImports } from './map-scan.js';
+import { houseDir, writeFileAtomic } from '../shared/house.js';
 
 const TEXT_CACHE_BYTES = 32 * 1024 * 1024;
 const MAX_INDEX_BYTES = 1024 * 1024;
@@ -37,7 +38,7 @@ const rootsByEntry = new WeakMap();
  * @ai.hint pure
  */
 export function projectMapFile(root) {
-    return path.join(root, '.ai', 'map.json');
+    return path.join(houseDir(root), 'map.json');
 }
 
 /**
@@ -359,7 +360,7 @@ function install(root, map, mtimeMs, importSpecs = new Map()) {
 async function writeMap(root, map) {
     const file = projectMapFile(root);
     await mkdir(path.dirname(file), { recursive: true });
-    await writeFile(file, `${JSON.stringify(map, null, 2)}\n`);
+    await writeFileAtomic(file, `${JSON.stringify(map, null, 2)}\n`);
     return stat(file);
 }
 

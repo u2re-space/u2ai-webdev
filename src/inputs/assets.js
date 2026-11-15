@@ -21,6 +21,7 @@
 import path from 'node:path';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { NOISY_DIRS, toPosix } from '../agent/paths.js';
+import { HOUSE_ASSETS, HOUSE_DIR, HOUSE_WORK } from '../shared/house.js';
 
 /** The extensions of the pictures the CLI reads. */
 export const IMAGE_EXTENSIONS = Object.freeze([
@@ -123,7 +124,7 @@ export async function listImages({ root, dir = '.', depth = 3, limit = 200 } = {
  * @exports
  * @ai.hint io
  */
-export async function collectAssetFiles({ root, dirs = ['.ai/refs', '.ai/assets', '.tmp'], depth = 3, limit = 200 } = {}) {
+export async function collectAssetFiles({ root, dirs = [`${HOUSE_DIR}/${HOUSE_ASSETS}`, `${HOUSE_DIR}/refs`, HOUSE_WORK], depth = 3, limit = 200 } = {}) {
     const out = [];
     const seen = new Set();
     for (const dir of dirs) {
