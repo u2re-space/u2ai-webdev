@@ -20,6 +20,7 @@
  * @ai.hint io
  * @ai.hint legacy-0.2
  * @changed 2026-11-13 Ported from the monolith: the steps of the plan drive the stages.
+ * @changed 2026-11-15 Каталог, названный шагом, — это не «файл не написан».
  */
 
 import path from 'node:path';
@@ -395,6 +396,11 @@ export async function readStepReports(root, config = {}, id = null) {
  *
  * A step names the files it touches. A file that is missing after the role has answered means
  * that the work was not done, and the stage says so instead of calling the step done.
+ *
+ * A directory counts as a file that is there: a step that names a directory of icons has done
+ * its work when the directory is on the disk. The check that asked for a file and did not get
+ * one called the whole stage broken — and the run stopped right there, before the review that
+ * would have told what was really wrong.
  * @param {string} root
  * @param {string[]} files
  * @returns {Promise<string[]>}
@@ -406,7 +412,9 @@ export async function missingFiles(root, files = []) {
     for (const rel of Array.isArray(files) ? files : []) {
         const name = String(rel ?? '').trim();
         if (!name) continue;
-        const found = await stat(path.join(root, name)).then((info) => info.isFile()).catch(() => false);
+        const found = await stat(path.join(root, name))
+            .then((info) => info.isFile() || info.isDirectory())
+            .catch(() => false);
         if (!found) missing.push(name);
     }
     return missing;

@@ -13,7 +13,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promises';
 
-import { stepsForRole, applyFiles, laterSteps, roleWorkOnDisk, stepReportPath, readStepReport, readStepReports, runStepStage } from '../src/stages/step.js';
+import { stepsForRole, applyFiles, laterSteps, missingFiles, roleWorkOnDisk, stepReportPath, readStepReport, readStepReports, runStepStage } from '../src/stages/step.js';
 import { markupStage } from '../src/stages/markup.js';
 import { codingStage } from '../src/stages/coding.js';
 import { stylingStage, styleTokensText } from '../src/stages/styling.js';
@@ -150,6 +150,54 @@ test('the words of a model never land in a picture', async () => {
     assert.deepEqual(applied.written, ['assets/icon.svg']);
     assert.deepEqual(applied.skipped, ['assets/picture.png']);
     assert.ok(applied.warnings.some((item) => /не текстовый файл/.test(item)));
+});
+
+test('the directory of a step is not a missing file', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-dir-'));
+    await mkdir(path.join(root, 'src', 'assets', 'icons'), { recursive: true });
+    await writeFile(path.join(root, 'src', 'assets', 'icons', 'mail.svg'), '<svg></svg>\n', 'utf8');
+
+    // The step named a directory: the icons are in it, and the step has done its work.
+    assert.deepEqual(await missingFiles(root, ['src/assets/icons/']), []);
+    // A directory that is not there is still missing.
+    assert.deepEqual(await missingFiles(root, ['src/assets/pictures/']), ['src/assets/pictures/']);
+});
+
+test('a step that names a directory is done when the directory is there', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-dir-step-'));
+    await mkdir(path.join(root, 'src', 'assets', 'icons'), { recursive: true });
+    const client = fakeClient([schemaAnswer('icon', {
+        summary: 'One set for the whole project.',
+        set: 'lucide',
+        icons: [{ name: 'mail', purpose: 'The mail.', size: 20, file: 'src/assets/icons/mail.svg' }],
+        files: [{ path: 'src/assets/icons/mail.svg', content: '<svg></svg>\n', language: 'svg' }],
+        notes: '',
+    })]);
+    const plan = {
+        summary: 'Icons.',
+        steps: [{
+            id: 'icons-1',
+            title: 'Icons',
+            role: 'iconifier',
+            dependsOn: [],
+            files: ['src/assets/icons/'],
+            criteria: ['the icons are there'],
+        }],
+    };
+
+    const result = await runStepStage({
+        client,
+        config: { output: { work: './.tmp' } },
+        root,
+        task: 'Make a landing.',
+        role: 'iconifier',
+        plan,
+        runId: 'run-1',
+    });
+
+    // The directory of the icons is on the disk: the step is done.
+    assert.equal(result.ok, true);
+    assert.equal(result.steps[0].ok, true);
 });
 
 test('a step stage runs the role over its steps and writes the reports', async () => {

@@ -112,6 +112,14 @@ exit code and a timeout come back as an answer, never as an exception. The insta
 only when every package of the manifest is already on the disk: a `node_modules` that does not
 hold `sass` is a reason to install, not a reason to skip.
 
+A step names the files it touches, and the check of the step counts what is really there: a file
+that is not on the disk means that the work was not done, and the stage says so instead of
+calling the step done. A directory counts as a file that is there. A step that names the
+directory of the icons (`src/assets/icons/`) has done its work when the directory is on the
+disk, and the run does not stop over a directory that was asked for and that exists — the run
+that stopped there never came to the review, and the review is the stage that says what is
+really wrong with the project.
+
 The compiler of the styles is a dependency of the project: a project that writes SCSS gets
 `sass` in its `devDependencies` (`sass ^1.80.0`), and the package manager of the project puts it
 on the disk. The code of the stage `setup` adds it to the manifest and installs it — the model
