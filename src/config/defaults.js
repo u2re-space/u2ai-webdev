@@ -34,6 +34,50 @@ export const STAGE_EFFORT = Object.freeze({
     learner: 'low',
 });
 
+/**
+ * The addresses of the pages of the documentation: the name of a source and its address.
+ *
+ * The name is the key by which a role gets the link: `documentation.roles.<role>` names the
+ * sources, and `documentation.sources` holds their addresses. The map came from the monolith:
+ * the addresses of the pages change slowly, and a role gets them once with its instructions.
+ *
+ * A user adds its own sources to the same section: a name that is not in the map is a link
+ * of the user, and a name that is in the map replaces the address of the built-in one.
+ */
+export const DOCUMENTATION_SOURCES = Object.freeze({
+  mdnCss: 'https://developer.mozilla.org/en-US/docs/Web/CSS',
+  mdnJavaScript: 'https://developer.mozilla.org/en-US/docs/Web/JavaScript',
+  ecma262: 'https://tc39.es/ecma262/',
+  typescript: 'https://www.typescriptlang.org/docs/',
+  sass: 'https://sass-lang.com/documentation/',
+  eslint: 'https://eslint.org/docs/latest/',
+  stylelint: 'https://stylelint.io/user-guide/',
+  prettier: 'https://prettier.io/docs/',
+  canIUse: 'https://caniuse.com/',
+  cssTricks: 'https://css-tricks.com/',
+  chromeStatus: 'https://chromestatus.com/',
+  cssLogical: 'https://drafts.csswg.org/css-logical/',
+  cssProperty: 'https://drafts.css-houdini.org/css-properties-values-api/',
+  cssLayer: 'https://drafts.csswg.org/css-cascade-5/',
+  cssConditional: 'https://drafts.csswg.org/css-conditional-5/',
+  cssAnchor: 'https://drafts.csswg.org/css-anchor-position-2/',
+  cssUnits: 'https://drafts.csswg.org/css-values-5/',
+  cssAnimation: 'https://drafts.csswg.org/css-animations-2/',
+  cssShapes: 'https://drafts.csswg.org/css-shapes-2/',
+  cssMotion: 'https://drafts.csswg.org/motion/',
+  cssTransform: 'https://drafts.csswg.org/css-transforms-2/',
+  cssCascade: 'https://drafts.csswg.org/css-cascade-5/',
+  cssContain: 'https://drafts.csswg.org/css-contain/',
+  cssImages: 'https://drafts.csswg.org/css-images-5/',
+  cssMasking: 'https://drafts.csswg.org/css-masking/',
+  cssFonts: 'https://drafts.csswg.org/css-fonts/',
+  magickOptions: 'https://imagemagick.org/command-line-options/',
+  magickTools: 'https://imagemagick.org/command-line-tools/',
+  phosphorIcons: 'https://phosphoricons.com/',
+  lucideIcons: 'https://lucide.dev/icons/',
+  googleFonts: 'https://fonts.google.com/',
+});
+
 export const defaults = {
   // --- API -----------------------------------------------------------------
   /** Text model for the role agents. */
@@ -428,16 +472,64 @@ export const defaults = {
 
   // --- documentation ----------------------------------------------------------
   /**
-   * The standards a role is given as documentation: CSS units, CSS shapes,
-   * the icon sets, the WCAG colour rules. The coder needs them to write the
-   * markup and the styles; the styler needs them to name the tokens.
+   * The documentation of the roles: the standards that live in the package and the
+   * addresses of the pages behind them.
+   *
+   * A name in `roles` may name a standard (the texts of `agent/docs`) or a source (an
+   * address of `sources`). A name that is both gives the role the rules and the page:
+   * `cssUnits` is the rules of the units and the draft that defines them.
    */
   documentation: {
+    /**
+     * The addresses of the pages: the built-in map, which the config may extend or
+     * override with a source of its own.
+     */
+    sources: { ...DOCUMENTATION_SOURCES },
     roles: {
-      coder: ['cssUnits', 'cssGrid', 'cssFlex', 'htmlSemantics', 'a11y'],
-      markup: ['htmlSemantics', 'a11y', 'svg', 'phosphorIcons', 'lucideIcons'],
-      styler: ['cssUnits', 'cssShapes', 'cssGrid', 'cssFlex', 'cssFonts', 'cssColors', 'wcagColors'],
-      iconifier: ['phosphorIcons', 'lucideIcons'],
+      planner: [
+        'mdnCss', 'mdnJavaScript', 'ecma262', 'typescript', 'sass',
+        'canIUse', 'cssTricks', 'chromeStatus',
+      ],
+      architect: [
+        'mdnCss', 'mdnJavaScript', 'ecma262', 'typescript', 'sass', 'canIUse',
+        'cssTricks', 'chromeStatus', 'cssLogical', 'cssProperty', 'cssLayer',
+        'cssConditional', 'cssAnchor', 'cssUnits', 'cssAnimation', 'cssShapes',
+        'cssMotion', 'cssTransform', 'cssCascade', 'cssContain', 'cssImages',
+        'cssMasking', 'cssFonts', 'eslint', 'stylelint', 'prettier',
+        'phosphorIcons', 'lucideIcons', 'googleFonts',
+      ],
+      director: [
+        'mdnCss', 'mdnJavaScript', 'ecma262', 'typescript', 'sass', 'canIUse',
+        'cssTricks', 'chromeStatus', 'cssLogical', 'cssProperty', 'cssLayer',
+        'cssConditional', 'cssAnchor', 'cssUnits', 'cssAnimation', 'cssShapes',
+        'cssMotion', 'cssTransform', 'cssCascade', 'cssContain', 'cssImages',
+        'cssMasking', 'cssFonts', 'eslint', 'stylelint', 'prettier',
+        'phosphorIcons', 'lucideIcons', 'googleFonts',
+      ],
+      coder: [
+        'cssUnits', 'cssGrid', 'cssFlex', 'htmlSemantics', 'a11y',
+        'mdnCss', 'mdnJavaScript', 'ecma262', 'typescript', 'sass', 'canIUse',
+        'cssTricks', 'chromeStatus', 'cssLogical', 'cssProperty', 'cssLayer',
+        'cssConditional', 'cssAnchor', 'cssAnimation', 'cssShapes', 'cssMotion',
+        'cssTransform', 'cssCascade', 'cssContain', 'cssImages', 'cssMasking',
+        'cssFonts', 'eslint', 'stylelint', 'prettier', 'phosphorIcons',
+        'lucideIcons', 'googleFonts',
+      ],
+      markup: [
+        'htmlSemantics', 'a11y', 'svg',
+        'mdnCss', 'phosphorIcons', 'lucideIcons',
+      ],
+      styler: [
+        'cssUnits', 'cssShapes', 'cssGrid', 'cssFlex', 'cssFonts', 'cssColors', 'wcagColors',
+        'mdnCss', 'sass', 'canIUse', 'cssLogical', 'cssProperty', 'cssLayer',
+        'cssConditional', 'cssAnchor', 'cssAnimation', 'cssMotion', 'cssTransform',
+        'cssCascade', 'cssContain', 'cssImages', 'cssMasking', 'stylelint',
+        'prettier', 'googleFonts',
+      ],
+      iconifier: ['phosphorIcons', 'lucideIcons', 'googleFonts'],
+      editor: ['svg', 'mdnCss', 'phosphorIcons', 'lucideIcons'],
+      reviewer: ['mdnCss', 'cssTricks'],
+      auditor: ['mdnCss'],
     },
   },
 

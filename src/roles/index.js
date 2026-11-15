@@ -33,6 +33,7 @@ import { parseResponse, textPart } from '../openai/responses.js';
 import { schemaFor } from '../agent/schemas.js';
 import { buildSkillInstructions, discoverSkills, skillsForRole } from '../agent/skills.js';
 import { documentationForRole } from '../agent/docs.js';
+import { sourcesBlock } from '../agent/sources.js';
 import { createToolset } from '../agent/tools.js';
 import { effortFor } from '../agent/pace.js';
 
@@ -262,8 +263,9 @@ export function resolveRole(role, config = {}) {
 }
 
 /**
- * The instructions of a role: its prompt, the instructions of the config, the standards of the
- * documentation, the skill packs and the brief of the context of the run.
+ * The instructions of a role: its prompt, the instructions of the config, the standards of
+ * the documentation, the pages behind them, the skill packs and the brief of the context
+ * of the run.
  *
  * The brief tells the role what the run already knows: the stages that are done, the decisions
  * that were made and the files that were written. A role that knows this does not ask again.
@@ -287,6 +289,10 @@ export async function buildInstructions({ role, config = {}, context = {}, root 
 
     const documentation = documentationForRole(config, key);
     if (documentation) blocks.push(`## Standards\n${documentation}`);
+
+    // The pages behind the standards: the role opens one when the task calls for it.
+    const sources = sourcesBlock(config, key);
+    if (sources) blocks.push(`## Documentation sources\n${sources}`);
 
     const packs = await skillsForRole({
         dir: config?.skills?.dir ?? null,

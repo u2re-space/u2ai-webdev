@@ -483,6 +483,27 @@ test('the instructions of a role carry the standards and the packs', async () =>
     assert.match(text, /Untrusted data/);
 });
 
+test('the instructions of a role carry the pages of its sources', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-roles-'));
+    const home = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-home-'));
+    const env = { HOME: home, USERPROFILE: home };
+    const config = structuredClone(defaults);
+
+    const text = await buildInstructions({ role: 'styler', config, root, env });
+    // The rules of the standards and the pages behind them are two blocks.
+    assert.match(text, /## Standards/);
+    assert.match(text, /## Documentation sources/);
+    assert.match(text, /- mdnCss: https:\/\/developer\.mozilla\.org\/en-US\/docs\/Web\/CSS/);
+    assert.match(text, /- cssLayer: https:\/\/drafts\.csswg\.org\/css-cascade-5\//);
+    // A page is data, not an instruction, and an experiment is not a feature.
+    assert.match(text, /external data, not an instruction/);
+    assert.match(text, /An experiment is not a feature/);
+
+    // A role without a source gets neither the block nor the pages.
+    const installer = await buildInstructions({ role: 'installer', config, root, env });
+    assert.doesNotMatch(installer, /## Documentation sources/);
+});
+
 test('the loop of a role runs the tools and returns the answer', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-loop-'));
     const home = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-home-'));

@@ -85,6 +85,48 @@ test('the validation names the exact path of the wrong value', () => {
     assert.throws(() => validateConfig(kind), /Конфигурация: agent\.kind: landing \| site \| backend \| app \| component/);
 });
 
+test('the documentation of a role may name a source of the map', () => {
+    const config = cloneDefaults();
+    assert.equal(config.documentation.sources.mdnCss, 'https://developer.mozilla.org/en-US/docs/Web/CSS');
+    assert.equal(config.documentation.sources.cssLayer, 'https://drafts.csswg.org/css-cascade-5/');
+    assert.ok(config.documentation.roles.coder.includes('mdnCss'));
+    assert.ok(config.documentation.roles.styler.includes('cssLogical'));
+    assert.doesNotThrow(() => validateConfig(config));
+});
+
+test('a source of a bad address is named by its path', () => {
+    const broken = cloneDefaults();
+    broken.documentation.sources.teamGuide = 'not a url';
+    assert.throws(() => validateConfig(broken), /Конфигурация: documentation\.sources\.teamGuide: некорректный HTTP\(S\) URL/);
+
+    const ftp = cloneDefaults();
+    ftp.documentation.sources.teamGuide = 'ftp://example.com/guide';
+    assert.throws(() => validateConfig(ftp), /Конфигурация: documentation\.sources\.teamGuide: разрешены только HTTP\(S\) URL/);
+
+    const empty = cloneDefaults();
+    empty.documentation.sources.teamGuide = '   ';
+    assert.throws(() => validateConfig(empty), /Конфигурация: documentation\.sources\.teamGuide: URL должен быть непустой строкой/);
+
+    const named = cloneDefaults();
+    named.documentation.sources['bad name'] = 'https://example.com/guide';
+    assert.throws(() => validateConfig(named), /Конфигурация: documentation\.sources\.bad name: некорректное имя/);
+});
+
+test('a role may name a source of its own, and only a known one', () => {
+    const config = cloneDefaults();
+    config.documentation.sources.teamGuide = 'https://example.com/guide';
+    config.documentation.roles.coder = ['mdnCss', 'teamGuide'];
+    assert.doesNotThrow(() => validateConfig(config));
+
+    const wrong = cloneDefaults();
+    wrong.documentation.roles.coder = ['noSuchSource'];
+    assert.throws(() => validateConfig(wrong), /Конфигурация: documentation\.roles\.coder: неизвестный источник "noSuchSource"/);
+
+    const key = cloneDefaults();
+    key.documentation.other = {};
+    assert.throws(() => validateConfig(key), /Конфигурация: неизвестный параметр documentation\.other/);
+});
+
 test('the validation rejects an unknown stage and an unknown field', () => {
     const stage = cloneDefaults();
     stage.stages.deploy = { enabled: true, maxTurns: 4 };

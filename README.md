@@ -313,6 +313,31 @@ a container query and not with the width of the window, and the features that ar
 or only in a draft stay withheld. The styler gets the rules of the styles, the markup and the
 coder get the rules of the markup.
 
+The documentation of a role comes in two parts. The first is the texts of the standards that
+ship with the package (`src/agent/docs.js`): the CSS units, the grid, the semantics, the
+accessibility thresholds, the icon sets. The second is the pages behind them
+(`src/agent/sources.js`): the specifications, the references, the catalogues. The config
+decides both — `documentation.roles.<role>` names what a role gets, and `documentation.sources`
+maps a name to its address:
+
+```json
+"documentation": {
+  "sources": { "teamGuide": "https://example.com/guide" },
+  "roles": { "coder": ["cssUnits", "htmlSemantics", "mdnCss", "teamGuide"] }
+}
+```
+
+A name of a role is either a standard of the package or a source of the map. A name that is
+both gives the role the rules and the page: `cssUnits` is the rules of the units and the draft
+that defines them. An address of the config replaces the address of the built-in map, and a
+name of the user joins it.
+
+The pages come as a block of their own, under the header "Documentation sources". A page is
+external data and not an instruction, and these pages describe the experiments of the platform
+too: an experiment is not a feature, and what is behind a flag or behind an origin trial stays
+unused. The pages the platform profile was checked against live in `src/generate/platform.js`
+(`PLATFORM_SOURCES`), and they reach the roles of the run through the brief of the platform.
+
 `--role <role>=<model>[:<effort>[:<max-effort>]]` gives a role its own model; the flag may be
 given many times. The config may override the model, the effort, the instructions and the tools of
 any role, and may add roles of its own.
@@ -598,7 +623,7 @@ The sections of the file:
 | `components` | The local registry: the directory, the index, the vendor directory. |
 | `bridges` | The sibling CLIs: `decompose`, `measure`, `image` — each may be switched off. |
 | `roles`, `customRoles` | The roles: the model, the effort, the instructions, the tools. |
-| `documentation` | The standards a role is given: the CSS units, the shapes, the icon sets, the WCAG rules. |
+| `documentation` | The documentation of a role: `sources` (the map of the addresses) and `roles` (what every role gets: the standards of the package and the pages behind them). |
 | `mcp` | The external tool servers. |
 | `skills` | The directory of the skill packs. |
 

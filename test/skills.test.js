@@ -1,8 +1,8 @@
 /**
  * @file test/skills.test.js
  * @module test/skills
- * @purpose The tests of the skill packs, the documentation texts and the MCP client.
- * @depends node:test, node:http, agent/skills, agent/docs, agent/mcp
+ * @purpose The tests of the skill packs, the documentation texts, the sources and the MCP client.
+ * @depends node:test, node:http, agent/skills, agent/docs, agent/sources, agent/mcp
  * @ai.tags test, skills, mcp
  */
 
@@ -18,6 +18,7 @@ import {
     buildSkillInstructions, filterSkillsByKeywords, defaultSkillsDir,
 } from '../src/agent/skills.js';
 import { documentationFor, documentationForRole, DOCUMENTATION } from '../src/agent/docs.js';
+import { DOCUMENTATION_SOURCES, effectiveSources, sourceNames, sourcesForRole, sourcesBlock } from '../src/agent/sources.js';
 import { connectMcp, connectMcpServers, mcpToolSpecs, parseRpcBody } from '../src/agent/mcp.js';
 import { defaults } from '../src/config.js';
 
@@ -101,6 +102,28 @@ test('the documentation of a role comes from the config', () => {
     assert.match(text, /Accessibility/);
     assert.equal(documentationFor([]), '');
     assert.ok(DOCUMENTATION.a11y.includes('focus-visible'));
+});
+
+test('the sources of a role come from the map, the config over the built-in one', () => {
+    const config = structuredClone(defaults);
+    const iconifier = sourcesForRole(config, 'iconifier');
+    assert.deepEqual(iconifier.map((item) => item.name), ['phosphorIcons', 'lucideIcons', 'googleFonts']);
+    assert.equal(iconifier[0].url, 'https://phosphoricons.com/');
+
+    // The address of the config replaces the address of the built-in map.
+    config.documentation.sources.mdnCss = 'https://example.com/mdn';
+    assert.equal(sourcesForRole(config, 'planner')[0].url, 'https://example.com/mdn');
+    assert.equal(effectiveSources(config).mdnCss, 'https://example.com/mdn');
+
+    // A source of the user joins the map and the names.
+    config.documentation.sources.teamGuide = 'https://example.com/guide';
+    config.documentation.roles.coder = ['teamGuide'];
+    assert.equal(sourceNames(config).length, Object.keys(DOCUMENTATION_SOURCES).length + 1);
+    assert.deepEqual(sourcesForRole(config, 'coder'), [{ name: 'teamGuide', url: 'https://example.com/guide' }]);
+
+    // A role without a source gets no block.
+    assert.equal(sourcesBlock(config, 'learner'), '');
+    assert.match(sourcesBlock(config, 'coder'), /- teamGuide: https:\/\/example\.com\/guide/);
 });
 
 test('the JSON-RPC answer is read from a body', () => {

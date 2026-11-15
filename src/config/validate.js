@@ -421,12 +421,31 @@ export function validateConfig(config) {
 
   if (!isRecord(c.customRoles)) fail('customRoles должен быть объектом');
   if (!isRecord(c.documentation)) fail('documentation должен быть объектом');
+  for (const key of Object.keys(c.documentation)) {
+    if (!['sources', 'roles'].includes(key)) fail(`неизвестный параметр documentation.${key}`);
+  }
+  if (!isRecord(c.documentation.sources)) fail('documentation.sources должен быть объектом');
+  for (const [name, url] of Object.entries(c.documentation.sources)) {
+    if (!/^[A-Za-z][A-Za-z0-9_-]*$/.test(name)) fail(`documentation.sources.${name}: некорректное имя`);
+    if (typeof url !== 'string' || !url.trim()) fail(`documentation.sources.${name}: URL должен быть непустой строкой`);
+    let parsed = null;
+    try {
+      parsed = new URL(url);
+    } catch {
+      fail(`documentation.sources.${name}: некорректный HTTP(S) URL`);
+    }
+    if (!parsed || !['http:', 'https:'].includes(parsed.protocol)) {
+      fail(`documentation.sources.${name}: разрешены только HTTP(S) URL`);
+    }
+  }
   if (!isRecord(c.documentation.roles)) fail('documentation.roles должен быть объектом');
   for (const [name, list] of Object.entries(c.documentation.roles)) {
     if (!Array.isArray(list)) fail(`documentation.roles.${name}: массив имён источников`);
     for (const item of list) {
-      if (!ENUMS.documentationSources.includes(item)) {
-        fail(`documentation.roles.${name}: неизвестный источник "${item}" (допустимо: ${ENUMS.documentationSources.join(', ')})`);
+      if (typeof item !== 'string' || !item.trim()) fail(`documentation.roles.${name}: имя источника должно быть строкой`);
+      // A name of a role is either a standard of the package or a source of the map.
+      if (!ENUMS.documentationSources.includes(item) && !Object.hasOwn(c.documentation.sources, item)) {
+        fail(`documentation.roles.${name}: неизвестный источник "${item}" (встроенные стандарты: ${ENUMS.documentationSources.join(', ')}; свой источник добавьте в documentation.sources)`);
       }
     }
   }

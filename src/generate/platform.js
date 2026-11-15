@@ -47,33 +47,42 @@ export const WITHHELD_FEATURES = Object.freeze([
     Object.freeze({ id: 'css-random', gate: 'not-default', summary: 'CSS random() is not in the default-enabled list of the browser of the snapshot.' }),
 ]);
 
-/** The pages the profile was checked against. They also describe experiments, which stay withheld. */
+/**
+ * The pages the profile was checked against. They also describe experiments, which stay
+ * withheld. The list came from the monolith; the address of the cascade draft was in it
+ * twice, and here every address is written once.
+ */
 export const PLATFORM_SOURCES = Object.freeze([
     'https://css-tricks.com/',
     'https://chromestatus.com/roadmap',
     'https://262.ecma-international.org/',
     'https://caniuse.com/',
     'https://drafts.csswg.org/css-logical/',
+    'https://drafts.css-houdini.org/css-properties-values-api/',
     'https://drafts.csswg.org/css-cascade-5/',
+    'https://drafts.csswg.org/css-conditional-5/',
     'https://drafts.csswg.org/css-anchor-position-2/',
     'https://drafts.csswg.org/css-values-5/',
     'https://drafts.csswg.org/css-animations-2/',
     'https://drafts.csswg.org/css-shapes-2/',
+    'https://drafts.csswg.org/motion/',
     'https://drafts.csswg.org/css-transforms-2/',
     'https://drafts.csswg.org/css-contain/',
     'https://drafts.csswg.org/css-images-5/',
     'https://drafts.csswg.org/css-masking/',
     'https://drafts.csswg.org/css-fonts/',
-    'https://developer.mozilla.org/en-US/docs/Web/CSS',
-    'https://developer.mozilla.org/en-US/docs/Web/JavaScript',
+    'https://imagemagick.org/command-line-options/',
+    'https://imagemagick.org/command-line-tools/',
+    'https://phosphoricons.com/',
+    'https://lucide.dev/icons/',
+    'https://fonts.google.com/',
     'https://www.typescriptlang.org/docs/',
     'https://sass-lang.com/documentation/',
+    'https://developer.mozilla.org/en-US/docs/Web/CSS',
+    'https://developer.mozilla.org/en-US/docs/Web/JavaScript',
     'https://eslint.org/docs/latest/',
     'https://stylelint.io/user-guide/',
-    'https://prettier.io/docs/',
-    'https://lucide.dev/icons/',
-    'https://phosphoricons.com/',
-    'https://fonts.google.com/',
+    'https://prettier.io/docs/'
 ]);
 
 /**
