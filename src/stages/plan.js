@@ -41,9 +41,8 @@ export const PLAN_FILE = 'plan.json';
 export const PLAN_CORRECTION = [
     'The previous answer was not a plan: its list of steps was empty.',
     'Work first, answer second: if the task names a reference picture, measure it with the',
-    'tool `call_ai_measure` (`["measure", "landing.png"]` for the sizes and the positions,',
-    '`["design", "landing.png"]` for the look) and read the files of the project with',
-    '`list_files` and `read_file`.',
+    'tool `call_ai_measure` (`["measure", "landing.png"]` for the sizes and the positions) and',
+    'read the files of the project with `list_files` and `read_file`.',
     'Then submit the plan with the tool `plan`: at least two concrete steps, each with an id,',
     'a title, the role that does it, the files it touches and the criteria that can be checked',
     'without a human.',

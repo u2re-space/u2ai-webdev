@@ -86,6 +86,9 @@ ${INPUTS_IN_CONTEXT}
 - Write the code for the browser that the project supports, and for the state the interface has:
   the long text, the empty list, the slow connection, the keyboard.
 - The names say what the thing is. The comments say why, not what.
+- The pictures prepared from the crops are the assets of the result: use the prepared file as
+  it is. Do not draw a copy of it and do not replace it with an SVG — the cut-out of the
+  reference is closer to the reference than a new drawing.
 - When a command has to run for the step to work, name it in \`commands\` with the program and
   the arguments, not as a shell line.
 - Finish with a report: the files, what each of them does now, and what the reader has to know.

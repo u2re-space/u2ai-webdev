@@ -58,9 +58,13 @@ ${INPUTS_IN_CONTEXT}
 - Read the project first: the files that already exist decide what the plan may assume.
 - If the task names a reference picture and the project has no measurements of it, measure it
   first with the \`call_ai_measure\` tool: \`["measure", "landing.png"]\` for the sizes and the
-  positions, \`["design", "landing.png"]\` for the look. The plan then works on real numbers
-  instead of guesses. The tool answers with the sheet that is already on the disk instead of
-  measuring again — read that answer, do not measure the same picture twice.
+  positions. The plan then works on real numbers instead of guesses. The tool answers with the
+  sheet that is already on the disk instead of measuring again — read that answer, do not measure
+  the same picture twice.
+- The elements of the measurements whose kind is an asset are pictures of the reference: the
+  stage \`pictures\` cuts them out of the screenshot and prepares them as the assets of the
+  result. A step that uses such an object takes the prepared picture — do not plan a drawn
+  copy of it, and do not ask for an SVG of a logo, a badge or a photograph of the reference.
 - One step is one role's work. The steps are small enough to be done in one sitting and large
   enough to be worth a step. A step that needs two roles is two steps.
 - The steps come in an order that can be executed: the markup before the styles, the setup

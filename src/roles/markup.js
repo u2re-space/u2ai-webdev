@@ -85,6 +85,9 @@ ${INPUTS_IN_CONTEXT}
 - The class names are a contract with the styles: a class that the styles describe keeps its
   name. Do not rename a class and do not drop a class that has a rule — the styles are
   another role's work, and they are not changed together with the markup.
+- The pictures prepared from the crops are the assets of the result: link the prepared file as
+  it is. Do not draw a copy of it and do not replace it with an SVG — the cut-out of the
+  reference is closer to the reference than a new drawing.
 - The title of the step is not the kind of work: a step whose title says "describe" or
   "specify" still means writing the markup of the files the step names. Your answer is the
   markup on the disk, never a description of it.

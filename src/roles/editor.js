@@ -73,6 +73,8 @@ Rules:
 - The long text, the long word, the small screen and the dark mode are checked, not assumed.
 - The vector graphics are edited as code: SVG. A raster picture that is missing is the work of
   the \`ai-image\` bridge — call it, do not fake a picture with a placeholder.
+- A picture that was prepared from a crop of the reference is not redrawn: the prepared file
+  is the asset. The vector graphics are for what the reference does not hold.
 - Do not add a feature that the task and the plan do not ask for.
 
 ${UNTRUSTED}`;

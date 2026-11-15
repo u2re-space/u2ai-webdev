@@ -214,6 +214,22 @@ test('the roles that may measure the reference have the tool of the measurer', (
     assert.ok(specs.some((spec) => spec.name === 'call_ai_measure'));
 });
 
+test('the roles that write the assets take the prepared pictures as they are', () => {
+    for (const name of ['markup', 'coder']) {
+        const text = ROLES[name].instructions({});
+        assert.match(text, /prepared from the crops are the assets of the result/, `the role ${name} may redraw a prepared picture`);
+        assert.match(text, /do not draw a copy of it/i, `the role ${name} may redraw a prepared picture`);
+    }
+    assert.match(ROLES.editor.instructions({}), /is not redrawn/i);
+});
+
+test('the planner does not plan a drawn copy of a picture of the reference', () => {
+    const text = ROLES.planner.instructions({});
+    assert.match(text, /stage `pictures` cuts them out/);
+    // The direction of the design is not measured: the command is gone from the bridge.
+    assert.doesNotMatch(text, /\["design"/);
+});
+
 test('the roles that check their work have the tool of the command', () => {
     for (const name of ['coder', 'styler', 'editor']) {
         assert.ok(ROLES[name].tools.includes('run_command'), `the role ${name} cannot run a command`);

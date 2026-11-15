@@ -14,7 +14,7 @@ import path from 'node:path';
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 
 import { svgFileName, parseSvg, validateSvg, optimizeSvg, svgSummary } from '../src/vector/svg.js';
-import { polishSvgFiles, vectorStage } from '../src/stages/vector.js';
+import { polishSvgFiles, preparedVectorPlan, vectorStage } from '../src/stages/vector.js';
 import { iconifyStage, iconFiles } from '../src/stages/iconify.js';
 
 const SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">\n  <path d="M4 4h16v16H4z" fill="none"/>\n</svg>\n';
@@ -131,6 +131,44 @@ test('the stage of the vector checks and tidies the SVG of the step', async () =
     const written = await readFile(path.join(root, 'assets', 'logo.svg'), 'utf8');
     assert.doesNotMatch(written, /<!-- x -->/);
     assert.match(written, /<path/);
+});
+
+test('the plan of the vector leaves out the SVG of a prepared picture', () => {
+    const plan = {
+        steps: [
+            { id: 'vector-1', role: 'editor', files: ['assets/award-badge.svg'] },
+            { id: 'vector-2', role: 'editor', files: ['assets/ornament.svg', 'assets/award-badge.svg'] },
+            { id: 'markup-1', role: 'markup', files: ['index.html'] },
+        ],
+    };
+    const prepared = preparedVectorPlan(plan, [
+        { name: 'award-badge', kind: 'image', file: 'assets/import/award-badge.png' },
+    ]);
+
+    assert.equal(prepared.skipped.length, 2);
+    assert.equal(prepared.skipped[0].picture, 'assets/import/award-badge.png');
+    // Шаг, у которого не осталось файлов, выпадает целиком; остальные файлы шага остаются.
+    assert.deepEqual(prepared.plan.steps.map((step) => step.id), ['vector-2', 'markup-1']);
+    assert.deepEqual(prepared.plan.steps[0].files, ['assets/ornament.svg']);
+});
+
+test('the stage of the vector does not draw a picture that is already prepared', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-vector-prepared-'));
+    // The model is not asked at all: there is nothing left to draw.
+    const client = fakeClient([]);
+
+    const result = await vectorStage({
+        client,
+        config: { output: { work: './.tmp' } },
+        root,
+        task: 'Make a landing.',
+        plan: { steps: [{ id: 'vector-1', title: 'The badge', role: 'editor', files: ['assets/award-badge.svg'], criteria: ['opens'] }] },
+        inputs: { pictures: [{ name: 'award-badge', kind: 'image', file: 'assets/import/award-badge.png' }] },
+        runId: 'run-1',
+    });
+
+    assert.match(result.warnings.join('\n'), /award-badge\.svg не рисуется/);
+    assert.match(result.warnings.join('\n'), /assets\/import\/award-badge\.png/);
 });
 
 test('a broken SVG is reported, not hidden', async () => {

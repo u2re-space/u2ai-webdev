@@ -216,6 +216,14 @@ The stage never stops the run: a crop that cannot be prepared is reported, and t
 as it was. A picture that is already in the directory is not prepared again — the model is not
 asked for the same cut twice.
 
+The prepared picture is the asset, and it is not drawn again. The object is cut out of the
+reference, so a new drawing of the same object is an approximation of what is already on the
+disk: the badge becomes a filled disc instead of a ring, and the monogram becomes a letter.
+The plan does not ask for such a drawing — an element of the measurements whose kind is an
+asset is taken as it is — and the stage `vector` does not draw an SVG whose name is the name of
+a prepared picture: the step that would draw it is not done, and the report says why. The roles
+that write the markup and the code take the prepared file as it is.
+
 ## The roles
 
 Every stage is done by a role: a prompt, a schema of the answer, a list of tools and a limit of

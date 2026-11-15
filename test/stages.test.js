@@ -164,6 +164,31 @@ test('the stage of the plan asks the planner and writes the plan', async () => {
     assert.equal(saved.summary, 'A landing page.');
 });
 
+test('the correction of the planner does not offer the command that is gone', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-plan-correction-'));
+    const client = fakeClient([
+        schemaAnswer('plan', { summary: 'Сначала изучу проект.', steps: [], risks: [], questions: [] }),
+        schemaAnswer('plan', {
+            summary: 'A landing page.',
+            steps: [{ id: 'a', title: 'Markup', role: 'markup', dependsOn: [], files: ['index.html'], criteria: ['opens'] }],
+            risks: [],
+            questions: [],
+        }),
+    ]);
+
+    await planStage({
+        client,
+        config: { output: { work: './.tmp' } },
+        root,
+        task: 'Make a landing.',
+        runId: 'run-1',
+    });
+
+    assert.equal(client.requests.length, 2);
+    // The direction of the design is not measured: the command is gone from the bridge.
+    assert.doesNotMatch(JSON.stringify(client.requests[1]), /\["design"/);
+});
+
 test('the stage of the plan reports an answer without a plan', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-plan3-'));
     const result = await planStage({
