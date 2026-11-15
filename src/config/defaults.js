@@ -134,7 +134,21 @@ export const defaults = {
   ],
   /** Per-model host lists: { "<model>": [{ baseURL, apiKey?, prefix?, vendor?, suffix?, type? }] }. */
   modelsBackends: {},
-  fallback: { enabled: true, models: {} },
+  /**
+   * The models to try when the model of the run refuses the request.
+   *
+   * The key is the model that failed, the value is the list of the models that get the request
+   * next; the key `*` is the chain of every other model. The chain of the house is the Kimi: it
+   * answers with the reasoning off in a fraction of the time, so a run that met a refusal keeps
+   * going. The Kimi is the fallback of the Gemini too — the two never stand in the same chain.
+   */
+  fallback: {
+    enabled: true,
+    models: {
+      'google/gemini-4-hydrogen': ['moonshotai/kimi-k3.1-pro'],
+      '*': ['moonshotai/kimi-k3.1-pro'],
+    },
+  },
 
   // --- logging ---------------------------------------------------------------
   /**

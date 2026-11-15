@@ -1511,6 +1511,35 @@ CLI `ai-webdev` (`@u2ai/webdev`) с собственным конфигом `~/.
 
 ---
 
+### step-83 — Gemini 4 Hydrogen вместо kimi, kimi — как fallback
+
+- [x] Повод: карточка модели `google/gemini-4-hydrogen` на RouterAI (ноябрь 2026) — 1M токенов
+      контекста, до 1M токенов выхода с продолжением, уровни усилия `low|medium|high|xhigh`.
+      Kimi становится моделью-фолбэком, а Gemini — основной альтернативой
+- [x] Живые пробы шлюза (2026-11-15):
+      - `POST /v1/responses` с `text.format` (json_schema) → 200, ответ по схеме
+        (`{"answer": "42"}`)
+      - `POST /v1/responses` с инструментом → 200, ответ `function_call`
+      - `POST /v1/responses` с `reasoning.effort = xhigh` → 200, 305 reasoning-токенов
+      - `POST /v1/chat/completions` с `response_format` (json_schema) → 200, ответ по схеме
+      ⇒ канал схемы `auto`: при инструментах схема едет своим инструментом, без них — в
+      `text.format`
+- [x] `src/model/profiles.js` — профиль `google/gemini-4-hydrogen`: окно 4 194 304 байта
+      (1M токенов), выход 1 048 576, потолок `xhigh`, лестница `low|medium|high|xhigh`,
+      канал схемы `auto`; уровня `none` у карточки нет — запрос `none` поднимается до `low`
+- [x] `src/config/defaults.js` — цепочка фолбэков дома: у Gemini и у всех прочих моделей
+      первым идёт kimi (`fallback.models`); модель по умолчанию остаётся minimax
+- [x] `test/responses.test.js` — профиль Gemini, срез усилия, цепочка фолбэков;
+      `test/roles.test.js` — роль работает на Gemini
+- [x] README (EN): таблица профилей, цепочка фолбэков, пример конфигурации
+- [x] Проверка: `npm test` — 493 теста, все проходят
+
+Замечание: механизм фолбэка моделей в `u2ai-webdev` (`src/openai/fallback.js`) пока не вшит в
+клиент — цепочка объявлена в конфигурации и читается этим модулем. В пакетах, где фолбэк
+включён в клиент (`u2ai-measurer`, `u2ai-decomposer`, `u2ai-server`), цепочка работает сразу.
+
+---
+
 ## 2. Порядок работы и зависимости шагов
 
 ```

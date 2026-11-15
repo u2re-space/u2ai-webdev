@@ -513,7 +513,7 @@ everything else stays on the defaults.
 
 ```json
 {
-  "model": "moonshotai/kimi-k3.1-pro",
+  "model": "minimax/minimax-m3.1-flash",
   "reasoning": { "effort": "xhigh", "summary": "auto" },
   "backends": [
     { "baseURL": "https://routerai.ru/api/v1", "env": "ROUTERAI_API_KEY" },
@@ -555,12 +555,13 @@ the effort and the channel of the schema.
 }
 ```
 
-The built-in profiles of the two text models of the house are tuned by the live answers of the
+The built-in profiles of the text models of the house are tuned by the live answers of the
 gateway (RouterAI, November 2026):
 
 | Model | Context | Output | Ceiling | Ladder |
 |---|---|---|---|---|
 | `minimax/minimax-m3.1-flash` | 1M tokens (4 MiB) | 524K | `xhigh` | `low`, `medium`, `high`, `xhigh` |
+| `google/gemini-4-hydrogen` | 1M tokens (4 MiB) | 1M | `xhigh` | `low`, `medium`, `high`, `xhigh` |
 | `moonshotai/kimi-k3.1-pro` | 1M tokens (4 MiB) | 944K | `medium` | `none`, `low`, `medium` |
 
 MiniMax refuses to work without reasoning ("Reasoning is mandatory for this endpoint and
@@ -568,6 +569,25 @@ cannot be disabled"), so a request for `none` is raised to `low` instead of bein
 Kimi takes the reasoning off without a refusal and answers in a fraction of the time (about
 0.8 s against about 31 s at `medium` on the same question), so `none` stays on its ladder —
 `ai-webdev run "<task>" --effort none --model moonshotai/kimi-k3.1-pro` is the fast run.
+
+Gemini 4 Hydrogen is the alternative to the Kimi: it decodes up to 1M tokens with the
+continuation and takes the effort up to `xhigh`, so a run that needs a long answer is not cut
+short. The card of the vendor names the four levels of its effort (`low`, `medium`, `high`,
+`xhigh`) and has no `none`, so the reasoning off is raised to `low` there as well. The Kimi
+stays the fallback model of the house: the `fallback.models` chain of the configuration names
+it for the Gemini and for every other model.
+
+```json
+{
+  "fallback": {
+    "enabled": true,
+    "models": {
+      "google/gemini-4-hydrogen": ["moonshotai/kimi-k3.1-pro"],
+      "*": ["moonshotai/kimi-k3.1-pro"]
+    }
+  }
+}
+```
 
 The effort of a run is not one number for everybody. `reasoning.effort` is the ceiling of the
 run, and `reasoning.stageEffort` says what every stage asks for:

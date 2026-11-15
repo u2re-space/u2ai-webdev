@@ -383,7 +383,7 @@ test('a model whose profile leaves the format free answers with its tools', asyn
 
     try {
         const config = structuredClone(defaults);
-        config.model = 'moonshotai/kimi-k3.1-pro';
+        config.model = 'google/gemini-4-hydrogen';
         config.backends = [{ baseURL: api.url, apiKey: 'test-key' }];
         config.reasoning.effort = 'low';
         const client = await createClient({ config, env });
