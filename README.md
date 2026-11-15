@@ -373,9 +373,14 @@ The bridges to the sibling CLIs add more: `ai-decompose` splits a reference into
 
 The measurer is not only a bridge in the config: the planner, the architect and the styler have
 the tool `call_ai_measure` and may measure the reference themselves when the measurements of the
-project are missing or thin — `["measure", "landing.png"]` for the sizes and the positions,
-`["design", "landing.png"]` for the look, `["palette", "landing.png"]` for the colours. The tool
-is switched off with `tools.external_measure: false` in the config.
+project are missing or thin — `["measure", "landing.png"]` for the sizes and the positions and
+`["palette", "landing.png"]` for the colours. The tool is switched off with
+`tools.external_measure: false` in the config.
+
+The direction of the design is not measured. The measurer writes it into its own working
+directory, where nobody reads it; the tokens of the reference live in `measurements/DESIGN.md`,
+and the roles take the styles upon themselves. A call of `["design", …]` is refused with an
+answer that says where the tokens are — the measurer is not started.
 
 The tool looks at the disk before it calls the measurer. A sheet that is already there answers
 the question as well as a new run: the tool answers with the path of the sheet and the number of

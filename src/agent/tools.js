@@ -16,6 +16,7 @@
  * @ai.hint keep
  * @changed 2026-11-15 Карта прогона и кэш контекста отвечают на чтения и поиск.
  * @changed 2026-11-15 `call_ai_measure` не запускает измеритель, если лист уже есть.
+ * @changed 2026-11-15 `call_ai_measure` не зовёт команду `design`: направление дизайна пишут роли.
  */
 
 import path from 'node:path';
@@ -443,13 +444,23 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
      * Измеритель медленный и дорогой: ответ на вопрос «что в картинке» уже лежит на диске,
      * и повторный запуск не добавляет ничего. Факт попадает в контекст прогона, чтобы
      * следующие роли знали, что картинка измерена.
+     *
+     * Направление дизайна измеритель не пишет: команда `design` кладёт его в рабочий каталог
+     * измерителя, откуда его никто не читает. Токены референса лежат в `measurements/DESIGN.md`,
+     * а решение по стилям принимает роль. Поэтому мост такую команду не зовёт.
      * @param {object} args the arguments of the tool
      * @returns {Promise<string>}
      */
     async function callMeasure(args) {
         const list = parseArgsList(args.args);
+        const command = commandOf(list);
+        if (command === 'design') {
+            return 'Направление дизайна измеритель не пишет: токены референса лежат в '
+                + 'measurements/DESIGN.md, а решение по стилям принимает роль. Измеритель не запускается. '
+                + 'Если нужны размеры и цвета — вызови ["measure", "<картинка>"].';
+        }
         const picture = pictureOf(list);
-        const known = commandOf(list) === 'measure'
+        const known = command === 'measure'
             ? await findMeasurement({ root, config, picture })
             : null;
         if (known) {

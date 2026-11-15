@@ -16,6 +16,7 @@ import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 
 import { createToolset, htmlToText, BLOCKING_COMMANDS } from '../src/agent/tools.js';
 import { runBridge } from '../src/agent/bridges.js';
+import { TOOL_SPECS } from '../src/agent/tool-specs.js';
 import { normalizeVerdict, verdictFromScores } from '../src/agent/quality.js';
 import { resolvePace, effortFor } from '../src/agent/pace.js';
 import { defaults } from '../src/config.js';
@@ -172,7 +173,7 @@ test('a picture without a sheet is measured', async () => {
     assert.match(answer, /Мост ai-measure выключен/);
 });
 
-test('the sheet of the measurements does not answer the design', async () => {
+test('the direction of the design is not measured', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-design-'));
     await mkdir(path.join(root, 'measurements'), { recursive: true });
     await writeFile(path.join(root, 'landing.png'), 'png');
@@ -184,12 +185,24 @@ test('the sheet of the measurements does not answer the design', async () => {
     }, null, 2));
 
     const config = structuredClone(defaults);
-    config.bridges.measure.enabled = false;
+    // The measurer is not there: if the tool called it, the answer would be about the bridge.
+    config.bridges.measure.command = 'ai-measure-does-not-exist';
     const tools = createToolset({ root, config });
 
     const answer = await tools.execute('call_ai_measure', { args: '["design", "landing.png"]' });
 
-    assert.match(answer, /Мост ai-measure выключен/);
+    // The measurer writes the direction into its own working directory, where nobody reads it.
+    assert.match(answer, /не пишет/);
+    assert.match(answer, /measurements\/DESIGN\.md/);
+    assert.doesNotMatch(answer, /Мост ai-measure/);
+});
+
+test('the measurer is not asked for the direction of the design', () => {
+    const spec = TOOL_SPECS.call_ai_measure;
+    // The description the model reads is a part of the behaviour of the tool: it must not
+    // offer the command `design` as a way to call the measurer.
+    assert.doesNotMatch(spec.description, /\["design"/);
+    assert.match(spec.description, /\["measure"/);
 });
 
 test('fetch_url reads the text of a page', async () => {

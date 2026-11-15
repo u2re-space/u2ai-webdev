@@ -16,6 +16,8 @@
  * @exports TOOL_SPECS, TOOL_NAMES, CONFIG_KEYS, toolSpecs, enabledToolNames, configKeyFor, toolEnabled
  * @ai.tags tools, specs, config
  * @ai.hint keep
+ * @changed 2026-11-15 Мост измерителя не предлагает направление дизайна: команда `design`
+ *                       пишет его в рабочий каталог измерителя, откуда его никто не читает.
  */
 
 const str = (description) => ({ type: 'string', description });
@@ -379,13 +381,14 @@ export const TOOL_SPECS = Object.freeze({
     },
     call_ai_measure: {
         configKey: 'external_measure',
-        description: 'Call the external `ai-measure` CLI to measure a picture or to produce a design direction. '
+        description: 'Call the external `ai-measure` CLI to measure a picture or to read its colours. '
             + 'This CLI has no measurer of its own: the work is delegated to @u2ai/measurer. '
             + 'The args are the arguments of the CLI as strings, e.g. ["measure", "landing.png"] for the '
-            + 'measurements of a reference, ["design", "landing.png"] for the design direction, '
-            + '["palette", "landing.png"] for the colours. '
+            + 'measurements of a reference, ["palette", "landing.png"] for the colours. '
             + 'If the picture is already measured, the tool answers with the sheet that is on the disk '
-            + 'and does not run the measurer again.',
+            + 'and does not run the measurer again. '
+            + 'The direction of the design is not measured: the roles take the tokens of the reference '
+            + 'from measurements/DESIGN.md and decide about the styles themselves.',
         parameters: {
             type: 'object',
             properties: {
