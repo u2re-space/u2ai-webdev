@@ -225,6 +225,45 @@ test('the pipeline runs the stages in order and writes the progress', async () =
     assert.equal(progress.stages[0].status, 'completed');
 });
 
+test('the stages that do the steps of the plan go in the order of the plan', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-plan-order-'));
+    const order = [];
+    const plan = {
+        summary: 'A landing.',
+        steps: [
+            { id: 'markup-1', title: 'Markup', role: 'markup', dependsOn: [], files: ['index.html'] },
+            { id: 'icons-1', title: 'Icons', role: 'iconifier', dependsOn: ['markup-1'], files: ['src/assets/icons/'] },
+            { id: 'styles-1', title: 'Styles', role: 'styler', dependsOn: ['icons-1'], files: ['src/styles/main.scss'] },
+        ],
+    };
+    const stages = [
+        {
+            name: 'plan',
+            title: 'Plan',
+            dependsOn: [],
+            run: async () => ({ ok: true, plan }),
+            apply: (ctx, result) => { ctx.plan = result.plan; },
+        },
+        { name: 'markup', title: 'Markup', dependsOn: [], run: async () => { order.push('markup'); return { ok: true }; } },
+        { name: 'styling', title: 'Styles', dependsOn: [], run: async () => { order.push('styling'); return { ok: true }; } },
+        { name: 'iconify', title: 'Icons', dependsOn: [], run: async () => { order.push('iconify'); return { ok: true }; } },
+    ];
+
+    const result = await runPipeline({
+        client: { responses: { create: async () => ({ output: [] }) } },
+        config: CONFIG,
+        root,
+        task: 'Make a landing.',
+        runId: 'run-1',
+        stages,
+    });
+
+    // The plan says that the icons are picked before the styles are written.
+    assert.equal(result.status, 'completed');
+    assert.deepEqual(order, ['markup', 'iconify', 'styling']);
+    assert.ok(result.warnings.some((item) => /Порядок стадий задан планом/.test(item)));
+});
+
 test('the pipeline pauses on the border of a stage and may continue', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-pause-'));
     const done = [];

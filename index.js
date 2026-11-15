@@ -30,6 +30,7 @@ export * from './src/cli/install.js';
 export * from './src/cli/config.js';
 export * from './src/structure/structure.js';
 export * from './src/stages/plan.js';
+export * from './src/stages/plan-order.js';
 export * from './src/stages/collect.js';
 export * from './src/stages/architect.js';
 export * from './src/stages/setup.js';

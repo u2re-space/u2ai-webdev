@@ -102,6 +102,15 @@ of the environment (`package.json`, `vite.config.js`, `.gitignore`) are not gues
 The planner is told the five roles in its prompt and in the schema of its answer, so the plan of
 a model that listens names them from the start.
 
+The plan decides the order of the stages that do its steps. The registry has an order of its own
+(markup, coding, styling), but the plan knows more: a step that depends on another step is done
+after it. The harness reads the dependencies of the plan and moves the stages of the steps
+accordingly — the icons are picked before the styles are written when the plan says so, and the
+scripts come after both. The order of the registry breaks the tie, so a plan that says nothing
+about the order of two stages changes nothing, and a plan with a circle in it keeps the order of
+the registry and says so in the warnings of the run. The stages that do not work on the steps of
+the plan keep their place: the build is after the styles, the review is after everything.
+
 The dependencies go on the disk by the code of the stage, not by the model: the stage reads the
 manifest and runs the package manager of the project (`npm install --no-audit --no-fund`), so a
 run that leaves the setup stage has a `node_modules` and not only a promise of one. The runner

@@ -26,10 +26,12 @@
  * @changed 2026-11-15 Прогон держит свой контекст и свою карту файлов.
  * @changed 2026-11-15 Результат стадии применяется внутри защиты: стадия, чей результат не
  *                       применился, — это упавшая стадия, а не мёртвый прогон.
+ * @changed 2026-11-15 Порядок стадий, которые делают шаги плана, задаёт сам план.
  */
 
 import { runId as makeRunId } from './stages/workspace.js';
 import { enabledStages } from './stages/index.js';
+import { planOrder } from './stages/plan-order.js';
 import { readPlan } from './stages/plan.js';
 import { readArchitecture } from './stages/architect.js';
 import { readSetup } from './stages/setup.js';
@@ -318,7 +320,24 @@ export async function runPipeline({
         return Number.isSafeInteger(own) && own > 0 ? own : stageTimeoutMs;
     };
 
-    for (const stage of list) {
+    // Очередь стадий. План может изменить порядок стадий, которые делают его шаги, а план
+    // известен только после стадии `plan`: очередь пересобирается, когда план прочитан.
+    const queue = [...list];
+    let position = 0;
+    let ordered = false;
+
+    while (position < queue.length) {
+        if (!ordered && ctx.plan) {
+            // План решает, какая стадия идёт раньше: шаг, который зависит от другого шага,
+            // делается после него.
+            ordered = true;
+            const rest = queue.slice(position);
+            const planned = planOrder(rest, ctx.plan);
+            queue.splice(position, rest.length, ...planned.stages);
+            warnings.push(...planned.warnings);
+        }
+        const stage = queue[position];
+        position += 1;
         const record = done.get(stage.name);
         if (resume && record?.status === 'completed' && !asked.has(stage.name)) {
             // The progress says that the stage ran. The disk says whether its work is
