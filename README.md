@@ -193,6 +193,12 @@ The subject is what the cut-out has to keep: `{name}` is the name of the item in
 model knows that the piece of the board that fell into the cut of the bishop, and the piece of
 the bishop that fell into the cut of the board, are not part of the object and go away.
 
+The stage answers with the pictures, with the sheet of the measurements and with the path of
+that sheet (`sheetFile`). The path is not called `files`: in the answer of a stage `files` is
+the list of the paths that were written, and the pipeline walks that list. A stage that
+answers in an unexpected shape does not kill the run: the run says what happened, writes the
+progress and stops on that stage.
+
 The stage never stops the run: a crop that cannot be prepared is reported, and the crop stays
 as it was. A picture that is already in the directory is not prepared again — the model is not
 asked for the same cut twice.

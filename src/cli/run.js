@@ -16,6 +16,8 @@
  * @ai.hint io
  * @ai.hint legacy-0.2
  * @changed 2026-11-13 Ported from the monolith: the flags of the run and the dispatch.
+ * @changed 2026-11-15 The files of a stage are read as lists: a field of another shape is not
+ *                       a list, and the run does not die about it.
  */
 
 import { createClient } from '../openai/client.js';
@@ -305,6 +307,9 @@ export function stopAfterStage(flags, stages = null, config = {}) {
 /**
  * The files a stage has written.
  *
+ * A field that is not a list is not a list: the run does not die because a stage answered in
+ * an unexpected shape.
+ *
  * @param {object} result
  * @returns {string[]}
  * @exports
@@ -312,9 +317,13 @@ export function stopAfterStage(flags, stages = null, config = {}) {
  */
 export function stageFiles(result = {}) {
     const out = new Set();
-    for (const item of result?.applied?.written ?? []) out.add(String(item));
-    for (const item of result?.steps ?? []) {
-        for (const rel of item?.applied?.written ?? []) out.add(String(rel));
+    for (const item of Array.isArray(result?.applied?.written) ? result.applied.written : []) {
+        out.add(String(item));
+    }
+    for (const item of Array.isArray(result?.steps) ? result.steps : []) {
+        for (const rel of Array.isArray(item?.applied?.written) ? item.applied.written : []) {
+            out.add(String(rel));
+        }
     }
     return [...out];
 }

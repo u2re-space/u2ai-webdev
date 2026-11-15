@@ -24,6 +24,8 @@
  * @changed 2026-11-14 The stage of the pictures; the name of the stage to stop at is not case sensitive.
  * @changed 2026-11-14 A resumed run reads the collected inputs and the prepared pictures back.
  * @changed 2026-11-15 Прогон держит свой контекст и свою карту файлов.
+ * @changed 2026-11-15 Результат стадии применяется внутри защиты: стадия, чей результат не
+ *                       применился, — это упавшая стадия, а не мёртвый прогон.
  */
 
 import { runId as makeRunId } from './stages/workspace.js';
@@ -61,6 +63,11 @@ export function filesAllowed(config = {}) {
 
 /**
  * The files of the stages are collected.
+ *
+ * The result of a stage names its files in three ways: the list of the written paths, the
+ * list under `applied` and the steps of the stage. A field that is not a list is not a list:
+ * the run does not die because a stage answered in an unexpected shape.
+ *
  * @param {object} result
  * @returns {string[]}
  * @exports
@@ -68,13 +75,17 @@ export function filesAllowed(config = {}) {
  */
 export function pipelineFiles(result = {}) {
     const written = new Set();
-    for (const item of result?.applied?.written ?? []) written.add(String(item));
-    for (const item of result?.files ?? []) {
+    for (const item of Array.isArray(result?.applied?.written) ? result.applied.written : []) {
+        written.add(String(item));
+    }
+    for (const item of Array.isArray(result?.files) ? result.files : []) {
         const rel = String(item?.path ?? item ?? '').trim();
         if (rel) written.add(rel);
     }
-    for (const item of result?.steps ?? []) {
-        for (const rel of item?.applied?.written ?? []) written.add(String(rel));
+    for (const item of Array.isArray(result?.steps) ? result.steps : []) {
+        for (const rel of Array.isArray(item?.applied?.written) ? item.applied.written : []) {
+            written.add(String(rel));
+        }
     }
     return [...written];
 }
@@ -339,6 +350,10 @@ export async function runPipeline({
         try {
             const args = typeof stage.args === 'function' ? { ...ctx, ...stage.args(ctx) } : ctx;
             result = await runStage(stage, args, budgetOf(stage.name));
+            // The result of the stage goes into the context of the next stages. A stage whose
+            // result cannot be applied is a failed stage: the run says so and stops, instead
+            // of dying with a message that names nothing.
+            if (typeof stage.apply === 'function') stage.apply(ctx, result);
         } catch (cause) {
             error = cause?.message ?? String(cause);
             warnings.push(`Стадия ${stage.name} упала: ${error}`);
@@ -359,7 +374,6 @@ export async function runPipeline({
         const stageWarnings = Array.isArray(result?.warnings) ? result.warnings : [];
         warnings.push(...stageWarnings.map((item) => `${stage.name}: ${item}`));
         const ok = result?.ok !== false;
-        if (typeof stage.apply === 'function') stage.apply(ctx, result);
 
         // The files of the stage go into the map and into the context of the run: the next
         // stage finds them without looking for them.

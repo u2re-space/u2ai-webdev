@@ -31,6 +31,8 @@
  * @changed 2026-11-15 The crops are looked for next to the sheet that was found.
  * @changed 2026-11-15 The crops of the measurer are taken from the disk when the sheet names
  *                       none: the fragments are cut before the sheet is written.
+ * @changed 2026-11-15 The sheet is returned as `sheetFile`: the field `files` of the result of
+ *                       a stage is the list of the written paths.
  */
 
 import path from 'node:path';
@@ -191,7 +193,7 @@ export function pictureCrops(sheet, kinds = pictureKinds) {
  * @param {{ root?: string, config?: object, inputs?: object|null, env?: object,
  *   notify?: (event: object) => void, apply?: boolean, runId?: string|null }} request
  * @returns {Promise<{ stage: string, ok: boolean, skipped: boolean, pictures: object[],
- *   measurements?: object|null, files?: object|null, warnings: string[], text: string,
+ *   measurements?: object|null, sheetFile?: string|null, warnings: string[], text: string,
  *   file: string|null }>}
  * @exports
  * @ai.hint io
@@ -258,7 +260,7 @@ export async function picturesStage({
             sheet?.present
                 ? 'В листе измерений нет обрезков-картинок.'
                 : 'Лист измерений не найден и обрезков на диске нет: картинки не готовятся.',
-            { measurements: sheet, files: { measurements: sheet?.present ? sheetFile : null } },
+            { measurements: sheet, sheetFile: sheet?.present ? sheetFile : null },
         );
     }
 
@@ -355,7 +357,10 @@ export async function picturesStage({
         // The sheet of the measurements, as it is on the disk now: the measurer may have run
         // after the collection, and the stages after this one need the real numbers.
         measurements: sheet,
-        files: { measurements: sheet?.present ? sheetFile : null },
+        // The path of the sheet: the stages after this one refresh their inputs with it.
+        // The field is not called `files`: in the result of a stage `files` is the list of
+        // the written paths, and the pipeline walks that list.
+        sheetFile: sheet?.present ? sheetFile : null,
         warnings: all,
         text,
         file,

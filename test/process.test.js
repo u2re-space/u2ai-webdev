@@ -637,6 +637,59 @@ test('the files of the stages are collected', () => {
     assert.deepEqual(files.sort(), ['index.html', 'src/main.js']);
 });
 
+test('a stage that answers in an unexpected shape does not kill the run', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-shape-'));
+    // The shape the pictures stage used to answer with: `files` is an object, not a list.
+    const stages = [
+        { name: 'one', title: 'One', dependsOn: [], run: async () => ({ ok: true, files: { measurements: null } }) },
+        { name: 'two', title: 'Two', dependsOn: ['one'], run: async () => ({ ok: true }) },
+    ];
+
+    const result = await runPipeline({
+        client: { responses: { create: async () => ({ output: [] }) } },
+        config: CONFIG,
+        root,
+        task: 'Make a landing.',
+        runId: 'run-1',
+        stages,
+    });
+
+    assert.equal(result.status, 'completed');
+    assert.equal(result.stages.length, 2);
+    assert.deepEqual(pipelineFiles({ files: { measurements: null } }), []);
+    assert.deepEqual(pipelineFiles({ steps: { one: 'two' } }), []);
+});
+
+test('a stage whose result cannot be applied is a failed stage, not a dead run', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-apply-'));
+    const stages = [
+        {
+            name: 'one',
+            title: 'One',
+            dependsOn: [],
+            run: async () => ({ ok: true }),
+            apply: () => { throw new Error('the result does not fit'); },
+        },
+        { name: 'two', title: 'Two', dependsOn: ['one'], run: async () => ({ ok: true }) },
+    ];
+
+    const result = await runPipeline({
+        client: { responses: { create: async () => ({ output: [] }) } },
+        config: CONFIG,
+        root,
+        task: 'Make a landing.',
+        runId: 'run-1',
+        stages,
+    });
+
+    assert.equal(result.status, 'failed');
+    assert.match(result.error, /the result does not fit/);
+    // The run says what happened instead of dying with a message that names nothing.
+    assert.ok(result.warnings.some((item) => /one/.test(item)));
+    const progress = JSON.parse(await readFile(result.file, 'utf8'));
+    assert.equal(progress.stages[0].status, 'failed');
+});
+
 test('the id of a job is a safe name of a directory', () => {
     const id = jobId(new Date('2026-11-13T14:22:33'));
     assert.match(id, /^20261113-142233-[0-9a-f]{6}$/);

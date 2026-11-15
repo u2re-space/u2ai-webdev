@@ -20,6 +20,7 @@
  * @ai.hint pure
  * @ai.hint legacy-0.2
  * @changed 2026-11-13 Ported from the monolith: стадии описаны в одном реестре.
+ * @changed 2026-11-15 Лист измерений обновляется из поля `sheetFile` ответа стадии.
  */
 
 import { collectStage } from './collect.js';
@@ -96,8 +97,8 @@ export const STAGES = Object.freeze([
             // The measurer may have run after the collection: the sheet of the measurements is
             // refreshed, so the stages after this one work with the numbers that are there.
             if (result?.measurements) next.measurements = result.measurements;
-            if (result?.files?.measurements) {
-                next.files = { ...next.files, measurements: result.files.measurements };
+            if (result?.sheetFile) {
+                next.files = { ...next.files, measurements: result.sheetFile };
             }
             ctx.inputs = next;
         },

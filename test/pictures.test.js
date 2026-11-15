@@ -3,7 +3,7 @@
  * @module test/pictures
  * @purpose The tests of the pictures: the crops of the reference, the names of the prepared
  *          pictures and the stage that prepares them with `ai-image`.
- * @depends node:test, node:path, node:fs/promises, inputs/crops, stages/pictures
+ * @depends node:test, node:path, node:fs/promises, inputs/crops, stages/pictures, pipeline
  * @ai.tags test, pictures, crops
  */
 
@@ -15,6 +15,7 @@ import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 
 import { cropName, cropCandidates, cropRelative, resolveCropFile } from '../src/inputs/crops.js';
 import { pictureName, pictureCrops, picturesStage, pictureSubject, pictureKinds, writePictures, readPictures } from '../src/stages/pictures.js';
+import { pipelineFiles } from '../src/pipeline.js';
 
 /**
  * A sheet of measurements with three crops.
@@ -419,7 +420,22 @@ test('the sheet that appeared after the collection is read again', async () => {
     // The stages after this one get the sheet that is really on the disk.
     assert.equal(result.measurements.present, true);
     assert.equal(result.measurements.source, 'landing.png');
-    assert.equal(result.files.measurements, 'measurements/measurements.json');
+    assert.equal(result.sheetFile, 'measurements/measurements.json');
+});
+
+test('the result of the stage keeps the list of the files a list', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-pictures-files-'));
+    const result = await picturesStage({
+        root,
+        config: config(),
+        inputs: { measurements: { present: false } },
+    });
+
+    // In the result of a stage `files` is the list of the written paths: an object there
+    // kills the run of the pipeline. The sheet of the measurements has its own field.
+    assert.deepEqual(result.files, undefined);
+    assert.equal(result.sheetFile, null);
+    assert.deepEqual(pipelineFiles(result), []);
 });
 
 test('the crop of the disk that is already prepared is not prepared again', async () => {
