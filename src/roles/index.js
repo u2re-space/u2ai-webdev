@@ -411,6 +411,9 @@ export async function runRole({
         env,
         context: runContext,
         map: runContext?.map ?? null,
+        // The log of the sibling CLIs comes live: the run shows what the bridge does while
+        // the bridge works.
+        notify,
     });
     const specs = tools.specsFor(key, definition.tools);
     const schema = roleSchema(key);

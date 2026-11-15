@@ -266,11 +266,12 @@ async function fetchPage({ url, maxBytes = 64 * 1024, timeoutMs = 30_000 }) {
  * touch the disk. The context of the run is the memory: the answer of a question that was
  * already asked comes from the cache, and every call is written into the journal.
  * @param {{ root: string, config: object, role?: string|null, mcp?: object[],
- *   writeDirs?: string[], env?: object, context?: object|null, map?: object|null }} opts
+ *   writeDirs?: string[], env?: object, context?: object|null, map?: object|null,
+ *   notify?: ((event: object) => void)|null }} opts
  * @returns {{ execute: (name: string, args: object) => Promise<string>, specs: object[],
  *   specsFor: Function, setWriteDirs: Function, writeDirs: Function }}
  */
-export function createToolset({ root, config, role = null, mcp = [], writeDirs = null, env = process.env, context = null, map = null }) {
+export function createToolset({ root, config, role = null, mcp = [], writeDirs = null, env = process.env, context = null, map = null, notify = null }) {
     const mcpTools = mcpToolEntries(mcp);
     const mcpSpecs = mcpTools.map((entry) => ({
         type: 'function',
@@ -423,13 +424,23 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
 
     /**
      * Run one of the bridge tools and answer with the answer of the external CLI.
+     *
+     * The log of the sibling CLI comes live: every line it writes is told to the run while
+     * the CLI works, and the answer of the tool keeps the whole output.
      * @param {string} name
      * @param {object} args
      * @returns {Promise<string>}
      */
     async function callBridge(name, args) {
         const list = parseArgsList(args.args);
-        const result = await runBridge({ name, args: list, config, cwd: root, env });
+        const result = await runBridge({
+            name,
+            args: list,
+            config,
+            cwd: root,
+            env,
+            onLine: (event) => notify?.({ type: 'bridge.log', name, stream: event.stream, line: event.line }),
+        });
         if (result.skipped) return `Мост ${name} выключен.`;
         if (!result.ok) {
             const detail = (result.stderr || result.stdout || '').trim();

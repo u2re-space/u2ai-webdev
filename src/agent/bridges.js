@@ -8,17 +8,20 @@
  * The binary is looked up in this order: the environment variable of the bridge, the checkout of
  * the sibling package, the installed `node_modules`, and the `PATH`.
  *
- * @depends node:path, node:fs/promises, node:child_process, node:url
- * @usedBy agent/tools, stages/collect
+ * @depends node:path, node:fs/promises, node:child_process, node:url, shared/child-log
+ * @usedBy agent/tools, stages/collect, stages/pictures
  * @exports EXTERNAL_CLIS, externalCliCandidates, resolveExternalCli, runBridge, bridgeEnabled, bridgeKey
  * @ai.tags tools, bridges, external
  * @ai.hint io
+ * @changed 2026-11-15 The log of the child comes live: the run shows the lines of the sibling
+ *                       CLI while it works, and not only when it is over.
  */
 
 import path from 'node:path';
 import { stat } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { createLineReader } from '../shared/child-log.js';
 
 /** The root of this package: the sibling packages are looked up next to it. */
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -148,13 +151,17 @@ export function bridgeEnabled(config, name) {
  *
  * The bridge never throws: a missing binary, a non-zero exit code and a timeout all come back as
  * a result the caller may put into a report.
+ *
+ * The log of the child comes live: `onLine` is called with every line of the child as it is
+ * written, so the run shows what the sibling CLI does instead of waiting in silence. The whole
+ * output is still collected in the answer of the bridge.
  * @param {{ name: string, args?: string[], config?: object, cwd?: string, env?: object,
- *   root?: string, signal?: AbortSignal|null }} request
+ *   root?: string, signal?: AbortSignal|null, onLine?: ((event: { stream: string, line: string }) => void)|null }} request
  * @returns {Promise<{ ok: boolean, skipped: boolean, code: number|null, stdout: string, stderr: string, reason: string|null }>}
  * @exports
  * @ai.hint io
  */
-export async function runBridge({ name, args = [], config = {}, cwd = process.cwd(), env = process.env, root = PACKAGE_ROOT, signal = null }) {
+export async function runBridge({ name, args = [], config = {}, cwd = process.cwd(), env = process.env, root = PACKAGE_ROOT, signal = null, onLine = null }) {
     const key = bridgeKey(name);
     const bridge = config?.bridges?.[key] ?? config?.bridges?.[name] ?? null;
     if (!bridge || bridge.enabled === false) {
@@ -169,6 +176,12 @@ export async function runBridge({ name, args = [], config = {}, cwd = process.cw
         };
     }
     const timeoutMs = Number.isSafeInteger(bridge.timeoutMs) ? bridge.timeoutMs : 600_000;
+    // The log of the child is live unless the bridge is told to keep quiet.
+    const live = typeof onLine === 'function' && bridge.log !== false;
+    const readers = {
+        stdout: live ? createLineReader((line) => onLine({ stream: 'stdout', line })) : null,
+        stderr: live ? createLineReader((line) => onLine({ stream: 'stderr', line })) : null,
+    };
     return await new Promise((resolve) => {
         let stdout = '';
         let stderr = '';
@@ -182,16 +195,27 @@ export async function runBridge({ name, args = [], config = {}, cwd = process.cw
         const timer = setTimeout(() => { timedOut = true; child.kill(); }, timeoutMs);
         const onAbort = () => child.kill();
         signal?.addEventListener('abort', onAbort, { once: true });
-        child.stdout?.on('data', (chunk) => { stdout += String(chunk); });
-        child.stderr?.on('data', (chunk) => { stderr += String(chunk); });
+        child.stdout?.on('data', (chunk) => {
+            stdout += String(chunk);
+            readers.stdout?.push(chunk);
+        });
+        child.stderr?.on('data', (chunk) => {
+            stderr += String(chunk);
+            readers.stderr?.push(chunk);
+        });
         child.on('error', (error) => {
             clearTimeout(timer);
             signal?.removeEventListener('abort', onAbort);
+            readers.stdout?.flush();
+            readers.stderr?.flush();
             resolve({ ok: false, skipped: false, code: null, stdout, stderr: `${stderr}${error.message}`, reason: error.message });
         });
         child.on('close', (code) => {
             clearTimeout(timer);
             signal?.removeEventListener('abort', onAbort);
+            // The last line of the child may have no line break at the end.
+            readers.stdout?.flush();
+            readers.stderr?.flush();
             const reason = timedOut ? `the bridge "${name}" timed out after ${timeoutMs} ms`
                 : code === 0 ? null : `the bridge "${name}" exited with code ${code}`;
             resolve({ ok: code === 0 && !timedOut, skipped: false, code: code ?? null, stdout, stderr, reason });

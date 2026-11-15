@@ -460,11 +460,14 @@ export const defaults = {
   /**
    * The bridges to the sibling CLIs. Each one may be switched off; a bridge
    * that fails never breaks the run, it only empties its part of the context.
+   *
+   * `log` is the live log of the sibling CLI: its lines are shown while it works.
+   * A bridge with `log: false` works in silence, and only its answer is read.
    */
   bridges: {
-    decompose: { enabled: true, command: 'ai-decompose', timeoutMs: 10 * 60_000 },
-    measure: { enabled: true, command: 'ai-measure', timeoutMs: 10 * 60_000 },
-    image: { enabled: true, command: 'ai-image', timeoutMs: 10 * 60_000 },
+    decompose: { enabled: true, command: 'ai-decompose', timeoutMs: 10 * 60_000, log: true },
+    measure: { enabled: true, command: 'ai-measure', timeoutMs: 10 * 60_000, log: true },
+    image: { enabled: true, command: 'ai-image', timeoutMs: 10 * 60_000, log: true },
   },
 
   // --- roles ----------------------------------------------------------------
@@ -590,9 +593,9 @@ export function defaultConfigText() {
     pace: { mode: defaults.pace.mode, speed: defaults.pace.speed, quality: defaults.pace.quality },
     stages: Object.fromEntries(ENUMS.stages.map((stage) => [stage, { enabled: true }])),
     bridges: {
-      decompose: { enabled: defaults.bridges.decompose.enabled },
-      measure: { enabled: defaults.bridges.measure.enabled },
-      image: { enabled: defaults.bridges.image.enabled },
+      decompose: { enabled: defaults.bridges.decompose.enabled, log: defaults.bridges.decompose.log },
+      measure: { enabled: defaults.bridges.measure.enabled, log: defaults.bridges.measure.log },
+      image: { enabled: defaults.bridges.image.enabled, log: defaults.bridges.image.log },
     },
   };
   return `${JSON.stringify(starter, null, 2)}\n`;

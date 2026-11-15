@@ -250,11 +250,12 @@ function validateBridges(bridges, fail) {
     const at = `${where}.${name}`;
     if (!isRecord(entry)) fail(`${at} должен быть объектом`);
     for (const key of Object.keys(entry)) {
-      if (!['enabled', 'command', 'timeoutMs'].includes(key)) fail(`${at}.${key}: неизвестное поле`);
+      if (!['enabled', 'command', 'timeoutMs', 'log'].includes(key)) fail(`${at}.${key}: неизвестное поле`);
     }
     if (typeof entry.enabled !== 'boolean') fail(`${at}.enabled: true | false`);
     if (typeof entry.command !== 'string' || !entry.command.trim()) fail(`${at}.command: непустая строка`);
     if (!(Number.isSafeInteger(entry.timeoutMs) && entry.timeoutMs > 0)) fail(`${at}.timeoutMs: целое > 0`);
+    if (typeof entry.log !== 'boolean') fail(`${at}.log: true | false`);
   }
 }
 

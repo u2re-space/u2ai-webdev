@@ -21,6 +21,7 @@
 
 import { createColors } from './colors.js';
 import { sanitizeText } from './stdio.js';
+import { formatBridgeLine } from '../shared/child-log.js';
 
 /** The symbols of the status lines. */
 export const SYMBOLS = Object.freeze({
@@ -304,6 +305,25 @@ export function createRenderer({
         },
 
         /**
+         * A line of the log of a sibling CLI.
+         *
+         * The line goes to stderr: the stdout of the run carries the answer of the run,
+         * and a line of a child is not a part of it. The error of the child is yellow: it
+         * is the child's own stderr.
+         * @param {string} name the name of the child
+         * @param {string} line the line of the child
+         * @param {string} [stream] `stdout` or `stderr`
+         * @returns {void}
+         */
+        bridge(name, line, stream = 'stdout') {
+            if (json) { emit('bridge.log', { name: String(name ?? ''), stream, line: String(line ?? '') }); return; }
+            const text = formatBridgeLine(name, line);
+            if (!text) return;
+            if (stream === 'stderr') err(`${paint.yellow(`${symbols.info} ${text}`)}`);
+            else err(`${paint.dim(`${symbols.info} ${text}`)}`);
+        },
+
+        /**
          * The progress of the run.
          * @param {object} progress
          * @returns {void}
@@ -376,6 +396,7 @@ export function createRenderer({
             else if (type === 'request.retry') this.retry(event);
             else if (type === 'request.error') this.warning(`запрос не удался: ${event.error ?? ''}`);
             else if (type === 'warning') this.warning(event.text);
+            else if (type === 'bridge.log') this.bridge(event.name, event.line, event.stream ?? 'stdout');
             else if (type === 'files') this.files(event.files);
             else if (type === 'plan') this.plan(event.plan);
             else if (type === 'progress') this.progress(event.progress);

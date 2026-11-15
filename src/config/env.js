@@ -121,6 +121,13 @@ export function fromEnv(env = process.env) {
     if (flag === '0' || flag === 'false') set(['bridges', bridge, 'enabled'], false);
     else if (flag === '1' || flag === 'true') set(['bridges', bridge, 'enabled'], true);
   }
+  // The live log of every bridge at once: `AI_WEBDEV_BRIDGES_LOG=0` silences them.
+  const bridgesLog = env.AI_WEBDEV_BRIDGES_LOG;
+  if (bridgesLog === '0' || bridgesLog === 'false') {
+    for (const bridge of ENUMS.bridges) set(['bridges', bridge, 'log'], false);
+  } else if (bridgesLog === '1' || bridgesLog === 'true') {
+    for (const bridge of ENUMS.bridges) set(['bridges', bridge, 'log'], true);
+  }
 
   return out;
 }

@@ -536,9 +536,9 @@ everything else stays on the defaults.
     "review": { "enabled": true, "repair": true, "repairRounds": 2, "timeoutMs": 3600000 }
   },
   "bridges": {
-    "decompose": { "enabled": true },
-    "measure": { "enabled": true },
-    "image": { "enabled": true }
+    "decompose": { "enabled": true, "log": true },
+    "measure": { "enabled": true, "log": true },
+    "image": { "enabled": true, "log": true }
   }
 }
 ```
@@ -687,7 +687,7 @@ The sections of the file:
 | `context` | The context of the run: `enabled`, `cache` and `maxBriefChars`. It lives in `<output.work>/<id>/context/` and dies with the run. |
 | `map` | The map of the run: `enabled`, `depth`, `maxFiles`, `maxFileBytes`, `maxLines`. It lives in `<output.work>/<id>/map.json` and dies with the run. |
 | `components` | The local registry: the directory, the index, the vendor directory. |
-| `bridges` | The sibling CLIs: `decompose`, `measure`, `image` — each may be switched off. |
+| `bridges` | The sibling CLIs: `decompose`, `measure`, `image` — each may be switched off, and each may keep its log to itself (`log`). |
 | `roles`, `customRoles` | The roles: the model, the effort, the instructions, the tools. |
 | `documentation` | The documentation of a role: `sources` (the map of the addresses) and `roles` (what every role gets: the standards of the package and the pages behind them). |
 | `mcp` | The external tool servers. |
@@ -721,6 +721,7 @@ The home directory holds:
 | `AI_WEBDEV_SPEED`, `AI_WEBDEV_QUALITY`, `AI_WEBDEV_PACE` | The dials of the team. |
 | `AI_WEBDEV_STAGE_<STAGE>` | `0` or `false` switches one stage off. |
 | `AI_WEBDEV_BRIDGE_<BRIDGE>` | `0` or `false` switches one bridge off. |
+| `AI_WEBDEV_BRIDGES_LOG` | `0` or `false` silences the live log of every bridge. |
 | `AI_WEBDEV_RETRIES`, `AI_WEBDEV_TIMEOUT_MS`, `AI_WEBDEV_MAX_TURNS` | The limits of one request. |
 | `AI_WEBDEV_LOG_DIR` | The directory of the log of the API calls; the name of the directory turns the log on. |
 
@@ -1094,6 +1095,33 @@ empties its part of the context.
 
 The binary of a bridge is looked up in the environment variable of the bridge, in the checkout of
 the sibling package, in `node_modules` and in the `PATH`.
+
+### The log of a bridge comes live
+
+A bridge that writes into a pipe is quiet until it is over: the terminal waits, and the silence
+says nothing — the child may work, may think, may hang. The run shows the lines of the child as
+they are written, so the wait becomes a log:
+
+```
+▸ pictures
+· [ai-image] gpt-image-2 · 1024×1024
+· [ai-image] the answer carries 1 picture(s)
+✓ pictures
+```
+
+Every line of the child comes with the name of the child in front of it. The lines go to stderr:
+the stdout of the run carries the answer of the run, and a line of a child is not a part of it.
+The stderr of the child is yellow.
+
+A bridge may keep its log to itself: `bridges.<name>.log: false` in the config, or
+`AI_WEBDEV_BRIDGES_LOG=0` in the environment silences every bridge at once. The answer of the
+bridge does not change either way — the model still gets the whole output of the child.
+
+In the `--json` mode the line of a child is an event of the run:
+
+```json
+{"time":"2026-11-15T10:00:00.000Z","type":"bridge.log","name":"ai-image","stream":"stdout","line":"the answer carries 1 picture(s)"}
+```
 
 ## Examples
 

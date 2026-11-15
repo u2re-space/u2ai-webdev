@@ -80,3 +80,4 @@ export * from './openai/responses.js';
 export * from './model/profiles.js';
 export * from './model/trust.js';
 export * from './shared/house.js';
+export * from './shared/child-log.js';

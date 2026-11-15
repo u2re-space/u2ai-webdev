@@ -312,7 +312,16 @@ export async function picturesStage({
         const model = String(settings.model ?? '').trim();
         if (model) args.push('--image-model', model);
 
-        const result = await runBridge({ name: 'ai-image', args, config, cwd: root, env });
+        const result = await runBridge({
+            name: 'ai-image',
+            args,
+            config,
+            cwd: root,
+            env,
+            // The log of `ai-image` comes live: the stage shows what the picture CLI does
+            // while it works, and not only when the picture is ready.
+            onLine: (event) => notify({ type: 'bridge.log', name: 'ai-image', stream: event.stream, line: event.line }),
+        });
         if (result.skipped) {
             warnings.push('Мост ai-image выключен: обрезки остаются как есть.');
             break;
