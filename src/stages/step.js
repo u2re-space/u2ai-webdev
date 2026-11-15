@@ -658,7 +658,7 @@ export async function runStepStage({
         // styles may be the file of an earlier stage, so the whole project is looked at: a
         // `@use` of a file that is not there breaks the build of the user, and the page
         // stays without styles.
-        const scope = await styleScope(root, role, checkedFiles);
+        let scope = await styleScope(root, role, checkedFiles);
         let partials = await missingPartials(root, scope);
         let answer = result;
         let repair = null;
@@ -707,6 +707,9 @@ export async function runStepStage({
                 };
             }
             syntax = await checkFiles(root, checkedFiles, { env });
+            // The repair may have written a stylesheet of its own: the scope is looked at
+            // again, so a partial that the new file names is found too.
+            scope = await styleScope(root, role, checkedFiles);
             partials = await missingPartials(root, scope);
         }
         // A partial that a later step of the plan writes is not a failure of this step: the
