@@ -236,7 +236,7 @@ export function repairText(step, issues = [], { again = false } = {}) {
  * is a defect in a new place.
  * @param {{ client: object, config?: object, root?: string, task?: string, plan?: object|null,
  *   architecture?: object|null, issues?: object[], notify?: (event: object) => void,
- *   env?: object, again?: boolean }} request
+ *   env?: object, again?: boolean, runContext?: object|null }} request
  * @returns {Promise<{ repaired: object[], written: string[], warnings: string[], errors: string[] }>}
  * @exports
  * @ai.hint io
@@ -252,6 +252,7 @@ export async function repairIssues({
     notify = () => {},
     env = process.env,
     again = false,
+    runContext = null,
 } = {}) {
     const list = Array.isArray(issues) ? issues : [];
     const repaired = [];
@@ -291,6 +292,8 @@ export async function repairIssues({
             maxTurns: config?.stages?.[STAGE_OF_ROLE[group.role] ?? group.role]?.maxTurns ?? null,
             requireFiles: true,
             notify,
+            runContext,
+            stage: 'repair',
         });
         if (!result.data) {
             warnings.push(`Ремонт роли ${group.role} не удался: ${roleReason(result) || 'роль не вернула ответ'}.`);
@@ -333,7 +336,7 @@ export async function repairIssues({
  *
  * @param {{ client: object, config?: object, root?: string, task?: string, plan?: object|null,
  *   architecture?: object|null, inputs?: object|null, reports?: object[], screenshots?: string[],
- *   runId?: string|null, notify?: (event: object) => void, env?: object }} request
+ *   runId?: string|null, notify?: (event: object) => void, env?: object, runContext?: object|null }} request
  * @returns {Promise<{ stage: string, ok: boolean, verdict: string, reviews: object[],
  *   issues: object[], file: string|null, warnings: string[], runId: string }>}
  * @exports
@@ -352,6 +355,7 @@ export async function reviewStage({
     runId: id = null,
     notify = () => {},
     env = process.env,
+    runContext = null,
 } = {}) {
     if (!client?.responses) throw new Error('Клиент API не передан.');
     const run = id ?? runId();
@@ -415,6 +419,8 @@ export async function reviewStage({
             maxTurns: config?.stages?.review?.maxTurns ?? null,
             notify,
             parts: [...reference.parts, ...shots.parts],
+            runContext,
+            stage: 'review',
         });
 
         const data = result.data ?? {};
@@ -473,6 +479,7 @@ export async function reviewStage({
                 notify,
                 env,
                 again: round > 0,
+                runContext,
             });
             warnings.push(...repair.warnings);
             repairs.push(repair);

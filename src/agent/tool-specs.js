@@ -139,7 +139,9 @@ export const TOOL_SPECS = Object.freeze({
     },
     search_files: {
         configKey: 'search',
-        description: 'Find the files of the working directory. With inContent=1 (the default) it greps the text '
+        description: 'Find the files of the working directory. The scope says what is searched: '
+            + '`path` looks at the names of the files, `content` at their text, `symbol` at the names the code '
+            + 'declares, `all` at everything. With inContent=1 (the default) it greps the text '
             + 'files and answers "path:line: text"; with inContent=0 it matches the paths of the files and '
             + 'answers the paths. The glob limits the files by their name.',
         parameters: {
@@ -147,6 +149,7 @@ export const TOOL_SPECS = Object.freeze({
             properties: {
                 query: str('The text to look for.'),
                 path: str('Directory to search in. Empty = the working directory.'),
+                scope: str('What to search: `path`, `content`, `symbol` or `all`. Default = `content`.'),
                 regex: bool('1 to treat the query as a regular expression.'),
                 inContent: bool('1 to search the content, 0 to search the names only.'),
                 glob: str('The names of the files to search in, like `*.scss` or `src/**/*.js`. Empty = every file.'),

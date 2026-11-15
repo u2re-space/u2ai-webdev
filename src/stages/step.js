@@ -551,7 +551,7 @@ export async function roleWorkOnDisk({ root, config = {}, id = null, plan = null
  * @param {{ client: object, config?: object, root?: string, task?: string, role: string,
  *   plan?: object|null, brief?: string, inputs?: object|null, runId?: string|null,
  *   apply?: boolean, context?: object, notify?: (event: object) => void,
- *   env?: object }} request
+ *   env?: object, runContext?: object|null }} request
  * @returns {Promise<{ stage: string, ok: boolean, skipped: boolean, steps: object[],
  *   warnings: string[], turns: number, usage: object|null, runId: string }>}
  * @exports
@@ -571,6 +571,7 @@ export async function runStepStage({
     context: extra = {},
     notify = () => {},
     env = process.env,
+    runContext = null,
 } = {}) {
     if (!client?.responses) throw new Error('Клиент API не передан.');
     const run = id ?? runId();
@@ -659,6 +660,8 @@ export async function runStepStage({
             maxTurns: config?.stages?.[role]?.maxTurns ?? null,
             requireFiles: Boolean(step.files?.length),
             notify,
+            runContext,
+            stage: role,
         });
         turns += result.turns;
         usage = usage ?? result.usage;
@@ -672,6 +675,11 @@ export async function runStepStage({
             warnings.push(...applied.warnings);
             for (const rel of applied.replaced) {
                 warnings.push(`Шаг ${step.id}: файл ${rel} перезаписан — ответ роли отличался от файла на диске.`);
+            }
+            // The files of the step go into the context of the run: the stages after it know
+            // what is on the disk without looking for it.
+            for (const rel of [...applied.written, ...applied.replaced]) {
+                await runContext?.file?.(rel);
             }
         }
 
@@ -716,6 +724,8 @@ export async function runStepStage({
                 requireFiles: Boolean(step.files?.length),
                 notify,
                 parts,
+                runContext,
+                stage: role,
             });
             turns += repair.turns;
             usage = usage ?? repair.usage;

@@ -13,7 +13,8 @@
  *   progress of the run stays on the disk and the run may be continued later.
  *
  * @depends stages/index, stages/workspace, stages/plan, stages/architect, stages/setup,
- *          stages/collect, stages/pictures, stages/review, agent/work-plan
+ *          stages/collect, stages/pictures, stages/review, agent/work-plan, agent/context,
+ *          agent/run-map
  * @usedBy cli, jobs/manager
  * @exports runPipeline, resumePipeline, pipelineFiles, filesAllowed
  * @ai.tags pipeline, orchestration, resume
@@ -22,6 +23,7 @@
  * @changed 2026-11-13 Ported from the monolith: оркестратор стадий и продолжение прогона.
  * @changed 2026-11-14 The stage of the pictures; the name of the stage to stop at is not case sensitive.
  * @changed 2026-11-14 A resumed run reads the collected inputs and the prepared pictures back.
+ * @changed 2026-11-15 Прогон держит свой контекст и свою карту файлов.
  */
 
 import { runId as makeRunId } from './stages/workspace.js';
@@ -37,6 +39,8 @@ import { readPictures } from './stages/pictures.js';
 import { createProgress, recordStep, readProgress, writeProgress } from './agent/work-plan.js';
 import { openMemory, memoryContext, memoryFile } from './memory.js';
 import { defaultHome } from './config/paths.js';
+import { openContext } from './agent/context.js';
+import { openRunMap } from './agent/run-map.js';
 
 /**
  * May the run write the files of the answers into the project?
@@ -161,6 +165,36 @@ export async function runPipeline({
         .map((name) => String(name ?? '').trim().toLowerCase())
         .filter(Boolean));
 
+    // The context of the run: what it did, what it decided and the answers it already has.
+    //
+    // The context is the primary knowledge of the run. The permanent memory of the project is
+    // a different thing: a new run starts with a clean head, and an old run never gets in the
+    // way of a new one.
+    const runContext = await openContext({
+        root,
+        config,
+        runId: run,
+        enabled: config?.context?.enabled !== false,
+        cache: config?.context?.cache !== false,
+        maxBriefChars: config?.context?.maxBriefChars,
+    });
+
+    // The map of the run: the files of the working directory with their lines and their
+    // symbols. The searches and the reads of the files the map knows do not touch the disk.
+    const map = await openRunMap({
+        root,
+        config,
+        runId: run,
+        build: config?.map?.enabled !== false,
+        depth: config?.map?.depth,
+        maxFiles: config?.map?.maxFiles,
+        maxFileBytes: config?.map?.maxFileBytes,
+        maxLines: config?.map?.maxLines,
+    });
+    // The map hangs on the context: the tools of a role need both, and the role runner gets
+    // the context alone.
+    runContext.map = map;
+
     // The context of the run: every stage reads it and puts its result into it.
     const ctx = {
         client,
@@ -183,6 +217,8 @@ export async function runPipeline({
         review: null,
         audit: null,
         lessons: [],
+        runContext,
+        map,
     };
 
     // The permanent memory of the project: the run reads it and writes the lessons into it.
@@ -314,6 +350,9 @@ export async function runPipeline({
             await writeProgress(root, config, run, progress);
             reports.push({ name: stage.name, status: 'failed', result: null, warnings: [error] });
             status = 'failed';
+            // The failed stage goes into the context of the run: the next run reads what
+            // happened and does not look for the answer again.
+            await runContext?.stage?.(stage.name, 'failed', error);
             break;
         }
 
@@ -322,6 +361,23 @@ export async function runPipeline({
         const ok = result?.ok !== false;
         if (typeof stage.apply === 'function') stage.apply(ctx, result);
 
+        // The files of the stage go into the map and into the context of the run: the next
+        // stage finds them without looking for them.
+        const written = pipelineFiles(result);
+        await map?.updateMany?.(written).catch(() => {});
+        for (const rel of written) {
+            await runContext?.file?.(rel);
+        }
+        // The pictures of the run are named by their exact paths: a role that knows the path
+        // does not go looking for the picture.
+        const references = Array.isArray(ctx.inputs?.references) ? ctx.inputs.references : [];
+        if (references.length) {
+            await runContext?.references?.(references.map((item) => ({
+                rel: String(item?.path ?? ''),
+                kind: 'original',
+            })));
+        }
+
         progress = recordStep(progress, {
             stage: stage.name,
             status: ok ? 'completed' : 'failed',
@@ -329,6 +385,9 @@ export async function runPipeline({
             files: pipelineFiles(result),
         });
         await writeProgress(root, config, run, progress);
+
+        // The stage goes into the context of the run: the stages after it know what is done.
+        await runContext?.stage?.(stage.name, ok ? 'done' : 'failed', reportOf(result));
 
         reports.push({ name: stage.name, status: ok ? 'completed' : 'failed', result, warnings: stageWarnings });
         notify({ type: 'stage.done', stage: stage.name, status: ok ? 'completed' : 'failed', result });
@@ -367,6 +426,11 @@ export async function runPipeline({
     }
     memory?.close?.();
 
+    // The digest of the run: what a person reads after it. The context of the run is the
+    // witness of what happened, and it dies with the run.
+    await runContext?.digest?.().catch(() => {});
+    await runContext?.close?.().catch(() => {});
+
     return {
         status,
         runId: run,
@@ -375,6 +439,8 @@ export async function runPipeline({
         file,
         warnings,
         error,
+        context: runContext?.rel ?? null,
+        map: map?.rel ?? null,
     };
 }
 

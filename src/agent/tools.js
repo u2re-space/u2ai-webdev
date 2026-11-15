@@ -9,11 +9,12 @@
  * `ai-measure`), which run as subprocesses.
  *
  * @depends node:path, node:child_process, agent/fs-tools, agent/project-backup, agent/assets,
- *          agent/bridges, agent/tool-specs, agent/paths
+ *          agent/bridges, agent/tool-specs, agent/paths, agent/run-map
  * @exports createToolset, toolSpecs, enabledToolNames, mcpToolEntries, htmlToText,
  *          BLOCKING_COMMANDS, WINDOWS_EXTENSIONS, quoteWindowsArg, findProgram, killTree
  * @ai.tags tools, agent
  * @ai.hint keep
+ * @changed 2026-11-15 Карта прогона и кэш контекста отвечают на чтения и поиск.
  */
 
 import path from 'node:path';
@@ -28,9 +29,13 @@ import { readSkill } from './skills.js';
 import { guidanceSearchText, guidanceRetrieveText, GUIDANCE_SOURCE } from './guidance.js';
 import { runProgram as runProgramIn } from './programs.js';
 import { isInside, resolveInside } from './paths.js';
+import { mapFiles } from './run-map.js';
 
 export { toolSpecs, enabledToolNames } from './tool-specs.js';
 export { WINDOWS_EXTENSIONS, quoteWindowsArg, findProgram, killTree } from './programs.js';
+
+/** Инструменты, ответы которых стоит помнить: они читают одно и то же. */
+const CACHEABLE = new Set(['read_file']);
 
 /**
  * The commands that do not finish on their own: a server, a watcher, a tail.
@@ -200,12 +205,16 @@ async function fetchPage({ url, maxBytes = 64 * 1024, timeoutMs = 30_000 }) {
  *
  * Every path the model names is resolved inside the working directory, and every file the model
  * writes has to land in one of the directories the current stage opened for writing.
+ *
+ * The map of the run is the fast path: the search and the read of a file the map knows do not
+ * touch the disk. The context of the run is the memory: the answer of a question that was
+ * already asked comes from the cache, and every call is written into the journal.
  * @param {{ root: string, config: object, role?: string|null, mcp?: object[],
- *   writeDirs?: string[], env?: object }} opts
+ *   writeDirs?: string[], env?: object, context?: object|null, map?: object|null }} opts
  * @returns {{ execute: (name: string, args: object) => Promise<string>, specs: object[],
  *   specsFor: Function, setWriteDirs: Function, writeDirs: Function }}
  */
-export function createToolset({ root, config, role = null, mcp = [], writeDirs = null, env = process.env }) {
+export function createToolset({ root, config, role = null, mcp = [], writeDirs = null, env = process.env, context = null, map = null }) {
     const mcpTools = mcpToolEntries(mcp);
     const mcpSpecs = mcpTools.map((entry) => ({
         type: 'function',
@@ -258,6 +267,71 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
     function skillDirs() {
         const dir = config?.skills?.dir;
         return dir ? [path.resolve(dir)] : [];
+    }
+
+    /**
+     * The text of a file, from the map of the run.
+     *
+     * The map is used only when the file has not changed since the map was built: the moment
+     * of the last change decides, so a stale map never lies.
+     * @param {string} rel путь файла относительно корня
+     * @param {number|null} startLine
+     * @param {number|null} endLine
+     * @returns {Promise<string|null>}
+     */
+    async function readFromMap(rel, startLine = null, endLine = null) {
+        if (!map?.enabled) return null;
+        const record = map.data?.files?.[rel];
+        if (!record || record.partial || !Array.isArray(record.lines)) return null;
+        const info = await stat(path.join(root, ...rel.split('/'))).catch(() => null);
+        if (!info?.isFile() || info.mtimeMs !== record.mtimeMs) return null;
+        const lines = record.lines;
+        const total = lines.length;
+        const from = Math.max(1, startLine ?? 1);
+        const to = Math.min(total, endLine ?? total);
+        if (from > total) return null;
+        const selected = lines.slice(from - 1, to);
+        const width = String(to).length;
+        const numbered = selected.map((line, index) => `${String(from + index).padStart(width)}| ${line}`).join('\n');
+        const header = `# ${rel} — строки ${from}-${to} из ${total}`;
+        return `${header}\n${numbered}`;
+    }
+
+    /**
+     * The path of a file relative to the root, as the map knows it.
+     * @param {string} value путь, который назвал модель
+     * @returns {Promise<string|null>}
+     */
+    async function relativeOf(value) {
+        const located = await resolveInside(root, String(value ?? ''), { allowRoot: false }).catch(() => null);
+        return located?.rel ?? null;
+    }
+
+    /**
+     * The key of the cache of a call: the name of the tool, its arguments and the moment of
+     * the file it reads.
+     * @param {string} name
+     * @param {object} args
+     * @returns {Promise<string>}
+     */
+    async function cacheKeyOf(name, args) {
+        const parts = [name, JSON.stringify(args ?? {})];
+        const rel = String(args?.path ?? '');
+        if (rel) {
+            const info = await stat(path.resolve(root, rel)).catch(() => null);
+            parts.push(info?.mtimeMs ?? 'no-file');
+        }
+        return parts.join('|');
+    }
+
+    /**
+     * Index a file of the run in the map, so the next search finds it.
+     * @param {string} rel
+     * @returns {Promise<void>}
+     */
+    async function rememberInMap(rel) {
+        if (!map?.enabled || !rel) return;
+        await map.update(rel).catch(() => {});
     }
 
     /**
@@ -326,8 +400,38 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
             }
             return typeof result === 'string' ? result : JSON.stringify(result ?? null);
         }
+        // The answer of a question that was already asked comes from the cache of the run.
+        const key = CACHEABLE.has(name) ? await cacheKeyOf(name, args) : null;
+        if (key) {
+            const hit = await context?.cached?.(key);
+            if (hit?.answer) {
+                await context?.action?.(`${name} ${JSON.stringify(args ?? {})}`, { role });
+                return String(hit.answer);
+            }
+        }
+        const answer = await runTool(name, args);
+        if (key) await context?.put?.(key, { answer, at: new Date().toISOString() });
+        await context?.action?.(`${name} ${JSON.stringify(args ?? {})}`, { role });
+        return answer;
+    }
+
+    /**
+     * Run one tool of the catalogue.
+     * @param {string} name
+     * @param {object} args
+     * @returns {Promise<string>}
+     */
+    async function runTool(name, args = {}) {
         switch (name) {
             case 'list_files': {
+                if (map?.enabled) {
+                    const located = await resolveInside(root, String(args.path ?? '.'), { allowRoot: true });
+                    const files = mapFiles(map.data, {
+                        dir: located.rel,
+                        depth: Math.max(1, Number(args.depth) || 2),
+                    }).slice(0, 400);
+                    return files.length ? files.join('\n') : '(пусто)';
+                }
                 const listing = await listFiles({
                     root,
                     dir: String(args.path ?? '.'),
@@ -346,6 +450,12 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                 if (seen && stamp && seen === stamp) {
                     return `Файл ${target} уже прочитан в этом разговоре и с тех пор не менялся. Его содержимое — выше в истории; читать его второй раз не нужно.`;
                 }
+                const rel = await relativeOf(target);
+                const known = rel ? await readFromMap(rel, startLine, endLine) : null;
+                if (known !== null) {
+                    if (stamp) reads.set(key, stamp);
+                    return known;
+                }
                 const file = await readTextFile({
                     root,
                     file: target,
@@ -359,6 +469,8 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                 const target = await writePath(args.path);
                 forgetReads(target.rel);
                 const result = await writeTextFile({ root, file: target.rel, content: String(args.content ?? '') });
+                await rememberInMap(target.rel);
+                await context?.file?.(target.rel);
                 return `Записан ${result.rel} (${result.bytes} байт${result.created ? ', новый файл' : ''}).`;
             }
             case 'replace_text': {
@@ -371,12 +483,14 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                     replacement: String(args.replacement ?? ''),
                     all: Boolean(args.all),
                 });
+                await rememberInMap(target.rel);
                 return `Заменено в ${result.rel}: ${result.replacements} (${result.bytes} байт).`;
             }
             case 'delete_file': {
                 const target = await writePath(args.path);
                 forgetReads(target.rel);
                 const result = await deleteFile({ root, file: target.rel });
+                await rememberInMap(target.rel);
                 return `Удалён ${result.rel}. Снимок: ${result.projectBackup?.id ?? 'нет'}.`;
             }
             case 'make_dir': {
@@ -388,15 +502,40 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                 const source = await resolveInside(root, String(args.source ?? ''), { allowRoot: false });
                 const destination = await writePath(args.destination);
                 const result = await copyPath({ root, source: source.rel, destination: destination.rel });
+                await rememberInMap(result.rel ?? destination.rel);
                 return `Скопировано ${result.rel ?? source.rel} → ${destination.rel}.`;
             }
             case 'search_files': {
+                const query = String(args.query ?? '');
+                const scope = String(args.scope ?? (args.inContent === 0 || args.inContent === false || args.inContent === '0' ? 'path' : 'content'));
+                // The map answers the search without touching the disk; only the files it did
+                // not read in full are looked at again.
+                if (map?.enabled && query.trim()) {
+                    const located = await resolveInside(root, String(args.path ?? '.'), { allowRoot: true });
+                    const found = map.search({
+                        query,
+                        dir: located.rel,
+                        scope,
+                        regex: Boolean(args.regex),
+                        glob: String(args.glob ?? ''),
+                        maxResults: 60,
+                    });
+                    const hits = found.text ? found.text.split('\n') : [];
+                    const matcher = Boolean(args.regex) ? new RegExp(query, 'i') : null;
+                    for (const rel of found.partial) {
+                        const body = await readTextFile({ root, file: rel }).catch(() => null);
+                        if (!body) continue;
+                        const hit = matcher ? matcher.test(body.text) : body.text.toLowerCase().includes(query.toLowerCase());
+                        if (hit) hits.push(rel);
+                    }
+                    return hits.length ? hits.join('\n') : 'Совпадений не найдено.';
+                }
                 const found = await searchFiles({
                     root,
-                    query: String(args.query ?? ''),
+                    query,
                     dir: String(args.path ?? '.'),
                     regex: Boolean(args.regex),
-                    inContent: !(args.inContent === 0 || args.inContent === false || args.inContent === '0'),
+                    inContent: scope !== 'path' && scope !== 'symbol',
                     glob: String(args.glob ?? ''),
                 });
                 return found.text;

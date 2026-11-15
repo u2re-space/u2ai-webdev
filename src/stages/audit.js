@@ -85,6 +85,7 @@ export async function auditStage({
     runId: id = null,
     notify = () => {},
     env = process.env,
+    runContext = null,
 } = {}) {
     if (!client?.responses) throw new Error('Клиент API не передан.');
     const run = id ?? runId();
@@ -112,6 +113,8 @@ export async function auditStage({
         env,
         maxTurns: config?.stages?.audit?.maxTurns ?? null,
         notify,
+        runContext,
+        stage: 'audit',
     });
 
     const data = result.data ?? {};

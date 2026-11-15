@@ -109,7 +109,7 @@ export async function readLessons(root, config = {}, id = null) {
  *
  * @param {{ client: object, config?: object, root?: string, task?: string, plan?: object|null,
  *   review?: object|null, memory?: string, runId?: string|null, store?: object|null,
- *   notify?: (event: object) => void, env?: object }} request
+ *   notify?: (event: object) => void, env?: object, runContext?: object|null }} request
  * @returns {Promise<{ stage: string, ok: boolean, lessons: object[], text: string,
  *   file: string|null, stored: object, warnings: string[], runId: string }>}
  * @exports
@@ -127,6 +127,7 @@ export async function learnStage({
     store = null,
     notify = () => {},
     env = process.env,
+    runContext = null,
 } = {}) {
     if (!client?.responses) throw new Error('Клиент API не передан.');
     const run = id ?? runId();
@@ -165,6 +166,8 @@ export async function learnStage({
         env,
         maxTurns: config?.stages?.learn?.maxTurns ?? null,
         notify,
+        runContext,
+        stage: 'learn',
     });
 
     const text = String(result.text ?? '').trim();
@@ -179,6 +182,12 @@ export async function learnStage({
         source: `run:${run}`,
     });
     warnings.push(...stored.warnings);
+
+    // The lessons of this run also stay in the context of the run: the stages that follow
+    // read them from there, not from the permanent memory of the project.
+    if (lessons.length) {
+        await runContext?.decision?.(lessons.map((item) => item.text ?? item.lesson ?? '').join('\n'), { stage: 'learn' });
+    }
 
     return {
         stage: 'learn',

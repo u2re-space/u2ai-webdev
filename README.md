@@ -449,6 +449,8 @@ The sections of the file:
 | `inputs` | The names of the input files: the design, the measurements, the palette, the tokens, the files of the essence (`extra`) and the reference. |
 | `pictures` | The crops of the reference that are prepared: the kinds, the command of `ai-image`, the subject, the model, the directory, the limit. |
 | `memory` | The permanent memory: the file, the scope, the limit, the summaries of the files, the finished tasks. |
+| `context` | The context of the run: `enabled`, `cache` and `maxBriefChars`. It lives in `<output.work>/<id>/context/` and dies with the run. |
+| `map` | The map of the run: `enabled`, `depth`, `maxFiles`, `maxFileBytes`, `maxLines`. It lives in `<output.work>/<id>/map.json` and dies with the run. |
 | `components` | The local registry: the directory, the index, the vendor directory. |
 | `bridges` | The sibling CLIs: `decompose`, `measure`, `image` — each may be switched off. |
 | `roles`, `customRoles` | The roles: the model, the effort, the instructions, the tools. |
@@ -566,6 +568,60 @@ ai-webdev memory tasks
 
 The kinds of a record: `fact`, `convention`, `decision`, `preference`, `pitfall`, `summary`,
 `note`. The scopes: `global` (every project) and `project` (this directory).
+
+## The context of the run
+
+The permanent memory is for the *project*. The context of the run is for the *run*: what this
+run did, what it decided and the answers its tools already gave. The context lives in the work
+directory of the run — `<output.work>/<id>/context/` — and dies with it.
+
+```
+.tmp/<id>/context/
+  journal.ndjson   что происходило, по одной записи на строку, в порядке событий
+  state.json       что прогон знает сейчас: картинки, стадии, факты
+  cache/           ответы, которые инструменты уже давали, чтобы не спрашивать дважды
+  notes.md         дайджест, который читает человек
+```
+
+A new run starts with a clean head: the context of the earlier run never gets in the way of the
+new one, and nothing leaks out of it into the permanent memory except the lessons the `learn`
+stage writes on purpose.
+
+The roles read the context before they work. The brief of the context names the exact paths of
+the pictures of the run, the stages that are done and the files that were written, so a model
+does not go looking for what the run already knows:
+
+```
+# The context of this run
+
+The pictures of this run — these paths are exact, do not look for them anywhere else:
+- `.ai/refs/landing.png` — the original picture
+
+The stages of this run:
+- plan: done — 3 steps.
+- markup: done — index.html written.
+```
+
+And the roles write into it: their answers, their decisions, the plan and the lessons of the run
+all land in the journal and in the state. The next stage starts from that instead of asking the
+model the same thing again.
+
+## The map of the run
+
+The map of a run is the index of the files of the working directory: their lines, their symbols,
+their size and the moment they changed. It lives in `<output.work>/<id>/map.json` and dies with
+the run.
+
+The tools read through the map: `list_files` answers from it, `read_file` is served from the
+lines it holds, and `search_files` searches them. A file that changed since the map was built is
+read from the disk again — the map never serves a stale file.
+
+The search knows three scopes: `path` looks at the names of the files, `content` at their text,
+`symbol` at the names the code declares, `all` at everything.
+
+The map does not read everything: it skips `.tmp`, `node_modules`, `.git` and the files with
+secrets, it holds at most 2000 files, and a file longer than 400 lines or bigger than 32 KiB is
+marked `partial` — for such a file the search goes to the disk.
 
 ## The skill packs
 

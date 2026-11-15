@@ -180,6 +180,40 @@ function validateMemory(memory, fail) {
 }
 
 /**
+ * Validate the `context` section: the context of a run.
+ * @param {object} context
+ * @param {(message: string) => never} fail
+ */
+function validateContext(context, fail) {
+  const where = 'context';
+  if (!isRecord(context)) fail(`${where} должен быть объектом`);
+  for (const key of Object.keys(context)) {
+    if (!(key in defaults.context)) fail(`${where}.${key}: неизвестное поле (допустимо: ${Object.keys(defaults.context).join(', ')})`);
+  }
+  for (const key of ['enabled', 'cache']) {
+    if (typeof context[key] !== 'boolean') fail(`${where}.${key}: true | false`);
+  }
+  if (!(Number.isSafeInteger(context.maxBriefChars) && context.maxBriefChars > 0)) fail(`${where}.maxBriefChars: целое > 0`);
+}
+
+/**
+ * Validate the `map` section: the map of a run.
+ * @param {object} map
+ * @param {(message: string) => never} fail
+ */
+function validateMap(map, fail) {
+  const where = 'map';
+  if (!isRecord(map)) fail(`${where} должен быть объектом`);
+  for (const key of Object.keys(map)) {
+    if (!(key in defaults.map)) fail(`${where}.${key}: неизвестное поле (допустимо: ${Object.keys(defaults.map).join(', ')})`);
+  }
+  if (typeof map.enabled !== 'boolean') fail(`${where}.enabled: true | false`);
+  for (const key of ['depth', 'maxFiles', 'maxFileBytes', 'maxLines']) {
+    if (!(Number.isSafeInteger(map[key]) && map[key] > 0)) fail(`${where}.${key}: целое > 0`);
+  }
+}
+
+/**
  * Validate the `components` section: the local registry.
  * @param {object} components
  * @param {(message: string) => never} fail
@@ -357,6 +391,8 @@ export function validateConfig(config) {
   }
 
   validateMemory(c.memory, fail);
+  validateContext(c.context, fail);
+  validateMap(c.map, fail);
   validateComponents(c.components, fail);
   validateBridges(c.bridges, fail);
   validatePictures(c.pictures, fail);

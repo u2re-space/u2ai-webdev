@@ -210,6 +210,7 @@ export async function architectStage({
     runId: id = null,
     notify = () => {},
     env = process.env,
+    runContext = null,
 } = {}) {
     if (!client?.responses) throw new Error('Клиент API не передан.');
 
@@ -240,6 +241,8 @@ export async function architectStage({
         maxTurns: config?.stages?.architect?.maxTurns ?? null,
         notify,
         parts: reference.parts,
+        runContext,
+        stage: 'architect',
     });
 
     if (!result.data) {

@@ -26,6 +26,7 @@
  *          partialCorrection
  * @ai.tags roles, agent
  * @ai.hint keep
+ * @changed 2026-11-15 Роли читают сводку контекста прогона и пишут свои ответы в него.
  */
 
 import { parseResponse, textPart } from '../openai/responses.js';
@@ -262,13 +263,17 @@ export function resolveRole(role, config = {}) {
 
 /**
  * The instructions of a role: its prompt, the instructions of the config, the standards of the
- * documentation and the skill packs.
- * @param {{ role: string, config?: object, context?: object, root?: string, env?: object }} request
+ * documentation, the skill packs and the brief of the context of the run.
+ *
+ * The brief tells the role what the run already knows: the stages that are done, the decisions
+ * that were made and the files that were written. A role that knows this does not ask again.
+ * @param {{ role: string, config?: object, context?: object, root?: string, env?: object,
+ *   runContext?: object|null }} request
  * @returns {Promise<string>}
  * @exports
  * @ai.hint io
  */
-export async function buildInstructions({ role, config = {}, context = {}, root = process.cwd(), env = process.env }) {
+export async function buildInstructions({ role, config = {}, context = {}, root = process.cwd(), env = process.env, runContext = null }) {
     const key = String(role ?? '').trim().toLowerCase();
     const definition = ROLES[key];
     if (!definition) throw new Error(`Неизвестная роль: ${role}`);
@@ -296,6 +301,10 @@ export async function buildInstructions({ role, config = {}, context = {}, root 
     });
     const list = buildSkillInstructions(skills);
     if (list) blocks.push(list);
+
+    // The brief of the context of the run: what this run already knows.
+    const brief = typeof runContext?.brief === 'function' ? runContext.brief() : '';
+    if (brief) blocks.push(brief);
 
     return blocks.join('\n\n');
 }
@@ -335,7 +344,8 @@ export function toolCallDetail(args) {
  * answer for every tool call.
  * @param {{ client: object, config?: object, role: string, input?: string, parts?: object[],
  *   context?: object, root?: string, env?: object, toolset?: object, maxTurns?: number,
- *   signal?: AbortSignal|null, notify?: (event: object) => void }} request
+ *   signal?: AbortSignal|null, notify?: (event: object) => void, runContext?: object|null,
+ *   stage?: string|null }} request
  * @returns {Promise<{ role: string, text: string, data: object|null, toolCalls: object[],
  *   turns: number, usage: object|null, model: string|null, stopped: string }>}
  * @exports
@@ -355,14 +365,25 @@ export async function runRole({
     requireFiles = false,
     signal = null,
     notify = () => {},
+    runContext = null,
+    stage = null,
 }) {
     if (!client?.responses) throw new Error('Клиент API не передан.');
     const key = String(role ?? '').trim().toLowerCase();
     const definition = resolveRole(key, config);
     if (!definition) throw new Error(`Неизвестная роль: ${role}`);
 
-    const instructions = await buildInstructions({ role: key, config, context, root, env });
-    const tools = toolset ?? createToolset({ root, config, role: key, env });
+    const instructions = await buildInstructions({ role: key, config, context, root, env, runContext });
+    // The toolset of a role reads through the map of the run and remembers its answers in
+    // the context of the run.
+    const tools = toolset ?? createToolset({
+        root,
+        config,
+        role: key,
+        env,
+        context: runContext,
+        map: runContext?.map ?? null,
+    });
     const specs = tools.specsFor(key, definition.tools);
     const schema = roleSchema(key);
     const schemaName = definition.schema ?? 'response';
@@ -540,6 +561,13 @@ export async function runRole({
     }
 
     notify({ type: 'role.done', role: key, turns, toolCalls: calls.length, stopped });
+
+    // The answer of the role goes into the context of the run: the next role builds on it
+    // instead of asking the model the same thing again.
+    const answerText = String(answer?.text ?? '').trim()
+        || (answer?.data ? JSON.stringify(answer.data).slice(0, 2000) : '');
+    if (answerText) await runContext?.answer?.(answerText, { role: key, stage });
+    if (answer?.error) await runContext?.note?.(String(answer.error), { role: key, stage });
 
     return {
         role: key,
