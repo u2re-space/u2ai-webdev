@@ -460,6 +460,16 @@ export async function setupStage({
         blocks.push(`The skeleton of the project is already written: ${scaffold.written.join(', ')}. Add what is missing: the dependencies, the scripts and the files that the stack needs.`);
     }
 
+    // The files the project needs: the plan names them, and the environment has to be
+    // ready for them. The installer does not do the steps of the plan — the roles of the
+    // plan write the files, and the installer only prepares the ground for them.
+    const wanted = [...new Set((Array.isArray(plan?.steps) ? plan.steps : []).flatMap((step) => step?.files ?? []))]
+        .map((item) => String(item).trim())
+        .filter(Boolean);
+    if (wanted.length) {
+        blocks.push(`The files of the plan: ${wanted.join(', ')}. The environment has to be ready for them: the compiler of the styles, the bundler and the scripts.`);
+    }
+
     let result = await runRole({
         client,
         config,
@@ -467,7 +477,7 @@ export async function setupStage({
         input: blocks.join('\n\n'),
         context: {
             task: String(task ?? ''),
-            step: plan?.steps?.[0] ?? null,
+            step: null,
             brief,
             stack: config?.stack ?? {},
             packageManager: manager,
@@ -488,7 +498,7 @@ export async function setupStage({
             input: `${blocks.join('\n\n')}\n\n${INSTALL_CORRECTION}`,
             context: {
                 task: String(task ?? ''),
-                step: plan?.steps?.[0] ?? null,
+                step: null,
                 brief,
                 stack: config?.stack ?? {},
                 packageManager: manager,

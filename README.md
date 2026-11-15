@@ -233,6 +233,22 @@ report says so. The names of the files that a stylesheet uses are checked withou
 compiler: a stylesheet that `@use`s a file that was never written is broken even when there is
 no `sass` on the machine, and the role is told the name of the missing file.
 
+A partial of Sass is a file whose name starts with an underscore, and a stylesheet names it
+without the underscore (`@use 'variables'` looks for `src/_variables.scss`). A model that
+writes an entry point of four `@use`s and none of the four files leaves the project without
+styles, and the build of Vite falls with "Can't find stylesheet to import". The stage finds
+the missing files on its own, names them with the path they have to be written under, and
+calls the role of the styles again: the role writes the partials or drops the `@use` lines
+that name them. A partial that a later step of the plan writes is not a failure of the
+current step — the file is on the disk when the run comes to that step, and the step says so
+in its report. A partial that nobody writes is a failure of the step, and the report names
+the file that is missing.
+
+The installer does not do the steps of the plan. The stage of the setup gives it the plan
+and the list of the files the plan names — the environment has to be ready for them — but
+not a step to work on: the markup, the code and the styles are written by the roles of the
+steps.
+
 The plan of the planner has to hold the work itself: a plan without steps is a plan of
 intentions ("first I will study the project"), and the stages of the run have nothing to do. The
 planner is asked once more when its answer holds no steps, and the stage fails when the second

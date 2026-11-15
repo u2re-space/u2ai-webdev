@@ -56,6 +56,10 @@ ${stack}
 ${manager}
 
 Rules:
+- The steps of the plan belong to the other roles: the markup, the code and the styles are
+  written by them. You prepare the ground for them — the dependencies, the scripts, the
+  config of the bundler and the proof that the project starts. The files that the plan names
+  are not yours to write.
 - Read the project before you change it: \`package.json\`, the lock file and the config of the
   bundler decide what the project already has.
 - Add the dependency that the plan needs and nothing else. A library that the plan does not

@@ -15,7 +15,7 @@
  * @usedBy stages/markup, stages/coding, stages/styling
  * @exports STEPS_DIR, LOOKS_AT_DESIGN, stepsForRole, applyFiles, filesByTool, stepReportPath,
  *          writeStepReport, readStepReport, resumableStep, roleWorkOnDisk, laterSteps,
- *          missingFiles, runStepStage
+ *          missingFiles, writtenLater, runStepStage
  * @ai.tags stages, steps, files
  * @ai.hint io
  * @ai.hint legacy-0.2
@@ -24,12 +24,13 @@
 
 import path from 'node:path';
 import { readFile, stat } from 'node:fs/promises';
-import { runRole, roleReason, syntaxCorrection } from '../roles/index.js';
+import { runRole, roleReason, syntaxCorrection, partialCorrection } from '../roles/index.js';
 import { writeTextFile } from '../agent/fs-tools.js';
 import { resolveInside } from '../agent/paths.js';
-import { checkFiles } from '../agent/syntax.js';
+import { checkFiles, missingPartials } from '../agent/syntax.js';
 import { inputContext } from '../inputs/index.js';
 import { readReferences } from '../inputs/references.js';
+import { listStyleFiles } from './build.js';
 import { runId, runFile, writeJsonFile, readJsonFile } from './workspace.js';
 
 /** The directory inside the run that holds the reports of the steps. */
@@ -382,6 +383,56 @@ export async function missingFiles(root, files = []) {
 }
 
 /**
+ * The stylesheets that the role has to answer for.
+ *
+ * The role that owns the styles answers for all of them: the entry point of the styles may
+ * be the file of an earlier stage, and a `@use` of a file that is not on the disk breaks the
+ * build of the project whatever the step of the role touches. The other roles answer only
+ * for the stylesheets of their own step.
+ * @param {string} root
+ * @param {string} role
+ * @param {string[]} files the files of the step
+ * @returns {Promise<string[]>}
+ * @ai.hint io
+ */
+async function styleScope(root, role, files = []) {
+    const styles = await listStyleFiles(root);
+    const owner = role === 'styler' || role === 'editor';
+    if (owner) return styles;
+    const own = new Set((Array.isArray(files) ? files : []).map((item) => String(item)));
+    return styles.filter((file) => own.has(file));
+}
+
+/**
+ * The file of a partial that a later step of the plan writes.
+ *
+ * The steps of the plan go one after another, and the styles of one step may be the entry
+ * point of the next one: a partial that a later step writes is not a failure of this step.
+ * @param {object} plan
+ * @param {object} step
+ * @param {{ expected?: string, partial?: string }} item
+ * @returns {boolean}
+ * @ai.hint pure
+ */
+export function writtenLater(plan, step, item = {}) {
+    const expected = String(item?.expected ?? item?.partial ?? '').trim();
+    if (!expected) return false;
+    const name = path.posix.basename(expected).replace(/^_/, '').replace(/\.(scss|sass)$/i, '');
+    const dir = path.posix.dirname(expected);
+    for (const later of laterSteps(plan, step)) {
+        for (const file of Array.isArray(later.files) ? later.files : []) {
+            const rel = String(file ?? '').trim();
+            if (!rel) continue;
+            const base = path.posix.basename(rel).replace(/^_/, '').replace(/\.(scss|sass)$/i, '');
+            if (base !== name) continue;
+            const laterDir = path.posix.dirname(rel);
+            if (laterDir === dir || laterDir === '.' || dir === '.') return true;
+        }
+    }
+    return false;
+}
+
+/**
  * The report of a step that may be taken as done.
  *
  * A step is done when its report says so and its files are still on the disk. A file that
@@ -603,15 +654,24 @@ export async function runStepStage({
             ...(apply ? applied.written : files.map((file) => String(file?.path ?? '').trim())),
         ])].filter(Boolean);
         let syntax = await checkFiles(root, checkedFiles, { env });
+        // The stylesheets that use a file that was never written. The entry point of the
+        // styles may be the file of an earlier stage, so the whole project is looked at: a
+        // `@use` of a file that is not there breaks the build of the user, and the page
+        // stays without styles.
+        const scope = await styleScope(root, role, checkedFiles);
+        let partials = await missingPartials(root, scope);
         let answer = result;
         let repair = null;
-        if (syntax.errors.length) {
+        if (syntax.errors.length || partials.length) {
             // The role is told what the compiler said and has to fix the files.
+            const correction = partials.length
+                ? partialCorrection(partials, syntax.errors)
+                : syntaxCorrection(syntax.errors);
             repair = await runRole({
                 client,
                 config,
                 role,
-                input: `${blocks.join('\n\n')}\n\n${syntaxCorrection(syntax.errors)}`,
+                input: `${blocks.join('\n\n')}\n\n${correction}`,
                 context: {
                     task: String(task ?? ''),
                     step,
@@ -647,16 +707,34 @@ export async function runStepStage({
                 };
             }
             syntax = await checkFiles(root, checkedFiles, { env });
+            partials = await missingPartials(root, scope);
         }
+        // A partial that a later step of the plan writes is not a failure of this step: the
+        // file is on the disk when the run comes to that step.
+        const planned = partials.filter((item) => writtenLater(plan, step, item));
+        const forgotten = partials.filter((item) => !writtenLater(plan, step, item));
+        for (const item of planned) {
+            warnings.push(`Шаг ${step.id}: файл стилей ${item.partial} напишет следующий шаг.`);
+        }
+        for (const item of forgotten) {
+            warnings.push(`Шаг ${step.id}: не хватает файла стилей ${item.partial} — ${item.file} использует '${item.ref}'.`);
+        }
+        // The errors of the check that name a file of a later step are not errors of this step.
+        const later = new Set(planned.flatMap((item) => [item.expected, item.partial]));
+        const errors = syntax.errors.filter((error) => {
+            const message = String(error?.message ?? '');
+            if (!/Файл стилей не найден/.test(message)) return true;
+            return ![...later].some((name) => name && message.includes(name));
+        });
         for (const note of syntax.notes) warnings.push(`Шаг ${step.id}: ${note}`);
-        for (const error of syntax.errors) {
+        for (const error of errors) {
             warnings.push(`Шаг ${step.id}: ошибка синтаксиса в ${error.file}: ${error.message}`);
         }
 
         // The step is done when its files are on the disk: an answer without them is a
         // description of the work, not the work.
         const missing = await missingFiles(root, step.files ?? []);
-        const ok = Boolean(answer.data) && !missing.length && !syntax.errors.length && !applied.failed.length;
+        const ok = Boolean(answer.data) && !missing.length && !errors.length && !applied.failed.length && !forgotten.length;
         if (missing.length) {
             warnings.push(`Шаг ${step.id}: файлы не написаны: ${missing.join(', ')}.`);
         }
@@ -684,7 +762,12 @@ export async function runStepStage({
                 failed: applied.failed,
                 own: applied.own,
             },
-            syntax: { checked: syntax.checked, errors: syntax.errors },
+            syntax: { checked: syntax.checked, errors },
+            partials: {
+                missing: partials.map((item) => `${item.file} -> ${item.partial}`),
+                planned: planned.map((item) => `${item.file} -> ${item.partial}`),
+                forgotten: forgotten.map((item) => `${item.file} -> ${item.partial}`),
+            },
             turns: result.turns + (repair?.turns ?? 0),
             stopped: answer.stopped,
         };

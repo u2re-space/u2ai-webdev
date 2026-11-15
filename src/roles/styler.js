@@ -80,8 +80,16 @@ ${INPUTS_IN_CONTEXT}
 - Every animation has a branch for \`prefers-reduced-motion: reduce\`.
 - The contrast of the text is 4.5:1, the contrast of the border of a control is 3:1. When the
   design cannot pass the threshold, say so in the report instead of hiding it.
-- One file per layer: the tokens, the base, the layout, the components, the utilities. The
-  order of the imports follows that order.
+- The styles of the step live in the files the step names. When the step names one file, write
+  one file: the rules of the layers go into it, one after another, under the comments that
+  name them — the tokens, the base, the layout, the components, the utilities.
+- Split the styles into partials only when the step names the partials as well. The order of
+  the imports follows the order of the layers.
+- A \`@use\` names a file that has to be on the disk. Before you write a \`@use\`, make sure
+  that the file is there (look for it with \`list_files\`): a partial of Sass is a file whose
+  name starts with an underscore (\`src/_variables.scss\`), and the \`@use\` names it without
+  the underscore (\`@use 'variables'\`). A \`@use\` of a file that was never written breaks
+  the build of the project — the page stays without styles.
 - Every file that the entry point \`@use\`s must be on the disk: write the partial in this
   step, or keep the rules in the entry file. A \`@use\` of a file that was never written
   breaks the build of the project — the page stays without styles.

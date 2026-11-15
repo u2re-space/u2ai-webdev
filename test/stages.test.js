@@ -553,6 +553,50 @@ test('the stage of the setup applies the environment and writes the file', async
     assert.equal(manifest.devDependencies.sass, '^1.80.0');
 });
 
+test('the installer is not given the step of the plan', async () => {
+    const root = await makeProject();
+    let seen = null;
+    const client = fakeClient([(body) => {
+        seen = body;
+        return schemaAnswer('setup', {
+            summary: 'The environment.',
+            packageManager: 'npm',
+            dependencies: [],
+            scripts: [],
+            files: [],
+            commands: [],
+            notes: '',
+        });
+    }]);
+
+    const result = await setupStage({
+        client,
+        config: { output: { work: './.tmp' } },
+        root,
+        task: 'Make a landing.',
+        plan: {
+            summary: 'A landing.',
+            steps: [{
+                id: 'markup',
+                title: 'Bring the HTML to the three rails',
+                role: 'markup',
+                dependsOn: [],
+                files: ['index.html'],
+                criteria: ['three rails'],
+            }],
+        },
+        architecture: { summary: 'x', stack: {}, modules: [], tokens: [], notes: '' },
+        runId: 'run-1',
+    });
+
+    assert.equal(result.ok, true);
+    const text = seen.input[0].content.map((part) => part.text ?? '').join('\n');
+    // The step of the plan belongs to the role of the step: the installer prepares the
+    // environment and does not write the files of the plan.
+    assert.doesNotMatch(text, /The step to do/);
+    assert.match(text, /The files of the plan: index\.html/);
+});
+
 test('the directory of a run is under the working directory of the config', () => {
     const dir = runDirectory('/projects/app', { output: { work: './.tmp' } }, 'run-1');
     assert.match(dir, /projects[\\/]app[\\/]\.tmp[\\/]run-1$/);

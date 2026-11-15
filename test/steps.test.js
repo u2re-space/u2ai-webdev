@@ -616,6 +616,126 @@ test('the file the role wrote beside the files of the step is checked too', asyn
     assert.equal(result.steps[0].syntax.errors.length, 1);
 });
 
+test('the stylesheet that uses a file that was never written is told to the styler', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-steps-partial-'));
+    let asked = null;
+    const client = fakeClient([
+        // The first answer writes an entry point that uses four partials and writes none.
+        schemaAnswer('style', {
+            summary: 'The styles.',
+            files: [{
+                path: 'src/styles.scss',
+                content: "@use 'variables';\n@use 'base';\n",
+                language: 'scss',
+            }],
+            tokens: [],
+            notes: '',
+        }),
+        // The second answer is the repair: the partial is written.
+        (body) => {
+            asked = body;
+            return schemaAnswer('style', {
+                summary: 'The styles and the partial.',
+                files: [
+                    { path: 'src/styles.scss', content: "@use 'variables';\n@use 'base';\n", language: 'scss' },
+                    { path: 'src/_variables.scss', content: ':root { --a: 1; }\n', language: 'scss' },
+                    { path: 'src/_base.scss', content: 'body { margin: 0; }\n', language: 'scss' },
+                ],
+                tokens: [],
+                notes: '',
+            });
+        },
+    ]);
+
+    const result = await runStepStage({
+        client,
+        config: { output: { work: './.tmp' }, stages: { styler: { maxTurns: 4 } } },
+        root,
+        task: 'Make a landing.',
+        role: 'styler',
+        plan: {
+            summary: 'A landing.',
+            steps: [{ id: 'style-1', title: 'Styles', role: 'styler', dependsOn: [], files: ['src/styles.scss'], criteria: ['looks'] }],
+        },
+        runId: 'run-1',
+    });
+
+    assert.equal(result.ok, true);
+    // The partials are on the disk: the page has styles.
+    assert.match(await readFile(path.join(root, 'src', '_variables.scss'), 'utf8'), /--a: 1/);
+    assert.match(await readFile(path.join(root, 'src', '_base.scss'), 'utf8'), /margin: 0/);
+    // The role was told what is missing and where the file has to be written.
+    const text = asked.input[0].content.map((part) => part.text ?? '').join('\n');
+    assert.match(text, /src\/_variables\.scss/);
+    assert.match(text, /src\/_base\.scss/);
+    assert.deepEqual(result.steps[0].partials.forgotten, []);
+});
+
+test('the partial that stays missing is an error of the step', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-steps-partial2-'));
+    const broken = schemaAnswer('style', {
+        summary: 'The styles.',
+        files: [{ path: 'src/styles.scss', content: "@use 'variables';\n", language: 'scss' }],
+        tokens: [],
+        notes: '',
+    });
+    const client = fakeClient([broken, broken]);
+
+    const result = await runStepStage({
+        client,
+        config: { output: { work: './.tmp' }, stages: { styler: { maxTurns: 4 } } },
+        root,
+        task: 'Make a landing.',
+        role: 'styler',
+        plan: {
+            summary: 'A landing.',
+            steps: [{ id: 'style-1', title: 'Styles', role: 'styler', dependsOn: [], files: ['src/styles.scss'], criteria: ['looks'] }],
+        },
+        runId: 'run-1',
+    });
+
+    assert.equal(result.ok, false);
+    assert.ok(result.warnings.some((item) => /не хватает файла стилей src\/_variables\.scss/.test(item)));
+    assert.deepEqual(result.steps[0].partials.forgotten, ['src/styles.scss -> src/_variables.scss']);
+});
+
+test('the partial that a later step of the plan writes is not an error of this step', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-steps-partial3-'));
+    const answer = schemaAnswer('style', {
+        summary: 'The styles.',
+        files: [{ path: 'src/styles.scss', content: "@use 'hero';\n", language: 'scss' }],
+        tokens: [],
+        notes: '',
+    });
+    const hero = schemaAnswer('style', {
+        summary: 'The hero.',
+        files: [{ path: 'src/hero.scss', content: '.hero { display: grid; }\n', language: 'scss' }],
+        tokens: [],
+        notes: '',
+    });
+    const client = fakeClient([answer, answer, hero]);
+
+    const result = await runStepStage({
+        client,
+        config: { output: { work: './.tmp' }, stages: { styler: { maxTurns: 4 } } },
+        root,
+        task: 'Make a landing.',
+        role: 'styler',
+        plan: {
+            summary: 'A landing.',
+            steps: [
+                { id: 'style-1', title: 'Rails', role: 'styler', dependsOn: [], files: ['src/styles.scss'], criteria: ['looks'] },
+                { id: 'style-2', title: 'Hero', role: 'styler', dependsOn: ['style-1'], files: ['src/hero.scss'], criteria: ['looks'] },
+            ],
+        },
+        runId: 'run-1',
+    });
+
+    assert.equal(result.ok, true);
+    assert.ok(result.warnings.some((item) => /напишет следующий шаг/.test(item)));
+    assert.deepEqual(result.steps[0].partials.forgotten, []);
+});
+
 test('the roles that look at the design get the picture of the reference', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-steps-ref-'));
     await writeFile(path.join(root, 'landing.png'), 'png');

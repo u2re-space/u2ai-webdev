@@ -22,7 +22,8 @@
  * @depends openai/responses, agent/schemas, agent/skills, agent/docs, agent/tools, agent/pace
  * @usedBy stages/index, cli
  * @exports ROLES, ROLE_NAMES, resolveRole, buildInstructions, runRole, roleSchema, roleReason,
- *          SCHEMA_CORRECTION, FINAL_ANSWER, WORK_CORRECTION, WORK_ORDER, syntaxCorrection
+ *          SCHEMA_CORRECTION, FINAL_ANSWER, WORK_CORRECTION, WORK_ORDER, syntaxCorrection,
+ *          partialCorrection
  * @ai.tags roles, agent
  * @ai.hint keep
  */
@@ -131,6 +132,35 @@ export function syntaxCorrection(errors = []) {
         .map((item) => `- ${item?.file ?? 'файл'}: ${item?.message ?? 'ошибка'}`)
         .join('\n');
     return `The files of the step are on the disk, but they do not compile. Fix them now with the tools: read the file, repair the broken line, write the file again. The compiler said:\n${list}\n\nA file that is written as text with "\\n" inside a string, or with a backslash at the end of a line, is broken — write the real line breaks and the real escapes. Write the repaired file under the same path as the broken one: a copy with another name leaves the broken file on the disk. Do not answer until the files are fixed.`;
+}
+
+/**
+ * The correction of a role whose styles use files that were never written.
+ *
+ * A stylesheet that `@use`s a file that is not on the disk breaks the build of the project:
+ * the page stays without styles. The names of the missing files are given with the path they
+ * have to be written under — a partial of Sass is a file whose name starts with an
+ * underscore — and the role has to write them or to drop the `@use` that names them.
+ * @param {{ file: string, ref: string, expected: string, partial: string }[]} missing
+ * @param {Array<{ file: string, message: string }>} [errors] the other errors of the check
+ * @returns {string}
+ * @exports
+ * @ai.hint pure
+ */
+export function partialCorrection(missing = [], errors = []) {
+    const list = Array.isArray(missing) ? missing : [];
+    const lines = list.map((item) => {
+        const file = String(item?.file ?? 'файл');
+        const ref = String(item?.ref ?? '').trim();
+        const partial = String(item?.partial ?? item?.expected ?? '').trim();
+        return `- ${file}: @use '${ref}' — the file ${partial} is not on the disk`;
+    }).join('\n');
+    const others = (Array.isArray(errors) ? errors : [])
+        .filter((item) => !/Файл стилей не найден/.test(String(item?.message ?? '')))
+        .map((item) => `- ${item?.file ?? 'файл'}: ${item?.message ?? 'ошибка'}`)
+        .join('\n');
+    const rest = others ? `\n\nThe compiler said:\n${others}\n` : '';
+    return `The styles of the step are on the disk, but a stylesheet uses files that were never written:\n${lines}\n\nWrite every one of these files now with the tool \`write_file\`: a partial of Sass is a file whose name starts with an underscore (${list[0]?.partial ?? 'src/_name.scss'}), and the stylesheet looks for it under that name. Put the rules of that layer into the file: the tokens and the custom properties into \`variables\`, the reset and the base into \`base\`, the rest into the layer they belong to. If a layer does not belong to this step, remove its \`@use\` line from the stylesheet that names it instead of writing an empty file.${rest}\nDo not answer until the files are on the disk.`;
 }
 
 /** The tools that write into the project. */

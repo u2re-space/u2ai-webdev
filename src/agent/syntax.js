@@ -19,7 +19,8 @@
  * @usedBy stages/step, stages/build
  * @exports SCRIPT_EXTENSIONS, STYLE_EXTENSIONS, CHECKED_EXTENSIONS, checkableFile,
  *          findSass, firstError, styleReferences, styleImportCandidates,
- *          missingStyleReferences, checkScript, checkStyle, checkFile, checkFiles
+ *          missingStyleReferences, missingPartials, partialName, checkScript, checkStyle,
+ *          checkFile, checkFiles
  * @ai.tags tools, agent, syntax
  * @ai.hint io
  */
@@ -246,6 +247,58 @@ export async function missingStyleReferences(root, rel, { content = null } = {})
         }
         if (!found && await isPackageReference(root, ref)) continue;
         if (!found) out.push({ ref, expected: candidates[0] ?? ref });
+    }
+    return out;
+}
+
+/**
+ * The name of a partial of Sass: the file with the underscore.
+ *
+ * A stylesheet names a partial without the underscore (`@use 'variables'`), and Sass looks
+ * for the file with it (`_variables.scss`). The name of the file on the disk is the one the
+ * role has to write.
+ * @param {string} expected the path as the stylesheet names it
+ * @returns {string}
+ * @exports
+ * @ai.hint pure
+ */
+export function partialName(expected) {
+    const name = String(expected ?? '').trim().replace(/\\/g, '/');
+    if (!name) return '';
+    const dir = path.posix.dirname(name);
+    const base = path.posix.basename(name);
+    const ext = path.posix.extname(base) || '.scss';
+    const stem = base.slice(0, -ext.length).replace(/^_/, '');
+    const file = `_${stem}${ext}`;
+    return dir === '.' ? file : path.posix.join(dir, file);
+}
+
+/**
+ * The stylesheets that use a file that is not on the disk.
+ *
+ * A model writes an entry point that `@use`s five files and writes none of them: the page
+ * has no styles, and the project of Vite breaks with "Can't find stylesheet to import". The
+ * names of the missing files are found here, without the compiler, and every one of them is
+ * named twice: as the stylesheet names it and as the file has to be written.
+ * @param {string} root
+ * @param {string[]} files the paths of the stylesheets
+ * @returns {Promise<{ file: string, ref: string, expected: string, partial: string }[]>}
+ * @exports
+ * @ai.hint io
+ */
+export async function missingPartials(root, files = []) {
+    const out = [];
+    for (const rel of Array.isArray(files) ? files : []) {
+        const name = String(rel ?? '').trim();
+        if (!name) continue;
+        for (const item of await missingStyleReferences(root, name)) {
+            out.push({
+                file: name,
+                ref: item.ref,
+                expected: item.expected,
+                partial: partialName(item.expected),
+            });
+        }
     }
     return out;
 }

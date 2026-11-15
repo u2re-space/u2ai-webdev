@@ -12,7 +12,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { chmod, mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 
-import { checkFile, checkFiles, checkableFile, findSass, styleImportCandidates, missingStyleReferences } from '../src/agent/syntax.js';
+import { checkFile, checkFiles, checkableFile, findSass, styleImportCandidates, missingStyleReferences, missingPartials, partialName } from '../src/agent/syntax.js';
 
 /**
  * A compiler of the stylesheets that always refuses the file: the test does not need sass.
@@ -166,4 +166,34 @@ test('the styles of a package of the project are not a missing file', async () =
 
     assert.deepEqual(missing, []);
     assert.equal(result.ok, true);
+});
+
+test('the missing partials are named with the path they have to be written under', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-syntax-'));
+    await mkdir(path.join(root, 'src'), { recursive: true });
+    await writeFile(path.join(root, 'src', 'styles.scss'), "@use 'variables';\n@use 'base';\n", 'utf8');
+
+    const missing = await missingPartials(root, ['src/styles.scss']);
+
+    assert.deepEqual(missing.map((item) => item.ref), ['variables', 'base']);
+    assert.deepEqual(missing.map((item) => item.partial), ['src/_variables.scss', 'src/_base.scss']);
+    assert.equal(missing[0].file, 'src/styles.scss');
+});
+
+test('the name of a partial is the name with the underscore', () => {
+    assert.equal(partialName('src/variables.scss'), 'src/_variables.scss');
+    assert.equal(partialName('src/_variables.scss'), 'src/_variables.scss');
+    assert.equal(partialName('variables.scss'), '_variables.scss');
+    assert.equal(partialName(''), '');
+});
+
+test('the partials that are on the disk are not missing', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-syntax-'));
+    await mkdir(path.join(root, 'src'), { recursive: true });
+    await writeFile(path.join(root, 'src', 'styles.scss'), "@use 'variables';\n", 'utf8');
+    await writeFile(path.join(root, 'src', '_variables.scss'), ':root { --a: 1; }\n', 'utf8');
+
+    const missing = await missingPartials(root, ['src/styles.scss']);
+
+    assert.deepEqual(missing, []);
 });

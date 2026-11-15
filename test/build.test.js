@@ -385,6 +385,7 @@ test('the style that a stylesheet uses and that is not there is named', async ()
     });
 
     assert.deepEqual(missing.map((item) => item.ref), ['tokens']);
+    assert.deepEqual(missing.map((item) => item.partial), ['scss/_tokens.scss']);
     assert.equal(result.ok, false);
     assert.match(result.warnings.join(' '), /Стиль не найден: scss\/main\.scss → tokens/);
 });

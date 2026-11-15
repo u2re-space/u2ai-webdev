@@ -36,7 +36,7 @@ import os from 'node:os';
 import { mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 
 import { runProgram } from '../agent/programs.js';
-import { findSass, firstError, styleReferences, missingStyleReferences } from '../agent/syntax.js';
+import { findSass, firstError, styleReferences, missingStyleReferences, partialName } from '../agent/syntax.js';
 import { runId, runFile, writeJsonFile, readJsonFile } from './workspace.js';
 
 export { styleReferences };
@@ -387,7 +387,9 @@ export async function missingReferences(root, files = [], contents = new Map()) 
         const content = contents?.get?.(file) ?? await readFile(path.join(root, file), 'utf8').catch(() => null);
         if (content === null) continue;
         const missing = await missingStyleReferences(root, file, { content });
-        for (const item of missing) out.push({ file, ref: item.ref, expected: item.expected });
+        for (const item of missing) {
+            out.push({ file, ref: item.ref, expected: item.expected, partial: partialName(item.expected) });
+        }
     }
     return out;
 }
@@ -832,7 +834,7 @@ export async function buildStage({
     // the build of the user breaks with "Can't find stylesheet to import".
     const missing = await missingReferences(root, files, contents);
     for (const item of missing) {
-        warnings.push(`Стиль не найден: ${item.file} → ${item.ref} (${item.expected}).`);
+        warnings.push(`Стиль не найден: ${item.file} → ${item.ref} (${item.partial ?? item.expected}) — напишите этот файл или уберите @use.`);
     }
 
     // The markup and the script of the project.
