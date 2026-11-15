@@ -23,19 +23,24 @@ import { openRegistry } from '../src/registry.js';
 
 /**
  * A client that answers with the ready answers, one per call.
+ *
+ * The requests are kept: a test may look at what the stage asked for.
  * @param {object[]} answers
  * @returns {object}
  * @ai.hint pure
  */
 function fakeClient(answers = []) {
     let index = 0;
+    const requests = [];
     return {
+        requests,
         responses: {
             /**
              * @param {object} body
              * @returns {Promise<object>}
              */
             async create(body) {
+                requests.push(body);
                 const answer = answers[index++];
                 if (typeof answer === 'function') return await answer(body);
                 return answer ?? { output: [], output_text: '' };
@@ -203,6 +208,41 @@ test('the stage of the plan asks again when the plan has no steps', async () => 
     assert.equal(asked.length, 0);
 });
 
+test('the stage of the plan asks again in the tool channel when the plan has no steps', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-plan6-'));
+    const client = fakeClient([
+        // The first answer is the skeleton of the schema: a model that is pinned to a
+        // JSON answer gives it without thinking.
+        schemaAnswer('plan', { summary: '...', steps: [], risks: [], questions: [] }),
+        // The second one is the work itself.
+        schemaAnswer('plan', {
+            summary: 'A landing page.',
+            steps: [{ id: 'a', title: 'Markup', role: 'markup', dependsOn: [], files: ['index.html'], criteria: ['opens'] }],
+            risks: [],
+            questions: [],
+        }),
+    ]);
+
+    const result = await planStage({
+        client,
+        config: { output: { work: './.tmp' } },
+        root,
+        task: 'Make a landing.',
+        runId: 'run-1',
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.plan.steps.length, 1);
+    // The first answer keeps the channel of the model, the second one moves the schema
+    // into the tool channel: the answer is the call of the schema.
+    assert.equal(client.requests[0].schemaChannel, null);
+    assert.equal(client.requests[1].schemaChannel, 'tool');
+    // The correction names the tools: the planner has to look before it decides.
+    const correction = JSON.stringify(client.requests[1].input);
+    assert.match(correction, /call_ai_measure/);
+    assert.match(correction, /`plan`/);
+});
+
 test('the stage of the plan fails when there are no steps at all', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-plan5-'));
     const empty = schemaAnswer('plan', { summary: 'Сначала изучу проект.', steps: [], risks: [], questions: [] });
@@ -215,6 +255,8 @@ test('the stage of the plan fails when there are no steps at all', async () => {
     });
     assert.equal(result.ok, false);
     assert.match(result.warnings.join(' '), /ни одного шага/);
+    // The failure says what to do: a dead run without a way out is no help.
+    assert.match(result.warnings.join(' '), /ai-webdev plan/);
 });
 
 test('the collected inputs are written to the run and read back', async () => {

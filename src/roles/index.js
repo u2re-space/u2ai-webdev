@@ -345,7 +345,7 @@ export function toolCallDetail(args) {
  * @param {{ client: object, config?: object, role: string, input?: string, parts?: object[],
  *   context?: object, root?: string, env?: object, toolset?: object, maxTurns?: number,
  *   signal?: AbortSignal|null, notify?: (event: object) => void, runContext?: object|null,
- *   stage?: string|null }} request
+ *   stage?: string|null, schemaChannel?: string|null }} request
  * @returns {Promise<{ role: string, text: string, data: object|null, toolCalls: object[],
  *   turns: number, usage: object|null, model: string|null, stopped: string }>}
  * @exports
@@ -367,6 +367,7 @@ export async function runRole({
     notify = () => {},
     runContext = null,
     stage = null,
+    schemaChannel: forcedChannel = null,
 }) {
     if (!client?.responses) throw new Error('Клиент API не передан.');
     const key = String(role ?? '').trim().toLowerCase();
@@ -400,9 +401,10 @@ export async function runRole({
     let fallback = null;
     // The channel of the schema: where the answer of the role travels. A model that is
     // pinned to a JSON answer never calls a tool: it describes the work instead of doing it.
-    // The mode comes from the profile of the model, and the role moves the schema into the
-    // tool channel when it has to write and only describes the work.
-    let schemaChannel = null;
+    // The mode comes from the profile of the model, the role moves the schema into the
+    // tool channel when it has to write and only describes the work, and a stage may pin
+    // the channel itself when the answer of the role depends on the tools.
+    let schemaChannel = forcedChannel ?? null;
     let withSchema = true;
     // The files the step names: the role has to write them.
     const wantedFiles = Array.isArray(context?.step?.files)

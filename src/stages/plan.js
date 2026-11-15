@@ -33,12 +33,22 @@ export const PLAN_FILE = 'plan.json';
  * A plan without steps is a plan of intentions ("first I will study the project"), and the
  * stages of the run have nothing to do. The model is asked once more, and the answer has to
  * be the work itself.
+ *
+ * The correction names the tools on purpose: the answer of the planner is the plan of the
+ * work, and the work of the planner is to look at the project and at the picture of the
+ * reference before it decides what the steps are.
  */
 export const PLAN_CORRECTION = [
     'The previous answer was not a plan: its list of steps was empty.',
-    'Answer with the plan itself: at least two concrete steps, each with an id, a title, the role',
-    'that does it, the files it touches and the criteria that can be checked without a human.',
-    'Do not describe what you are going to do later — the steps are the work.',
+    'Work first, answer second: if the task names a reference picture, measure it with the',
+    'tool `call_ai_measure` (`["measure", "landing.png"]` for the sizes and the positions,',
+    '`["design", "landing.png"]` for the look) and read the files of the project with',
+    '`list_files` and `read_file`.',
+    'Then submit the plan with the tool `plan`: at least two concrete steps, each with an id,',
+    'a title, the role that does it, the files it touches and the criteria that can be checked',
+    'without a human.',
+    'Do not answer in prose and do not describe what you are going to do later — the steps are',
+    'the work.',
 ].join('\n');
 
 /**
@@ -286,17 +296,22 @@ export async function planStage({
     let result = await runRole(request);
     let plan = result.data ? normalizePlan(result.data) : null;
 
-    // A plan without steps is a plan of intentions. The planner is asked once more, and the
-    // second answer has to hold the work itself.
-    if (plan && !plan.steps.length) {
-        const retry = await runRole({ ...request, input: `${prompt}\n\n${PLAN_CORRECTION}` });
-        if (retry.data) {
-            const second = normalizePlan(retry.data);
-            if (second.steps.length) {
-                second.warnings.push('Планировщик вернул пустой план и был спрошен ещё раз.');
-                plan = second;
-                result = retry;
-            }
+    // A plan without steps is a plan of intentions, and a plan without data is no plan at
+    // all. The planner is asked once more — and this time the schema travels in the tool
+    // channel: the answer is the call of the schema, and the model may work with the tools
+    // before it answers. A model that is pinned to a JSON answer describes the work
+    // instead of doing it, and the plan of such a model is the skeleton of the schema.
+    if (!plan?.steps?.length) {
+        const retry = await runRole({
+            ...request,
+            input: `${prompt}\n\n${PLAN_CORRECTION}`,
+            schemaChannel: 'tool',
+        });
+        const second = retry.data ? normalizePlan(retry.data) : null;
+        if (second?.steps?.length) {
+            second.warnings.push('Планировщик вернул пустой план и был спрошен ещё раз.');
+            plan = second;
+            result = retry;
         }
     }
 
@@ -321,7 +336,10 @@ export async function planStage({
             plan: null,
             file: null,
             text: result.text ?? '',
-            warnings: ['Планировщик не вернул ни одного шага.'],
+            warnings: [
+                'Планировщик не вернул ни одного шага: план без шагов не запускает остальные стадии.',
+                'Проверьте модель в конфиге (`models.<id>.schemaChannel`) или посмотрите план отдельно: `ai-webdev plan <задача>`.',
+            ],
             turns: result.turns,
             usage: result.usage,
             runId: run,

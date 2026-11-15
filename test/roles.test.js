@@ -327,6 +327,49 @@ test('a model whose profile leaves the format free answers with its tools', asyn
     }
 });
 
+test('a stage may pin the channel of the schema of a role', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-loop-pin-'));
+    const home = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-home-'));
+    const env = { HOME: home, USERPROFILE: home };
+
+    const api = await mockApi([
+        schemaAnswer('plan', {
+            summary: 'A landing page.',
+            steps: [{ id: 'a', title: 'Markup', role: 'markup', dependsOn: [], files: ['index.html'], criteria: ['opens'] }],
+            risks: [],
+            questions: [],
+        }),
+    ]);
+
+    try {
+        const config = structuredClone(defaults);
+        // The profile of the model pins the answer to a JSON text, and the stage asks for
+        // the tool channel anyway.
+        config.model = 'minimax/minimax-m3.1-flash';
+        config.backends = [{ baseURL: api.url, apiKey: 'test-key' }];
+        config.reasoning.effort = 'low';
+        const client = await createClient({ config, env });
+
+        const answer = await runRole({
+            client,
+            config,
+            role: 'planner',
+            input: 'Plan the work.',
+            root,
+            env,
+            schemaChannel: 'tool',
+        });
+
+        assert.equal(answer.data.steps.length, 1);
+        // The request does not pin the answer to the schema: the tools stay reachable for
+        // the model, and the schema travels as a tool of its own.
+        assert.equal(api.requests[0].text?.format, undefined);
+        assert.ok(api.requests[0].tools.some((tool) => tool.name === 'plan'));
+    } finally {
+        api.close();
+    }
+});
+
 test('the schema of a role comes from the catalogue', () => {
     assert.ok(roleSchema('planner'));
     assert.equal(roleSchema('planner').additionalProperties, false);

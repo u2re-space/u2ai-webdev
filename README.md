@@ -262,7 +262,10 @@ steps.
 The plan of the planner has to hold the work itself: a plan without steps is a plan of
 intentions ("first I will study the project"), and the stages of the run have nothing to do. The
 planner is asked once more when its answer holds no steps, and the stage fails when the second
-answer holds none either.
+answer holds none either. The second question goes to the tool channel: the model works with
+the tools of the role — it measures the picture of the reference and reads the project — and
+submits the plan as a call of the `plan` tool. A model that is pinned to a JSON answer
+describes the work instead of doing it, and its plan is the skeleton of the schema.
 
 The review does not only report: it repairs. The reviewer names the file, the defect and the
 change that is asked for, and the role that owns that file — the role of the step of the plan
@@ -433,6 +436,12 @@ model that is pinned to a JSON answer never calls a tool: it describes the work 
 doing it. `auto` is the channel of a model that calls its tools well, `format` is the channel
 of a model that needs the pin. The role moves the schema into the tool channel by itself when
 the role has to write and only describes the work.
+
+The stage of the plan does the same when the planner answers with a plan without steps: the
+planner is asked again with the schema in the tool channel, so the model may measure the
+picture of the reference and read the project before it decides what the steps are. A plan
+without steps is an error with an action, not a dead run: the report names the model of the
+config and the `ai-webdev plan <task>` command, which shows the plan on its own.
 
 The sections of the file:
 
