@@ -157,8 +157,8 @@ test('the effort of a role comes from the profile of the stages', () => {
     config.reasoning.effort = 'xhigh';
     // The markup and the styles carry the look of the reference: they get the deepest
     // reasoning; the scripts and the mechanical work get the cheapest one.
-    assert.equal(resolveRole('markup', config).effort, 'xhigh');
-    assert.equal(resolveRole('styler', config).effort, 'xhigh');
+    assert.equal(resolveRole('markup', config).effort, 'high');
+    assert.equal(resolveRole('styler', config).effort, 'high');
     assert.equal(resolveRole('coder', config).effort, 'medium');
     assert.equal(resolveRole('planner', config).effort, 'medium');
     assert.equal(resolveRole('architect', config).effort, 'medium');

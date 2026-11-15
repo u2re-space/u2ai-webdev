@@ -24,8 +24,8 @@ export const STAGE_EFFORT = Object.freeze({
     architect: 'medium',
     director: 'medium',
     coder: 'medium',
-    markup: 'xhigh',
-    styler: 'xhigh',
+    markup: 'high',
+    styler: 'high',
     iconifier: 'medium',
     installer: 'low',
     editor: 'medium',
@@ -100,7 +100,7 @@ export const defaults = {
      * The ceiling of the reasoning effort of the run. A stage asks for the effort it
      * needs (`reasoning.stageEffort`), but never works above this ceiling.
      */
-    effort: 'xhigh',
+    effort: 'high',
     summary: 'auto',
     mode: null,
     /**
@@ -561,7 +561,7 @@ export function cloneDefaults() {
 export function defaultConfigText() {
   const starter = {
     model: defaults.model,
-    reasoning: { effort: 'xhigh', summary: 'auto' },
+    reasoning: { effort: 'high', summary: 'auto' },
     backends: structuredClone(defaults.backends),
     stack: structuredClone(defaults.stack),
     agent: { fidelity: defaults.agent.fidelity, creativity: defaults.agent.creativity, platform: defaults.agent.platform },
