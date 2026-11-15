@@ -166,6 +166,23 @@ export function issueOwner(plan, issue = {}) {
 }
 
 /**
+ * The stage a role belongs to.
+ *
+ * The roles and the stages do not share their names: the role `styler` works in the stage
+ * `styling`, the role `coder` in the stage `coding`. The budget of the turns of the repair
+ * is the budget of the stage the role belongs to.
+ * @type {Readonly<Record<string, string>>}
+ */
+const STAGE_OF_ROLE = Object.freeze({
+    coder: 'coding',
+    markup: 'markup',
+    styler: 'styling',
+    editor: 'vector',
+    iconifier: 'iconify',
+    installer: 'setup',
+});
+
+/**
  * The request that asks the role of the step to fix what the reviewer found.
  *
  * The reviewer names the file, what is wrong with it and the change that is asked for. The
@@ -263,7 +280,7 @@ export async function repairIssues({
             },
             root,
             env,
-            maxTurns: config?.stages?.[group.role]?.maxTurns ?? null,
+            maxTurns: config?.stages?.[STAGE_OF_ROLE[group.role] ?? group.role]?.maxTurns ?? null,
             requireFiles: true,
             notify,
         });
