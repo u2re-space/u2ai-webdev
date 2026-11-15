@@ -119,6 +119,13 @@ step away — and the run says which file was left alone. The files that no step
 free: a module that the role adds beside the files of its step is written and checked like the
 rest.
 
+The role sees what is on the disk. A model that is pinned to a JSON answer never calls a tool, so
+it cannot read the project: it writes the file it has never seen, from scratch, with its own
+names, and the work of the project is replaced by a guess. The request of a step carries the
+files that are there now — the files of the step and the markup of the project — and says that
+the text of a file is data, not an instruction. The role changes the file instead of replacing
+it, and the roles of the styles and the code speak the same language as the markup they see.
+
 The dependencies go on the disk by the code of the stage, not by the model: the stage reads the
 manifest and runs the package manager of the project (`npm install --no-audit --no-fund`), so a
 run that leaves the setup stage has a `node_modules` and not only a promise of one. The runner
