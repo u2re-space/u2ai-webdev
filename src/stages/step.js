@@ -14,8 +14,8 @@
  *          inputs/index, inputs/references, stages/workspace
  * @usedBy stages/markup, stages/coding, stages/styling
  * @exports STEPS_DIR, LOOKS_AT_DESIGN, stepsForRole, applyFiles, filesByTool, stepReportPath,
- *          writeStepReport, readStepReport, resumableStep, roleWorkOnDisk, laterSteps,
- *          missingFiles, writtenLater, runStepStage
+ *          writeStepReport, readStepReport, readStepReports, resumableStep, roleWorkOnDisk,
+ *          laterSteps, missingFiles, writtenLater, runStepStage
  * @ai.tags stages, steps, files
  * @ai.hint io
  * @ai.hint legacy-0.2
@@ -23,7 +23,7 @@
  */
 
 import path from 'node:path';
-import { readFile, stat } from 'node:fs/promises';
+import { readFile, readdir, stat } from 'node:fs/promises';
 import { runRole, roleReason, syntaxCorrection, partialCorrection } from '../roles/index.js';
 import { writeTextFile } from '../agent/fs-tools.js';
 import { resolveInside } from '../agent/paths.js';
@@ -358,6 +358,36 @@ export async function writeStepReport(root, config = {}, id = null, stepId = 'st
  */
 export async function readStepReport(root, config = {}, id = null, stepId = 'step') {
     return await readJsonFile(stepReportPath(root, config, id, stepId));
+}
+
+/**
+ * The reports of the steps of a run, read back from the disk.
+ *
+ * A continued run needs the reports of the steps of the earlier run: the review judges the
+ * work of the steps, and without their reports it has nothing to judge. A missing report is
+ * skipped: the run simply knows less.
+ * @param {string} root
+ * @param {object} config
+ * @param {string} id
+ * @returns {Promise<object[]>}
+ * @exports
+ * @ai.hint io
+ */
+export async function readStepReports(root, config = {}, id = null) {
+    const dir = path.dirname(stepReportPath(root, config, id, 'step.json'));
+    let names = [];
+    try {
+        names = await readdir(dir);
+    } catch {
+        return [];
+    }
+    const out = [];
+    for (const name of names.sort()) {
+        if (!name.endsWith('.json')) continue;
+        const report = await readStepReport(root, config, id, name.slice(0, -5));
+        if (report) out.push(report);
+    }
+    return out;
 }
 
 /**

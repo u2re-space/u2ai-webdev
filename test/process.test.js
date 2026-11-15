@@ -257,6 +257,42 @@ test('the pipeline pauses on the border of a stage and may continue', async () =
     assert.equal(continued.stages[0].status, 'skipped');
 });
 
+test('a stage that was asked for by name runs again on a resumed run', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-asked-stage-'));
+    const done = [];
+    const stages = [
+        { name: 'one', title: 'One', dependsOn: [], run: async () => { done.push('one'); return { ok: true }; } },
+        { name: 'two', title: 'Two', dependsOn: ['one'], run: async () => { done.push('two'); return { ok: true }; } },
+    ];
+
+    await runPipeline({
+        client: { responses: { create: async () => ({ output: [] }) } },
+        config: CONFIG,
+        root,
+        task: 'Make a landing.',
+        runId: 'run-1',
+        stages,
+    });
+    assert.deepEqual(done, ['one', 'two']);
+
+    // The stage is asked for by name: it runs again, even though the progress says that
+    // it is done. The repair of the review needs it.
+    const continued = await resumePipeline({
+        client: { responses: { create: async () => ({ output: [] }) } },
+        config: CONFIG,
+        root,
+        task: 'Make a landing.',
+        runId: 'run-1',
+        stages,
+        requested: ['two'],
+    });
+
+    assert.deepEqual(done, ['one', 'two', 'two']);
+    assert.equal(continued.stages[0].status, 'skipped');
+    assert.equal(continued.stages[1].status, 'completed');
+    assert.ok(continued.warnings.some((item) => /запрошена явно/.test(item)));
+});
+
 test('a stage whose work was lost is done again on a resumed run', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-lost-stage-'));
     const done = [];
@@ -461,6 +497,53 @@ test('a resumed run without the inputs collects them again', async () => {
     assert.equal(result.status, 'completed');
     // The collection is deterministic, and the later stages need what it finds.
     assert.deepEqual(done, ['collect', 'plan']);
+});
+
+test('a resumed run reads the reports of the steps back', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-resume-steps-'));
+    const dir = path.join(root, '.tmp', 'run-1');
+    await mkdir(path.join(dir, 'steps'), { recursive: true });
+    await writeFile(path.join(dir, 'steps', 'rails-style.json'), JSON.stringify({
+        id: 'rails-style',
+        role: 'styler',
+        summary: 'The rails are styled.',
+    }));
+    await writeFile(path.join(dir, 'progress.json'), JSON.stringify({
+        id: 'run-1',
+        task: 'Make a landing.',
+        status: 'paused',
+        cursor: 1,
+        stages: [
+            { name: 'collect', status: 'completed', index: 1 },
+            { name: 'plan', status: 'pending', index: 2 },
+        ],
+    }));
+
+    let seen = null;
+    const stages = [
+        { name: 'collect', title: 'Collect', dependsOn: [], run: async () => ({ ok: true }) },
+        {
+            name: 'plan',
+            title: 'Plan',
+            dependsOn: ['collect'],
+            run: async (args) => { seen = args; return { ok: true }; },
+        },
+    ];
+
+    const result = await resumePipeline({
+        client: { responses: { create: async () => ({ output: [] }) } },
+        config: { ...CONFIG, memory: { enabled: false } },
+        root,
+        runId: 'run-1',
+        stages,
+    });
+
+    assert.equal(result.status, 'completed');
+    // The review judges the work of the steps: a continued run has to know what the steps
+    // of the earlier run did.
+    assert.equal(seen.reports.length, 1);
+    assert.equal(seen.reports[0].id, 'rails-style');
+    assert.equal(seen.reports[0].summary, 'The rails are styled.');
 });
 
 test('a continued run takes the essence of the task of its own flags', async () => {

@@ -630,6 +630,19 @@ later ones with nothing. The task belongs to the run, so `--resume <id>` without
 own works on the task of the earlier run. A run whose `inputs.json` is missing collects the
 inputs again — the collection is deterministic, and the later stages need what it finds.
 
+The reports of the steps (`steps/<id>.json`) are read back too: the review judges the work of
+the steps of the plan, and a continued run that reaches the review without those reports has
+nothing to judge.
+
+A stage that is named in `--route` is asked for: it runs even when the progress of the earlier
+run says that it is done. The stages that the route adds are only the way to it, and they are
+skipped when their work is still on the disk. So a review that found defects and repaired them
+can be run again over the same project:
+
+```bash
+ai-webdev run --resume 20261113-142530 --route review
+```
+
 A step of the plan that is already done is not done again: its report is on the disk and its
 files are still there, so the run continues with the work that exists. A file that was deleted
 after the step means the work is gone, and the step is done again. A file that is there, but

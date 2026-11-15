@@ -30,6 +30,7 @@ import { readPlan } from './stages/plan.js';
 import { readArchitecture } from './stages/architect.js';
 import { readSetup } from './stages/setup.js';
 import { readReview } from './stages/review.js';
+import { readStepReports } from './stages/step.js';
 import { readInputs } from './stages/collect.js';
 import { collectInputs, mergeInputs } from './inputs/index.js';
 import { readPictures } from './stages/pictures.js';
@@ -122,7 +123,8 @@ export async function runStage(stage, args, timeoutMs = 0) {
  * Run the stages of a run.
  *
  * @param {{ client: object, config?: object, root?: string, task?: string, runId?: string|null,
- *   stageNames?: string[]|null, stopAfter?: string|null, signal?: AbortSignal|null,
+ *   stageNames?: string[]|null, requested?: string[]|null, stopAfter?: string|null,
+ *   signal?: AbortSignal|null,
  *   notify?: (event: object) => void, env?: object, inputs?: object|null, resume?: boolean,
  *   stages?: object[]|null }} request
  * @returns {Promise<{ status: string, runId: string, stages: object[], progress: object,
@@ -137,6 +139,7 @@ export async function runPipeline({
     task = '',
     runId: id = null,
     stageNames = null,
+    requested = null,
     stopAfter = null,
     signal = null,
     notify = () => {},
@@ -151,6 +154,12 @@ export async function runPipeline({
         : enabledStages(config, stageNames);
     const list = selected.stages;
     const warnings = [...selected.warnings];
+    // The stages the user asked for by name: they run even when the progress of an
+    // earlier run says that they are done. The stages that the route adds are only the
+    // way to them.
+    const asked = new Set((Array.isArray(requested) ? requested : [])
+        .map((name) => String(name ?? '').trim().toLowerCase())
+        .filter(Boolean));
 
     // The context of the run: every stage reads it and puts its result into it.
     const ctx = {
@@ -233,6 +242,9 @@ export async function runPipeline({
         }
         const review = await readReview(root, config, run);
         if (review) ctx.review = review;
+        // The reports of the steps of the earlier run: the review judges the work of the
+        // steps, and a continued run has to know what the steps did.
+        ctx.reports.push(...await readStepReports(root, config, run));
     }
 
     const reports = [];
@@ -248,7 +260,7 @@ export async function runPipeline({
 
     for (const stage of list) {
         const record = done.get(stage.name);
-        if (resume && record?.status === 'completed') {
+        if (resume && record?.status === 'completed' && !asked.has(stage.name)) {
             // The progress says that the stage ran. The disk says whether its work is
             // still there: a stage whose files are gone is done again.
             const lost = stage.verify ? !(await stage.verify(ctx)) : false;
@@ -258,6 +270,11 @@ export async function runPipeline({
                 continue;
             }
             warnings.push(`Стадия ${stage.name}: работа потеряна — стадия выполняется заново.`);
+            progress = recordStep(progress, { stage: stage.name, status: 'pending' });
+        } else if (resume && record?.status === 'completed' && asked.has(stage.name)) {
+            // The stage was asked for by name: it runs again, even when the progress of
+            // the earlier run says that it is done. The repair of the review needs it.
+            warnings.push(`Стадия ${stage.name}: запрошена явно — стадия выполняется заново.`);
             progress = recordStep(progress, { stage: stage.name, status: 'pending' });
         }
 

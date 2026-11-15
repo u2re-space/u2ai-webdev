@@ -11,7 +11,7 @@
  * @depends cli/errors, cli/renderer, openai/client, pipeline, stages/index
  * @usedBy cli
  * @exports runCommand, planCommand, stagesCommand, configOverrides, parseRoleSpecs,
- *          routeStages, expandRoute, stageFiles, stageReportText
+ *          routeStages, requestedStages, expandRoute, stageFiles, stageReportText
  * @ai.tags cli, run, pipeline
  * @ai.hint io
  * @ai.hint legacy-0.2
@@ -250,6 +250,31 @@ export function routeStages(flags = {}) {
 }
 
 /**
+ * The stages the user asked for, without the stages they need.
+ *
+ * A stage that is named in the route is asked for: it runs even when the progress of an
+ * earlier run says that it is done. The stages that the route adds are only the way to
+ * it, and they are skipped when their work is still on the disk.
+ * @param {Record<string, string|boolean|string[]>} flags
+ * @returns {string[]} the names of the stages, empty when the route is not given
+ * @ai.hint pure
+ */
+export function requestedStages(flags = {}) {
+    const raw = flags?.route;
+    if (raw === undefined || raw === null || raw === true) return [];
+    const names = asList(raw)
+        .flatMap((item) => item.split(','))
+        .map((item) => item.trim().toLowerCase())
+        .filter(Boolean);
+    const known = names.filter((name) => STAGE_NAMES.includes(name));
+    const unknown = names.filter((name) => !STAGE_NAMES.includes(name));
+    if (unknown.length) {
+        throw new UsageError(`--route: неизвестные стадии: ${unknown.join(', ')}.`);
+    }
+    return known;
+}
+
+/**
  * The stage the run stops at.
  *
  * The name of the stage is checked against the stages the run really goes through: a stage
@@ -365,6 +390,7 @@ export async function runCommand(ctx) {
     }
 
     const stages = routeStages(flags);
+    const requested = requestedStages(flags);
     const stopAfter = stopAfterStage(flags, stages, config);
     // The id of the run is made here, not in the pipeline: the run has to name itself before
     // the first stage, so that a run that falls can be continued by its id.
@@ -424,6 +450,7 @@ export async function runCommand(ctx) {
             task,
             runId,
             stageNames: stages,
+            requested,
             stopAfter,
             signal: controller.signal,
             notify,

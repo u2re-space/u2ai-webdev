@@ -17,7 +17,7 @@ import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 import { EXIT, VALUE_FLAGS, parseArgv } from '../src/cli.js';
-import { configOverrides, parseRoleSpecs, expandRoute, routeStages, splitKind, stopAfterStage, resumeCommand } from '../src/cli/run.js';
+import { configOverrides, parseRoleSpecs, expandRoute, routeStages, requestedStages, splitKind, stopAfterStage, resumeCommand } from '../src/cli/run.js';
 import { createRenderer, detectMode } from '../src/cli/renderer.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -151,6 +151,14 @@ test('the route of the flags adds the stages the route needs', () => {
     assert.deepEqual(routeStages({ route: 'plan' }), ['collect', 'plan']);
     assert.equal(routeStages({}), null);
     assert.throws(() => expandRoute(['nowhere']), /--route: неизвестные стадии: nowhere\./);
+});
+
+test('the stages that were asked for are known apart from the ones they need', () => {
+    assert.deepEqual(requestedStages({ route: 'review' }), ['review']);
+    assert.deepEqual(requestedStages({ route: 'plan,review' }), ['plan', 'review']);
+    assert.deepEqual(requestedStages({}), []);
+    assert.deepEqual(requestedStages({ route: 'PLAN' }), ['plan']);
+    assert.throws(() => requestedStages({ route: 'nowhere' }), /--route: неизвестные стадии: nowhere\./);
 });
 
 test('the stage of the pause is checked against the stages of the run', () => {

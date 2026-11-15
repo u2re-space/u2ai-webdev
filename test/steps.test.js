@@ -13,7 +13,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promises';
 
-import { stepsForRole, applyFiles, laterSteps, roleWorkOnDisk, stepReportPath, readStepReport, runStepStage } from '../src/stages/step.js';
+import { stepsForRole, applyFiles, laterSteps, roleWorkOnDisk, stepReportPath, readStepReport, readStepReports, runStepStage } from '../src/stages/step.js';
 import { markupStage } from '../src/stages/markup.js';
 import { codingStage } from '../src/stages/coding.js';
 import { stylingStage, styleTokensText } from '../src/stages/styling.js';
@@ -181,6 +181,28 @@ test('a step stage runs the role over its steps and writes the reports', async (
     assert.equal(report.summary, 'The entry.');
     assert.equal(report.commands.length, 1);
     assert.match(stepReportPath(root, { output: { work: './.tmp' } }, 'run-1', 'code-1'), /steps[\\/]code-1\.json$/);
+});
+
+test('the reports of the steps of a run are read back from the disk', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-steps-reports-'));
+    const config = { output: { work: './.tmp' } };
+    await mkdir(path.join(root, '.tmp', 'run-1', 'steps'), { recursive: true });
+    await writeFile(path.join(root, '.tmp', 'run-1', 'steps', 'code-1.json'), JSON.stringify({
+        id: 'code-1',
+        summary: 'The entry.',
+    }));
+    await writeFile(path.join(root, '.tmp', 'run-1', 'steps', 'rails-style.json'), JSON.stringify({
+        id: 'rails-style',
+        summary: 'The rails.',
+    }));
+
+    const reports = await readStepReports(root, config, 'run-1');
+    assert.equal(reports.length, 2);
+    assert.deepEqual(reports.map((item) => item.id).sort(), ['code-1', 'rails-style']);
+
+    // A run without reports has none.
+    const empty = await readStepReports(root, config, 'run-2');
+    assert.deepEqual(empty, []);
 });
 
 test('a file that could not be written fails the step', async () => {
