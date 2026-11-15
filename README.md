@@ -555,6 +555,20 @@ the effort and the channel of the schema.
 }
 ```
 
+The built-in profiles of the two text models of the house are tuned by the live answers of the
+gateway (RouterAI, November 2026):
+
+| Model | Context | Output | Ceiling | Ladder |
+|---|---|---|---|---|
+| `minimax/minimax-m3.1-flash` | 1M tokens (4 MiB) | 524K | `xhigh` | `low`, `medium`, `high`, `xhigh` |
+| `moonshotai/kimi-k3.1-pro` | 1M tokens (4 MiB) | 944K | `medium` | `none`, `low`, `medium` |
+
+MiniMax refuses to work without reasoning ("Reasoning is mandatory for this endpoint and
+cannot be disabled"), so a request for `none` is raised to `low` instead of being refused.
+Kimi takes the reasoning off without a refusal and answers in a fraction of the time (about
+0.8 s against about 31 s at `medium` on the same question), so `none` stays on its ladder —
+`ai-webdev run "<task>" --effort none --model moonshotai/kimi-k3.1-pro` is the fast run.
+
 The effort of a run is not one number for everybody. `reasoning.effort` is the ceiling of the
 run, and `reasoning.stageEffort` says what every stage asks for:
 

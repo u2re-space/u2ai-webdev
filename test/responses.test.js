@@ -11,7 +11,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { buildResponsesBody } from '../src/openai/responses.js';
-import { getModelProfile, MODEL_PROFILES } from '../src/model/profiles.js';
+import { getModelProfile, MODEL_PROFILES, snapEffort } from '../src/model/profiles.js';
 
 const SCHEMA = {
     type: 'object',
@@ -56,4 +56,20 @@ test('the profile of a model knows the channel of the schema', () => {
         models: { 'moonshotai/kimi-k3.1-pro': { schemaChannel: 'format' } },
     });
     assert.equal(profile.schemaChannel, 'format');
+});
+
+test('the profile of a text model is tuned by the live answers of the gateway', () => {
+    const minimax = MODEL_PROFILES['minimax/minimax-m3.1-flash'];
+    assert.equal(minimax.window, 4_194_304, '1M tokens of context');
+    assert.equal(minimax.maxOutput, 524_288);
+    assert.equal(minimax.ceiling, 'xhigh');
+    assert.ok(!minimax.efforts.includes('none'), 'the endpoint refuses to work without reasoning');
+    assert.equal(snapEffort('none', minimax), 'low', 'the request for none is raised, not refused');
+
+    const kimi = MODEL_PROFILES['moonshotai/kimi-k3.1-pro'];
+    assert.equal(kimi.window, 4_194_304, '1M tokens of context');
+    assert.equal(kimi.maxOutput, 944_000);
+    assert.equal(kimi.ceiling, 'medium', 'the levels above it cost the same seconds');
+    assert.equal(snapEffort('high', kimi), 'medium');
+    assert.equal(snapEffort('none', kimi), 'none', 'the reasoning may be turned off');
 });

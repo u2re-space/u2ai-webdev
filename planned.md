@@ -1488,6 +1488,29 @@ CLI `ai-webdev` (`@u2ai/webdev`) с собственным конфигом `~/.
 
 ---
 
+### step-82 — Профили minimax и kimi по живым ответам шлюза
+
+- [x] Повод: документы моделей RouterAI (ноябрь 2026) дают окно и выход, которых в
+      профилях не было: `minimax/minimax-m3.1-flash` — 1M токенов контекста и 524K выхода,
+      `moonshotai/kimi-k3.1-pro` — 1M и 944K. В профилях стояло 8 MiB окна (≈2M токенов) и
+      65K выхода у обоих
+- [x] Живые пробы шлюза (один и тот же вопрос):
+      - minimax `effort=none` → 400: «Reasoning is mandatory for this endpoint and cannot be
+        disabled» ⇒ `none` не в лестнице minimax, запрос `none` поднимается до `low`
+      - minimax `effort=high` → 1,3 с, reasoning-токены 8
+      - kimi `effort=high` → 31,1 с; `medium` → 31,0 с; `low` → 52,1 с; `none` → 0,8 с ⇒
+        уровни выше `medium` стоят тех же секунд, потолок kimi — `medium`, а `none` остаётся
+        на лестнице (модель гасит reasoning без отказа)
+- [x] `src/model/profiles.js` — minimax: окно 4 194 304 байта (1M токенов), выход 524 288,
+      потолок `xhigh`, лестница `low|medium|high|xhigh`; kimi: окно 4 194 304, выход 944 000,
+      потолок `medium`, лестница `none|low|medium`
+- [x] `test/responses.test.js` — тест на профили: окно, выход, потолок, лестница; `none`
+      у minimax поднимается до `low`, у kimi остаётся `none`
+- [x] README (EN), planned.md (RU)
+- [x] Проверка: `npm test` — 492 теста, все проходят
+
+---
+
 ## 2. Порядок работы и зависимости шагов
 
 ```

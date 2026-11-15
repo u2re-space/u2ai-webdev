@@ -13,10 +13,25 @@ import { ENUMS } from '../config/constants.js';
  *   schemaChannel: string }} ModelProfile
  */
 
-/** Built-in model profiles. A ceiling of `null` means "no built-in limit". */
+/**
+ * Built-in model profiles. A ceiling of `null` means "no built-in limit".
+ *
+ * The window is the size of the context in bytes, the output cap is the longest answer in
+ * tokens. The two text models of the house are tuned by the live answers of the gateway
+ * (RouterAI, November 2026):
+ *
+ *   - MiniMax M3.1 Flash — 1M tokens of context (4 MiB of text) and 524K of output. The
+ *     endpoint refuses to work without reasoning ("Reasoning is mandatory for this endpoint
+ *     and cannot be disabled"), so `none` is not on its ladder: a request for `none` is raised
+ *     to `low` instead of being refused.
+ *   - Kimi K3.1 Pro — 1M tokens of context (4 MiB of text) and 944K of output. It takes the
+ *     reasoning off without a refusal and answers in a fraction of the time (about 0.8 s
+ *     against about 31 s at `medium` on the same question), so `none` stays on its ladder; the
+ *     ceiling is `medium`, because the levels above it cost the same seconds.
+ */
 export const MODEL_PROFILES = Object.freeze({
-    'minimax/minimax-m3.1-flash': { window: 8_388_608, maxOutput: 65_536, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'], schemaChannel: 'format' },
-    'moonshotai/kimi-k3.1-pro': { window: 8_388_608, maxOutput: 65_536, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'], schemaChannel: 'auto' },
+    'minimax/minimax-m3.1-flash': { window: 4_194_304, maxOutput: 524_288, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'], schemaChannel: 'format' },
+    'moonshotai/kimi-k3.1-pro': { window: 4_194_304, maxOutput: 944_000, ceiling: 'medium', efforts: ['none', 'low', 'medium'], schemaChannel: 'auto' },
     'openai/gpt-6.1-sol': { window: 4_194_304, maxOutput: 32_768, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'], schemaChannel: 'format' },
     'openai/gpt-6.1-terra': { window: 2_097_152, maxOutput: 16_384, ceiling: 'high', efforts: ['low', 'medium', 'high'], schemaChannel: 'format' },
     'openai/gpt-6-luna': { window: 1_048_576, maxOutput: 8_192, ceiling: 'medium', efforts: ['low', 'medium'], schemaChannel: 'format' },
