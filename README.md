@@ -1194,6 +1194,8 @@ npm pack --dry-run
 ```
 
 The suite needs no network and no key: the calls of the API are made by a fake client.
+  The suite is also guarded: `test/offline-guard.js` refuses every address outside the
+  machine, so a test that reaches the outside fails fast instead of spending money.
 
 ## License
 
