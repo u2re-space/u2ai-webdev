@@ -111,6 +111,14 @@ about the order of two stages changes nothing, and a plan with a circle in it ke
 the registry and says so in the warnings of the run. The stages that do not work on the steps of
 the plan keep their place: the build is after the styles, the review is after everything.
 
+A step writes its own files. The plan divides the work of the project between the steps, and
+every step owns its files: a role that picks the icons does not rewrite the styles of the
+project, and a role that writes the scripts does not replace the markup. A file that another
+step of the plan owns is not written — the answer of a role does not take the work of another
+step away — and the run says which file was left alone. The files that no step named are
+free: a module that the role adds beside the files of its step is written and checked like the
+rest.
+
 The dependencies go on the disk by the code of the stage, not by the model: the stage reads the
 manifest and runs the package manager of the project (`npm install --no-audit --no-fund`), so a
 run that leaves the setup stage has a `node_modules` and not only a promise of one. The runner

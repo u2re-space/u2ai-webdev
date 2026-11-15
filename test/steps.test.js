@@ -13,7 +13,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promises';
 
-import { stepsForRole, applyFiles, laterSteps, missingFiles, roleWorkOnDisk, stepReportPath, readStepReport, readStepReports, runStepStage } from '../src/stages/step.js';
+import { stepsForRole, applyFiles, laterSteps, missingFiles, roleWorkOnDisk, stepReportPath, readStepReport, readStepReports, stepScope, inScope, runStepStage } from '../src/stages/step.js';
 import { markupStage } from '../src/stages/markup.js';
 import { codingStage } from '../src/stages/coding.js';
 import { stylingStage, styleTokensText } from '../src/stages/styling.js';
@@ -198,6 +198,79 @@ test('a step that names a directory is done when the directory is there', async 
     // The directory of the icons is on the disk: the step is done.
     assert.equal(result.ok, true);
     assert.equal(result.steps[0].ok, true);
+});
+
+test('the boundaries of a step are its files and the files of no other step', () => {
+    const plan = {
+        steps: [
+            { id: 'icons-1', role: 'iconifier', files: ['src/assets/icons/', 'index.html'] },
+            { id: 'styles-1', role: 'styler', files: ['src/styles/main.scss'] },
+        ],
+    };
+    const scope = stepScope(plan.steps[0], plan);
+
+    // The file of the step is its own, and so is the file in the directory it named.
+    assert.ok(inScope('index.html', scope));
+    assert.ok(inScope('src/assets/icons/mail.svg', scope));
+    // The file of another step is not.
+    assert.equal(inScope('src/styles/main.scss', scope), false);
+    // The file of no step is free.
+    assert.ok(inScope('src/scripts/main.js', scope));
+});
+
+test('the answer of a role does not overwrite the file of another step', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-scope-'));
+    await mkdir(path.join(root, 'src', 'styles'), { recursive: true });
+    await mkdir(path.join(root, 'src', 'assets', 'icons'), { recursive: true });
+    await writeFile(path.join(root, 'src', 'styles', 'main.scss'), '.page { color: red; }\n', 'utf8');
+    const plan = {
+        summary: 'Icons and styles.',
+        steps: [
+            {
+                id: 'icons-1',
+                title: 'Icons',
+                role: 'iconifier',
+                dependsOn: [],
+                files: ['src/assets/icons/', 'index.html'],
+                criteria: ['the icons are there'],
+            },
+            {
+                id: 'styles-1',
+                title: 'Styles',
+                role: 'styler',
+                dependsOn: [],
+                files: ['src/styles/main.scss'],
+                criteria: ['the styles are there'],
+            },
+        ],
+    };
+    const client = fakeClient([schemaAnswer('icon', {
+        summary: 'The icons.',
+        set: 'lucide',
+        icons: [],
+        files: [
+            { path: 'index.html', content: '<main class="page"></main>\n', language: 'html' },
+            { path: 'src/styles/main.scss', content: '.other { color: blue; }\n', language: 'scss' },
+        ],
+        notes: '',
+    })]);
+
+    const result = await runStepStage({
+        client,
+        config: { output: { work: './.tmp' } },
+        root,
+        task: 'Make a landing.',
+        role: 'iconifier',
+        plan,
+        runId: 'run-1',
+    });
+
+    // The styles belong to the styler step: they stay as they were.
+    assert.equal(await readFile(path.join(root, 'src', 'styles', 'main.scss'), 'utf8'), '.page { color: red; }\n');
+    assert.ok(result.steps[0].applied.skipped.includes('src/styles/main.scss'));
+    assert.ok(result.warnings.some((item) => /вне границ шага/.test(item)));
+    // The file of the step itself is written.
+    assert.equal(await readFile(path.join(root, 'index.html'), 'utf8'), '<main class="page"></main>\n');
 });
 
 test('a step stage runs the role over its steps and writes the reports', async () => {
@@ -685,13 +758,13 @@ test('the file the role wrote beside the files of the step is checked too', asyn
     const bin = path.join(root, 'node_modules', '.bin');
     await mkdir(bin, { recursive: true });
     await writeFile(path.join(bin, 'sass.cmd'), '@echo off\r\necho Error: expected "{". 1>&2\r\nexit /b 65\r\n', 'utf8');
-    // The step names one file, but the role writes a stylesheet beside it, and that
-    // stylesheet does not compile.
+    // The step names one file, but the role writes a module beside it, and that module does
+    // not compile. The file belongs to the step: no other step of the plan owns it.
     const answer = schemaAnswer('code', {
-        summary: 'The entry and the styles.',
+        summary: 'The entry and the module.',
         files: [
             { path: 'src/main.js', content: 'export const x = 1;\n', language: 'js' },
-            { path: 'src/styles/main.css', content: '.a { color: red;\n', language: 'css' },
+            { path: 'src/helper.js', content: 'export const y = "unclosed;\n', language: 'js' },
         ],
         commands: [],
         notes: '',
@@ -709,7 +782,7 @@ test('the file the role wrote beside the files of the step is checked too', asyn
     });
 
     assert.equal(result.ok, false);
-    assert.ok(result.steps[0].syntax.checked.includes('src/styles/main.css'));
+    assert.ok(result.steps[0].syntax.checked.includes('src/helper.js'));
     assert.equal(result.steps[0].syntax.errors.length, 1);
 });
 
