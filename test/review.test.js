@@ -19,6 +19,8 @@ import {
     readReview,
     issueOwner,
     repairText,
+    markupSnapshot,
+    stylePairIssues,
     reviewStage,
 } from '../src/stages/review.js';
 import { readAudit, auditStage } from '../src/stages/audit.js';
@@ -193,6 +195,141 @@ test('the request of the second repair says that the first one did not work', ()
 
     assert.match(text, /last repair did not close the defect/i);
     assert.match(text, /Read it again/i);
+});
+
+test('the request of the repair keeps the contract with the styles', () => {
+    const text = repairText({ id: 'markup-1', files: ['index.html'] }, [{
+        severity: 'high',
+        path: 'index.html',
+        message: 'The title is wrong.',
+        requestedChange: 'Fix the title.',
+    }]);
+
+    assert.match(text, /class names are a contract with the styles/i);
+});
+
+test('the classes of the markup without a rule are a defect of the styles', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-pairs-'));
+    await writeFile(path.join(root, 'index.html'), '<div class="landing hero__title"></div>', 'utf8');
+    await writeFile(path.join(root, 'styles.scss'), '.landing { color: red; }\n', 'utf8');
+
+    const issues = await stylePairIssues({
+        root,
+        before: ['hero__title', 'landing'],
+        current: ['hero__title', 'landing'],
+        markup: ['index.html'],
+        styles: ['styles.scss'],
+    });
+
+    assert.equal(issues.length, 1);
+    assert.equal(issues[0].path, 'styles.scss');
+    assert.match(issues[0].message, /hero__title/);
+    assert.match(issues[0].requestedChange, /hero__title/);
+});
+
+test('the renamed classes are a defect of the markup', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-pairs-'));
+    await writeFile(path.join(root, 'index.html'), '<div class="landing hero__headline"></div>', 'utf8');
+    await writeFile(path.join(root, 'styles.scss'), '.landing { color: red; }\n.hero-card__title { color: red; }\n', 'utf8');
+
+    const issues = await stylePairIssues({
+        root,
+        before: ['hero-card__title', 'landing'],
+        current: ['hero__headline', 'landing'],
+        markup: ['index.html'],
+        styles: ['styles.scss'],
+    });
+
+    assert.equal(issues.length, 1);
+    assert.equal(issues[0].path, 'index.html');
+    assert.match(issues[0].message, /hero-card__title/);
+    assert.match(issues[0].requestedChange, /hero-card__title/);
+});
+
+test('the snapshot of the markup names the classes of the project', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-pairs-'));
+    await writeFile(path.join(root, 'index.html'), '<div class="landing"></div>', 'utf8');
+    await writeFile(path.join(root, 'styles.scss'), '.landing { color: red; }\n', 'utf8');
+
+    const shot = await markupSnapshot(root, null);
+    assert.deepEqual(shot.classes, ['landing']);
+    assert.deepEqual(shot.markup, ['index.html']);
+    assert.deepEqual(shot.styles, ['styles.scss']);
+});
+
+test('the repair that renames the classes is caught and the names are restored', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-rename-'));
+    await writeFile(path.join(root, 'index.html'), '<div class="hero-card__title">A</div>', 'utf8');
+    await writeFile(path.join(root, 'styles.scss'), '.hero-card__title { color: red; }\n', 'utf8');
+    const plan = {
+        summary: 'A landing.',
+        steps: [
+            { id: 'markup-1', title: 'Markup', role: 'markup', dependsOn: [], files: ['index.html'], criteria: ['opens'] },
+        ],
+    };
+    const markupAnswer = (content) => schemaAnswer('markup', {
+        summary: 'The markup is written.',
+        files: [{ path: 'index.html', content, language: 'html' }],
+        landmarks: [],
+        accessibility: [],
+        notes: '',
+    });
+    const asked = [];
+    const client = fakeClient([
+        // The review of the step finds a defect.
+        schemaAnswer('review', {
+            verdict: 'fail',
+            scores: { fidelity: 40, completeness: 50, accessibility: 30, quality: 40 },
+            issues: [{
+                severity: 'high',
+                path: 'index.html',
+                message: 'The title is not a heading.',
+                requestedChange: 'Make it an h1.',
+            }],
+            summary: 'The title is wrong.',
+            recommendations: [],
+        }),
+        // The repair rewrites the file and renames the class on the way.
+        (body) => {
+            asked.push(body);
+            return markupAnswer('<h1 class="hero__headline">A</h1>');
+        },
+        // The step is judged again and the defect is gone.
+        schemaAnswer('review', {
+            verdict: 'pass',
+            scores: { fidelity: 90, completeness: 100, accessibility: 80, quality: 85 },
+            issues: [],
+            summary: 'The title is a heading now.',
+            recommendations: [],
+        }),
+        // The second round: the check of the names asks the markup to restore them.
+        (body) => {
+            asked.push(body);
+            return markupAnswer('<h1 class="hero-card__title">A</h1>');
+        },
+        schemaAnswer('review', {
+            verdict: 'pass',
+            scores: { fidelity: 90, completeness: 100, accessibility: 80, quality: 85 },
+            issues: [],
+            summary: 'The names are the same as the styles.',
+            recommendations: [],
+        }),
+    ]);
+
+    const result = await reviewStage({
+        client,
+        config: { output: { work: './.tmp' } },
+        root,
+        task: 'Make a landing.',
+        plan,
+        runId: 'run-1',
+    });
+
+    // The names of the styles are back on the disk.
+    assert.match(await readFile(path.join(root, 'index.html'), 'utf8'), /hero-card__title/);
+    // The second repair was told which names to bring back.
+    assert.match(JSON.stringify(asked[1].input), /hero-card__title/);
+    assert.equal(result.repair.repaired.length, 2);
 });
 
 test('the review repairs what it found and judges the result again', async () => {

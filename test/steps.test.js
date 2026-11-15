@@ -545,6 +545,33 @@ test('the stage of the styles reports the tokens it declares', async () => {
     assert.match(await readFile(path.join(root, 'src', 'styles', 'main.css'), 'utf8'), /var\(--color-text\)/);
 });
 
+test('the stage of the styles says that the classes of the markup have no rules', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-styling-pairs-'));
+    await writeFile(path.join(root, 'index.html'), '<div class="landing hero__title"></div>', 'utf8');
+    const client = fakeClient([schemaAnswer('style', {
+        summary: 'The styles.',
+        tokens: [],
+        files: [{ path: 'styles.scss', content: '.landing { color: red; }\n', language: 'scss' }],
+        notes: '',
+    })]);
+
+    const result = await stylingStage({
+        client,
+        config: { output: { work: './.tmp' } },
+        root,
+        task: 'Make a landing.',
+        plan: {
+            summary: 'A landing.',
+            steps: [
+                { id: 'style-1', title: 'Styles', role: 'styler', dependsOn: [], files: ['styles.scss'], criteria: ['looks'] },
+            ],
+        },
+        runId: 'run-1',
+    });
+
+    assert.match(result.warnings.join('\n'), /hero__title/);
+});
+
 test('a broken file of a step is found and the role is asked to fix it', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-steps-broken-'));
     const client = fakeClient([

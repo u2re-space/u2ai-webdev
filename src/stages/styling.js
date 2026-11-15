@@ -11,7 +11,8 @@
  *   The stylesheets the styler wrote are applied, and the tokens it declares are reported, so
  *   a reader sees which token came from where.
  *
- * @depends roles/index, stages/architect, stages/step, inputs/index
+ * @depends roles/index, stages/architect, stages/step, inputs/index, agent/markup-styles,
+ *          stages/project-files
  * @usedBy stages/index, pipeline
  * @exports stylingStage, styleTokensText
  * @ai.tags stages, styling, tokens
@@ -21,6 +22,8 @@
  */
 
 import { architectureText } from './architect.js';
+import { projectFiles } from './project-files.js';
+import { checkMarkupStyles } from '../agent/markup-styles.js';
 import { runStepStage } from './step.js';
 
 /**
@@ -96,6 +99,20 @@ export async function stylingStage({
         const declared = Array.isArray(report.tokens) ? report.tokens : [];
         if (!declared.length) continue;
         report.tokensBlock = styleTokensText(declared);
+    }
+
+    // The markup and the styles have to speak the same language: a class of the markup
+    // without a rule is an element without a shape. The stage says so right away, while the
+    // styles are still the work of this stage.
+    const files = await projectFiles(root, plan);
+    if (files.markup.length && files.styles.length) {
+        const check = await checkMarkupStyles({ root, markup: files.markup, styles: files.styles });
+        if (check.orphans.length) {
+            result.warnings.push(`Классы разметки без правил в стилях: ${check.orphans.join(', ')}.`);
+        }
+        if (check.unused.length) {
+            result.warnings.push(`Правила стилей, для которых нет разметки: ${check.unused.join(', ')}.`);
+        }
     }
     return result;
 }

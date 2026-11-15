@@ -10,23 +10,27 @@
  *   When there are screenshots of the result, they go into the request as pictures: the
  *   reviewer looks at the layout before it judges it.
  *
- * @depends node:fs/promises, roles/index, openai/responses, stages/architect, stages/workspace
+ * @depends node:fs/promises, roles/index, openai/responses, stages/architect, stages/workspace,
+ *          agent/markup-styles, stages/project-files
  * @usedBy stages/index, pipeline
  * @exports REVIEW_FILE, reviewVerdict, worstVerdict, readScreenshots, writeReview, readReview,
- *          issueOwner, repairText, repairIssues, reviewStage
+ *          issueOwner, repairText, repairIssues, markupSnapshot, stylePairIssues, reviewStage
  * @ai.tags stages, review
  * @ai.hint io
  * @ai.hint legacy-0.2
  * @changed 2026-11-13 Ported from the monolith: ревью по критериям шага и по картинкам.
  */
 
+import path from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { runRole, roleReason } from '../roles/index.js';
 import { imagePart } from '../openai/responses.js';
 import { resolveInside } from '../agent/paths.js';
 import { checkFiles } from '../agent/syntax.js';
+import { checkMarkupStyles, renamedClasses } from '../agent/markup-styles.js';
 import { readReferences } from '../inputs/references.js';
 import { architectureText } from './architect.js';
+import { projectFiles } from './project-files.js';
 import { applyFiles, filesByTool } from './step.js';
 import { runId, runFile, writeJsonFile, readJsonFile } from './workspace.js';
 
@@ -218,6 +222,11 @@ export function repairText(step, issues = [], { again = false } = {}) {
         ...(again ? [''] : []),
         `The files of the step: ${files.join(', ') || 'not named'}.`,
         '',
+        'The class names are a contract with the styles: a class that the styles describe keeps',
+        'its name, and a class may not be renamed or dropped while the rules still describe the',
+        'old name. If a name has to change, the styles have to change with it — that is the work',
+        'of the role that owns them.',
+        '',
         'Fix it now with the tools: read the file, make the change that is asked for, and write the',
         'file back under the same path. Change the file, not the report: an answer that only says',
         'what should be done leaves the defect on the disk. Keep the rest of the file as it is —',
@@ -332,6 +341,73 @@ export async function repairIssues({
 }
 
 /**
+ * Снимок разметки проекта: какими именами разметка называет свои части.
+ *
+ * Снимок снимается до ремонта и после: разница между двумя снимками — это то, что ремонт
+ * сделал с именами.
+ * @param {string} root
+ * @param {object|null} [plan]
+ * @returns {Promise<{ classes: string[], markup: string[], styles: string[], check: object }>}
+ * @exports
+ * @ai.hint io
+ */
+export async function markupSnapshot(root = process.cwd(), plan = null) {
+    const files = await projectFiles(root, plan);
+    const check = await checkMarkupStyles({ root, markup: files.markup, styles: files.styles });
+    return { classes: check.used, markup: files.markup, styles: files.styles, check };
+}
+
+/**
+ * Замечания о том, что разметка и стили разошлись.
+ *
+ * Ремонт переписывает разметку целиком и может переименовать классы: правила остаются от
+ * прежней разметки, и страница остаётся без оформления. Поэтому сравниваются имена до
+ * ремонта и после: класс, который исчез из разметки, но остался в стилях, — это
+ * переименование, и чинить его должна разметка, а не стили.
+ *
+ * @param {{ root?: string, before?: string[], current?: string[], markup?: string[],
+ *   styles?: string[] }} request
+ * @returns {Promise<object[]>}
+ * @exports
+ * @ai.hint io
+ */
+export async function stylePairIssues({
+    root = process.cwd(),
+    before = [],
+    current = [],
+    markup = [],
+    styles = [],
+} = {}) {
+    if (!markup.length || !styles.length) return [];
+    const check = await checkMarkupStyles({ root, markup, styles });
+    const lost = renamedClasses(before, current, check.styled);
+    const beforeSet = new Set(before);
+    const gained = current.filter((name) => !beforeSet.has(name));
+    if (lost.length && gained.length) {
+        return [{
+            severity: 'high',
+            path: markup[0],
+            message: `Ремонт переименовал классы разметки: ${lost.join(', ')} — в стилях для них есть`
+                + ` правила, а в разметке их больше нет. Новые имена (${gained.join(', ')}) не имеют`
+                + ' ни одного правила, и элементы с ними остались без оформления.',
+            requestedChange: `Верни прежние имена классов (${lost.join(', ')}): стили описывают именно`
+                + ' их. Не переименовывай классы в ремонте — правила стилей им соответствуют.',
+        }];
+    }
+    if (check.orphans.length) {
+        const target = styles.find((file) => !path.basename(file).startsWith('_')) ?? styles[0];
+        return [{
+            severity: 'medium',
+            path: target,
+            message: `В разметке есть классы, для которых в стилях нет ни одного правила:`
+                + ` ${check.orphans.join(', ')}. Элементы с ними остаются без оформления.`,
+            requestedChange: `Добавь правила для этих классов в ${target}: ${check.orphans.join(', ')}.`,
+        }];
+    }
+    return [];
+}
+
+/**
  * The stage of the review.
  *
  * @param {{ client: object, config?: object, root?: string, task?: string, plan?: object|null,
@@ -441,8 +517,10 @@ export async function reviewStage({
 
     // The findings of the first pass go to the disk before the repair starts: a repair that
     // runs out of time must not take the findings with it.
+    // The findings of the harness itself: the markup and the styles that do not match.
+    const pairing = [];
     const snapshot = (repair) => {
-        const issues = reviews.flatMap((review) => review.issues);
+        const issues = [...reviews.flatMap((review) => review.issues), ...pairing];
         const verdict = worstVerdict(reviews.map((review) => review.verdict));
         return {
             verdict,
@@ -464,10 +542,36 @@ export async function reviewStage({
         ? Math.max(0, config.stages.review.repairRounds)
         : 2;
     const repairs = [];
+    // The markup and the styles have to speak the same language. The check is the harness's
+    // own: the reviewer judges the step by its criteria and does not see that a class of the
+    // markup has no rule. The check sees the names, and the repair fixes what it found.
+    const checkStyles = config?.stages?.review?.checkStyles !== false;
+    let current = null;
+    let before = [];
+    if (wanted && checkStyles) {
+        current = await markupSnapshot(root, plan);
+        before = current.classes;
+    }
     if (wanted) {
         for (let round = 0; round < rounds; round++) {
             const found = reviews.flatMap((review) => review.issues);
-            if (!found.length) break;
+            const issues = [...found];
+            if (current) {
+                const pair = await stylePairIssues({
+                    root,
+                    before,
+                    current: current.classes,
+                    markup: current.markup,
+                    styles: current.styles,
+                });
+                issues.push(...pair);
+                for (const issue of pair) {
+                    if (!pairing.some((item) => item.path === issue.path && item.message === issue.message)) {
+                        pairing.push(issue);
+                    }
+                }
+            }
+            if (!issues.length) break;
             const repair = await repairIssues({
                 client,
                 config,
@@ -475,7 +579,7 @@ export async function reviewStage({
                 task,
                 plan,
                 architecture,
-                issues: found,
+                issues,
                 notify,
                 env,
                 again: round > 0,
@@ -485,9 +589,13 @@ export async function reviewStage({
             repairs.push(repair);
             // The steps that were repaired are judged again: the verdict of the run has to
             // say what the project looks like now, not what it looked like before.
-            const dirty = new Set(found
+            const dirty = new Set(issues
                 .map((issue) => issueOwner(plan, issue).step?.id)
                 .filter(Boolean));
+            if (current) {
+                before = current.classes;
+                current = await markupSnapshot(root, plan);
+            }
             if (!dirty.size) break;
             for (const [index, old] of reviews.entries()) {
                 if (!dirty.has(old.step.id)) continue;

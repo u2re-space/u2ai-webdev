@@ -228,7 +228,7 @@ export const defaults = {
     build: { enabled: true, maxTurns: 1, timeoutMs: null },
     vector: { enabled: true, maxTurns: 8, timeoutMs: null },
     iconify: { enabled: true, maxTurns: 8, timeoutMs: null },
-    review: { enabled: true, maxTurns: 12, repair: true, repairRounds: 2, timeoutMs: null },
+    review: { enabled: true, maxTurns: 12, repair: true, repairRounds: 2, checkStyles: true, timeoutMs: null },
     audit: { enabled: true, maxTurns: 8, timeoutMs: null },
     learn: { enabled: true, maxTurns: 8, timeoutMs: null },
   },

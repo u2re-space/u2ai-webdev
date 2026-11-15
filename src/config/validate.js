@@ -96,6 +96,9 @@ function validateStage(id, section, fail) {
   if (section.repairRounds != null && !(Number.isSafeInteger(section.repairRounds) && section.repairRounds >= 0)) {
     fail(`${where}.repairRounds: целое >= 0`);
   }
+  if (section.checkStyles != null && typeof section.checkStyles !== 'boolean') {
+    fail(`${where}.checkStyles: true | false`);
+  }
   if (section.timeoutMs != null && !(Number.isSafeInteger(section.timeoutMs) && section.timeoutMs > 0)) {
     fail(`${where}.timeoutMs: целое > 0`);
   }

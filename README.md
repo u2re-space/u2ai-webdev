@@ -146,6 +146,19 @@ role that the last repair did not close the defect. `"repair": false` turns the 
 and the review then only reports. The findings go to the disk before the repair starts, so a
 repair that runs out of time does not take the findings with it.
 
+The markup and the styles have to speak the same language, and the review checks it. A class
+that the markup uses and that no rule describes is an element without a shape; a class that
+the styles describe and that the markup does not use is a rule that nobody gets. The check
+reads the names of both sides: the classes of the markup and the classes of the selectors of
+the styles, with the nested selectors of SCSS resolved (`&__title` inside `.card` is
+`.card__title`). A class of the markup without a rule is a defect of the styles, and the
+styler is asked to write the rule. A class that the styles describe and that disappeared from
+the markup while the repair was running is a renamed class: the repair rewrote the markup and
+changed the names on the way, so the markup is asked to bring the old names back — the styles
+are not rewritten to fit the new names. The names of the classes are a contract, and the
+request of the repair says so to every role. `"checkStyles": false` turns the check off, and
+the stage `styling` warns about the same mismatch while the styles are still being written.
+
 ### The pictures of the reference
 
 The sheet of the measurements names the crops of the reference: the chess piece, the wooden

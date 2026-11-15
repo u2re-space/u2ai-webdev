@@ -99,6 +99,17 @@ test('the validation rejects an unknown stage and an unknown field', () => {
     assert.throws(() => validateConfig(section), /Конфигурация: stack\.colors: неизвестное поле/);
 });
 
+test('the check of the styles and the markup is a switch of the review', () => {
+    const config = cloneDefaults();
+    assert.equal(config.stages.review.checkStyles, true);
+    config.stages.review.checkStyles = false;
+    assert.doesNotThrow(() => validateConfig(config));
+
+    const wrong = cloneDefaults();
+    wrong.stages.review.checkStyles = 'yes';
+    assert.throws(() => validateConfig(wrong), /Конфигурация: stages\.review\.checkStyles: true \| false/);
+});
+
 test('a request may stay silent for fifteen minutes', () => {
     // A thinking model works for minutes without a word. A short timeout does not make
     // the model faster: it throws the reasoning away and asks again.

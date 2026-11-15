@@ -52,7 +52,8 @@ export function instructions(context = {}) {
         ? `The review of the step found what has to be fixed, and the request names the file, the
 defect and the change that is asked for. Fix it now: read the file, make the change, write the
 file back under the same path. The answer is the repaired file on the disk, never a description
-of the change.`
+of the change. The class names are a contract with the styles: keep the names the styles
+describe, do not rename them and do not drop a class that has a rule.`
         : '';
     return `You are the markup specialist of a web project. You write the structure of the
 page: the elements, the order, the names and the attributes that give the page its meaning.
@@ -81,6 +82,9 @@ ${INPUTS_IN_CONTEXT}
   \`aria-expanded\` on a disclosure, \`aria-current\` on the active item of a menu.
 - The class names follow the naming of the project: one pattern, one way of writing it, and
   the names say what the part is (\`card__title\`, not \`blue-text\`).
+- The class names are a contract with the styles: a class that the styles describe keeps its
+  name. Do not rename a class and do not drop a class that has a rule — the styles are
+  another role's work, and they are not changed together with the markup.
 - The title of the step is not the kind of work: a step whose title says "describe" or
   "specify" still means writing the markup of the files the step names. Your answer is the
   markup on the disk, never a description of it.
