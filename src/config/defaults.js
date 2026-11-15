@@ -14,24 +14,24 @@ import { ENUMS } from './constants.js';
  * The effort of every role of the run, by the stage it works in.
  *
  * The markup and the styles carry the look of the reference: they get the deepest
- * reasoning. The mechanical work — the scripts, the icons, the lessons — gets the
- * cheapest one. The planner and the architect stay in between: they decide, but they
- * do not build. A thinking model spends minutes on a high effort, so the stages that
- * only decide stay at `medium`.
+ * reasoning (`xhigh`). Every other stage works on `high`: the code, the icons, the
+ * setup, the review and the audit answer on a model that thinks long enough to be
+ * right, and the stages that only decide — the plan, the architecture — pay for the
+ * seconds of the thinking on a plan that may be thrown away.
  */
 export const STAGE_EFFORT = Object.freeze({
-    planner: 'medium',
-    architect: 'medium',
-    director: 'medium',
-    coder: 'medium',
-    markup: 'high',
-    styler: 'high',
-    iconifier: 'medium',
-    installer: 'low',
-    editor: 'medium',
-    reviewer: 'medium',
-    auditor: 'medium',
-    learner: 'low',
+    planner: 'high',
+    architect: 'high',
+    director: 'high',
+    coder: 'high',
+    markup: 'xhigh',
+    styler: 'xhigh',
+    iconifier: 'high',
+    installer: 'high',
+    editor: 'high',
+    reviewer: 'high',
+    auditor: 'high',
+    learner: 'high',
 });
 
 /**

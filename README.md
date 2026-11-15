@@ -599,23 +599,28 @@ run, and `reasoning.stageEffort` says what every stage asks for:
     "stageEffort": {
       "markup": "xhigh",
       "styler": "xhigh",
-      "architect": "medium",
-      "reviewer": "medium",
-      "planner": "medium",
-      "coder": "medium",
-      "iconifier": "medium",
-      "installer": "low"
+      "planner": "high",
+      "architect": "high",
+      "director": "high",
+      "coder": "high",
+      "iconifier": "high",
+      "installer": "high",
+      "editor": "high",
+      "reviewer": "high",
+      "auditor": "high",
+      "learner": "high"
     }
   }
 }
 ```
 
-The markup and the styles carry the look of the reference: they get the deepest reasoning. The
-scripts, the icons and the mechanical work get the cheapest one. The stages that only decide —
-the plan, the architecture, the review — stay at `medium`: a thinking model spends minutes on a
-high effort. A stage never works above the ceiling of the run, and the effort of a role set in
-`roles.<role>.effort` wins over the profile. `"stageEffort": null` turns the profile off and
-leaves every role with the effort of the run.
+The markup and the styles carry the look of the reference: they get the deepest reasoning
+(`xhigh`). Every other stage works on `high`: the code, the icons, the setup, the review and
+the audit answer on a model that thinks long enough to be right, and the stages that only
+decide — the plan, the architecture — pay for the seconds of the thinking on a plan that may
+be thrown away. A stage never works above the ceiling of the run, and the effort of a role
+set in `roles.<role>.effort` wins over the profile. `"stageEffort": null` turns the profile
+off and leaves every role with the effort of the run.
 
 A thinking model works for minutes without a word. The run says that it waits (`· thinking (60s)`)
 and a failed request is shown, with its retry — the silence of the terminal is never a hang. The
