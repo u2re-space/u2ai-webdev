@@ -1585,6 +1585,26 @@ CLI `ai-webdev` (`@u2ai/webdev`) с собственным конфигом `~/.
       проходят; `npm run check` — 187 из 187; живая проверка: страница снята headless Chrome,
       картинка открыта и показывает сломанную вёрстку верно
 
+### step-90 — Движок называется `ego`, и снимок делает headless
+
+- [x] Проблема: движок искался как `ego-browser`, а на машине стоит `ego`
+      (`C:\Program Files\Citro Labs\ego lite\Application\ego.exe`, версия 0.6.3.14) — прогон
+      его не находил и уходил в headless Chrome, не зная, что ego lite рядом
+- [x] Живая проверка (2026-11-16, ~30 с): `ego --help` открывает окно браузера;
+      `ego skill` молчит; `ego nodejs -e …` подключается к уже открытой сессии и **не отдаёт
+      результат скрипта** в stdout/stderr ⇒ протокол ego не годится для headless-снимка
+- [x] `src/agent/browser.js` — поиск: имя `ego` (`ego.exe`, `ego.cmd`) + папки установки
+      (`Citro Labs\ego lite\Application`, `~/.local/bin`, `~/.local/share/ego`, `ego lite.app`)
+- [x] `src/agent/browser.js` — `resolveEngine()`: `auto` берёт **headless Chromium** (снимок
+      делает он), `ego` — только по явному `browser.engine: "ego"`, `chrome` — Chromium.
+      Движок больше не врёт в отчёте о том, кто снял страницу
+- [x] `u2ai-server/src/tools/browser.js` — то же имя и тот же выбор движка
+- [x] `src/agent/browser.js` (монолита) — имя `ego` в поиске (монолит помечен как deprecated)
+- [x] README (EN) обоих пакетов, комментарии в коде, `planned.md`
+- [x] Проверка: живая — движок найден (`ego.exe`), `auto` → chrome, dev-сервер поднят,
+      страница снята (66 КБ), слова страницы собраны, сервер остановлен; тесты `browser` и
+      `dev-server` в `u2ai-webdev` (14), в `u2ai-server` (6) — все проходят
+
 ### step-88 — Роль видит то, что сама сняла
 
 - [x] Проблема (живой прогон ForMeasure, 2026-11-16): роль сняла страницу инструментом

@@ -307,12 +307,13 @@ export const defaults = {
    * role that owns the styles, so it can see what it has written and compare it with the
    * reference of the design.
    *
-   * Ego Lite (`ego-browser`) is the engine of the house when it is installed. Otherwise the
-   * run falls back to headless Chrome/Edge, which is read-only: it opens a page and takes a
-   * picture of it.
+   * The snapshot is taken by headless Chrome/Edge: it is read-only and it is on every desktop.
+   * Ego Lite (`ego`) is the engine of the house with the window and the interaction; it is used
+   * when it is asked for explicitly, because the ego lite hands the page to the session that is
+   * already open and gives nothing back to a caller that waits for a snapshot.
    */
   browser: {
-    /** `auto` prefers Ego Lite, `ego` demands it, `chrome` demands a headless Chromium. */
+    /** `auto` takes the headless Chromium, `ego` demands the ego lite, `chrome` demands a Chromium. */
     engine: 'auto',
     /** The path of the browser, when the usual places do not hold it. */
     executable: null,

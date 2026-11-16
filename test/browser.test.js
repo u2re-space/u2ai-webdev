@@ -43,8 +43,10 @@ test('the actions of the browser are known', () => {
 });
 
 test('the places of the engines are known', () => {
+    // The command of the ego lite is `ego`, not `ego-browser`.
     const ego = egoCandidates(null, { PATH: '/usr/bin' });
-    assert.ok(ego.some((item) => item.includes('ego-browser')));
+    assert.ok(ego.some((item) => path.basename(item) === 'ego'));
+    assert.ok(!ego.some((item) => item.includes('ego-browser')));
 
     const chrome = chromiumCandidates(null, { ProgramFiles: 'C:/Program Files' }, 'win32');
     assert.ok(chrome.some((item) => item.endsWith('chrome.exe')));
@@ -55,32 +57,35 @@ test('the places of the engines are known', () => {
 });
 
 test('the engine is chosen by what is installed', async () => {
-    const ego = await resolveEngine({ browser: {} }, {
-        findEgo: async () => 'C:/ego/ego-browser.exe',
+    // The `auto` mode takes the headless Chromium: the snapshot of the page is taken headless.
+    const auto = await resolveEngine({ browser: {} }, {
+        findEgo: async () => 'C:/ego/ego.exe',
         findChromium: async () => 'C:/chrome/chrome.exe',
     });
-    assert.equal(ego.engine, 'ego');
-    assert.equal(ego.interactions, true);
-
-    const chrome = await resolveEngine({ browser: {} }, {
-        findEgo: async () => null,
-        findChromium: async () => 'C:/chrome/chrome.exe',
-    });
-    assert.equal(chrome.engine, 'chrome');
-    assert.equal(chrome.interactions, false);
+    assert.equal(auto.engine, 'chrome');
+    assert.equal(auto.interactions, false);
+    // The ego lite is found and named, but it does not take the snapshot by itself.
+    assert.equal(auto.ego, 'C:/ego/ego.exe');
 
     // An explicit engine is honoured: the run does not fall back behind the back of the user.
-    const forced = await resolveEngine({ browser: { engine: 'chrome' } }, {
-        findEgo: async () => 'C:/ego/ego-browser.exe',
+    const forcedEgo = await resolveEngine({ browser: { engine: 'ego' } }, {
+        findEgo: async () => 'C:/ego/ego.exe',
         findChromium: async () => 'C:/chrome/chrome.exe',
     });
-    assert.equal(forced.engine, 'chrome');
+    assert.equal(forcedEgo.engine, 'ego');
+    assert.equal(forcedEgo.interactions, true);
+
+    const forcedChrome = await resolveEngine({ browser: { engine: 'chrome' } }, {
+        findEgo: async () => 'C:/ego/ego.exe',
+        findChromium: async () => 'C:/chrome/chrome.exe',
+    });
+    assert.equal(forcedChrome.engine, 'chrome');
 });
 
 test('no engine at all is an error with a way out', async () => {
     await assert.rejects(
         () => resolveEngine({ browser: {} }, { findEgo: async () => null, findChromium: async () => null }),
-        /ego-browser|Chromium/,
+        /Браузер не найден|Chromium/,
     );
 });
 

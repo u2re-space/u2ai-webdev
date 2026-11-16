@@ -230,10 +230,12 @@ looked at: the SCSS is compiled and the markup is wired to the stylesheet there.
 cannot be opened — no browser, no entry point, a broken build — is reported and the run goes
 on: the styles are written either way, they are simply not checked by the eye.
 
-**The page it looks at.** Two engines are supported. **Ego Lite** (`ego-browser`) is the engine
-of the house when it is installed: the browser with the window and the interaction. Otherwise
-the run falls back to **headless Chrome/Edge**, which is read-only — it opens a page and takes
-a picture of it.
+**The page it looks at.** Two engines are supported. **Headless Chrome/Edge** takes the
+snapshot by default: it is read-only — it opens a page and takes a picture of it — and it is on
+every desktop. **Ego Lite** (`ego`) is the engine of the house with the window and the
+interaction; it is used when it is asked for explicitly (`browser.engine: "ego"`), because the
+ego lite hands the page to the session that is already open and gives nothing back to a caller
+that waits for a snapshot.
 
 The live page of the project is preferred: the dev server of Vite (`npm run dev` →
 `http://localhost:5173/`) shows the styles as they are now, compiled by the bundler, so the

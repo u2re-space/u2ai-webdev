@@ -9,10 +9,12 @@
  *
  *   Two engines are supported:
  *
- *   - Ego Lite (`ego-browser`), when it is installed: the browser of the house, with the
- *     window and the interaction. It is the preferred engine.
  *   - headless Chromium (Chrome or Edge), always available on a desktop: a read-only engine
- *     that opens a page, takes a screenshot and reads the rendered text.
+ *     that opens a page, takes a screenshot and reads the rendered text. It is the engine of
+ *     the snapshot.
+ *   - Ego Lite (`ego`), the browser of the house, with the window and the interaction. It is
+ *     used when it is asked for explicitly: the ego lite hands the page to the session that is
+ *     already open and gives nothing back to a caller that waits for a snapshot.
  *
  *   The page of the project is served by a local server of the package: a `file://` URL breaks
  *   the modules and the fetch of a modern project, so the run serves the root over HTTP and
@@ -52,7 +54,7 @@ const CHROME_MAC = [
 const CHROME_LINUX = ['google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser', 'microsoft-edge']
     .map((name) => `/usr/bin/${name}`);
 
-const EGO_NOT_FOUND = 'ego-browser не найден в PATH. Установите Ego Lite (https://lite.ego.app/) или укажите browser.executable.';
+const EGO_NOT_FOUND = 'ego не найден в PATH. Установите Ego Lite (https://lite.ego.app/) или укажите browser.executable.';
 
 /**
  * Whether stat reports an existing file. A missing path returns false.
@@ -69,7 +71,9 @@ async function isFile(filePath) {
 }
 
 /**
- * The places the `ego-browser` command may live: the PATH, then the folders of the install.
+ * The places the `ego` command may live: the PATH, then the folders of the install.
+ *
+ * The command of the ego lite is `ego` — the application of Citro Labs, not `ego-browser`.
  * @param {string|null} configured the executable of the configuration
  * @param {object} env
  * @returns {string[]}
@@ -79,7 +83,7 @@ async function isFile(filePath) {
 export function egoCandidates(configured = null, env = process.env) {
     const names = configured
         ? [path.basename(configured)]
-        : ['ego-browser', 'ego-browser.exe', 'ego-browser.cmd', 'ego-browser.bat'];
+        : ['ego', 'ego.exe', 'ego.cmd', 'ego.bat'];
     const result = configured ? [configured] : [];
     const push = (dir) => {
         for (const name of names) {
@@ -94,6 +98,12 @@ export function egoCandidates(configured = null, env = process.env) {
     if (home) {
         push(path.join(home, '.local', 'bin'));
         push(path.join(home, '.local', 'share', 'ego'));
+        push(path.join(home, 'Applications', 'ego lite.app', 'Contents', 'MacOS'));
+    }
+    // The install of the ego lite on Windows: «Citro Labs\ego lite\Application\ego.exe».
+    if (process.platform === 'win32') {
+        const roots = [env.ProgramFiles, env['ProgramFiles(x86)'], env.LOCALAPPDATA].filter(Boolean);
+        for (const root of roots) push(path.join(root, 'Citro Labs', 'ego lite', 'Application'));
     }
     return result;
 }
@@ -123,7 +133,7 @@ export function chromiumCandidates(configured = null, env = process.env, platfor
 }
 
 /**
- * Find the `ego-browser` command of the house.
+ * Find the `ego` command of the house.
  * @param {{ executable?: string|null, env?: object, exists?: Function }} [options]
  * @returns {Promise<string|null>}
  * @exports
@@ -151,7 +161,12 @@ export async function findChromium({ executable = null, env = process.env, exist
 }
 
 /**
- * The engine of the run: Ego Lite when it is installed, headless Chromium otherwise.
+ * The engine of the run: headless Chromium, or Ego Lite when the user asks for it.
+ *
+ * The `auto` mode takes the Chromium: the snapshot of the page is taken headless, and the ego
+ * lite is a windowed application — it hands the page to the session that is already open and
+ * gives nothing back to the caller. The ego lite is named `ego` (`ego nodejs -e …`), not
+ * `ego-browser`.
  * @param {object} config
  * @param {{ findEgo?: Function, findChromium?: Function }} [options]
  * @returns {Promise<{ engine: 'ego'|'chrome', executable: string, interactions: boolean, ego: string|null, chrome: string|null }|null>}
@@ -163,15 +178,20 @@ export async function resolveEngine(config = {}, { findEgo: findEgoFn = findEgo,
     const preference = browser.engine ?? 'auto';
     const executable = typeof browser.executable === 'string' && browser.executable.trim() ? browser.executable.trim() : null;
     const selected = preference === 'auto' && executable
-        ? (/^ego-browser(?:\.exe|\.cmd|\.bat)?$/i.test(path.basename(executable)) ? 'ego' : 'chrome')
+        ? (/^ego(?:\.exe|\.cmd|\.bat)?$/i.test(path.basename(executable)) ? 'ego' : 'chrome')
         : preference;
     const ego = selected === 'chrome' ? null : await findEgoFn({ executable: selected === 'ego' ? executable : null, env: process.env });
     const chrome = selected === 'ego' ? null : await findChromiumFn({ executable: selected === 'chrome' ? executable : null, env: process.env });
+    if (selected === 'auto') {
+        // The headless engine takes the snapshot; the ego lite is only a name in the report.
+        if (chrome) return { engine: 'chrome', executable: chrome, interactions: false, ego, chrome };
+        if (ego) return { engine: 'ego', executable: ego, interactions: true, ego, chrome };
+        throw new Error(`Браузер не найден. Установите Chrome/Edge или укажите browser.executable (${CHROME_WIN.join(' | ')}).`);
+    }
     if (ego) return { engine: 'ego', executable: ego, interactions: true, ego, chrome };
     if (chrome) return { engine: 'chrome', executable: chrome, interactions: false, ego, chrome };
     if (selected === 'chrome') throw new Error(`Chromium-браузер не найден. Укажите browser.executable (${CHROME_WIN.join(' | ')}).`);
-    if (selected === 'ego') throw new Error(EGO_NOT_FOUND);
-    throw new Error(`${EGO_NOT_FOUND} Либо установите Chrome/Edge и укажите browser.engine chrome.`);
+    throw new Error(EGO_NOT_FOUND);
 }
 
 /**
