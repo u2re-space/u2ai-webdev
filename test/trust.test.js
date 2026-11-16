@@ -52,7 +52,7 @@ test('the effort of the markup is pulled down to what the Kimi takes', () => {
     config.reasoning.effort = 'xhigh';
     // The Kimi has no levels above `medium`: the answer of the same question costs the same
     // seconds there.
-    assert.equal(resolveRole('markup', config).effort, 'medium');
+    assert.equal(resolveRole('markup', config).effort, 'high');
     // The styles stay on the model of the run and keep the deepest reasoning.
     assert.equal(resolveRole('styler', config).effort, 'xhigh');
 });

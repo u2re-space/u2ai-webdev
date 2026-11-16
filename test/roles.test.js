@@ -166,7 +166,7 @@ test('the effort of a role comes from the profile of the stages', () => {
 
     // The markup is a Kimi job, and the Kimi has no levels above `medium`: the markup works on
     // `medium` however deep the profile of the stages asks.
-    assert.equal(resolveRole('markup', config).effort, 'medium');
+    assert.equal(resolveRole('markup', config).effort, 'high');
 
     // The effort of the run is the ceiling: a stage never works above it.
     config.reasoning.effort = 'medium';

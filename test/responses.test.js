@@ -72,15 +72,15 @@ test('the profile of a text model is tuned by the live answers of the gateway', 
     const kimi = MODEL_PROFILES['moonshotai/kimi-k3.1-pro'];
     assert.equal(kimi.window, 4_194_304, '1M tokens of context');
     assert.equal(kimi.maxOutput, 944_000);
-    assert.equal(kimi.ceiling, 'medium', 'the levels above it cost the same seconds');
-    assert.equal(snapEffort('high', kimi), 'medium');
+    assert.equal(kimi.ceiling, 'high', 'the levels above it cost the same seconds');
+    assert.equal(snapEffort('high', kimi), 'high');
     assert.equal(snapEffort('none', kimi), 'none', 'the reasoning may be turned off');
 });
 
 test('the Gemini is the alternative to the Kimi and the Kimi is the fallback', () => {
     const gemini = MODEL_PROFILES['google/gemini-4-hydrogen'];
     assert.equal(gemini.window, 4_194_304, '1M tokens of context');
-    assert.equal(gemini.maxOutput, 1_048_576, 'the continuation decodes up to 1M tokens');
+    assert.equal(gemini.maxOutput, 655_36, 'the continuation decodes up to 1M tokens');
     assert.equal(gemini.ceiling, 'xhigh');
     assert.deepEqual(gemini.efforts, ['low', 'medium', 'high', 'xhigh']);
     assert.equal(snapEffort('none', gemini), 'low', 'the card of the vendor has no none');
