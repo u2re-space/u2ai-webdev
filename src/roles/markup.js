@@ -12,6 +12,7 @@
 import { UNTRUSTED } from './untrusted.js';
 import { INPUTS_IN_CONTEXT } from './inputs.js';
 import { referenceNote } from './reference.js';
+import { pageFrameRules, pageWidthNote } from './page-frame.js';
 import { webDevelopment } from './web-development.js';
 
 /** The name of the role. */
@@ -31,7 +32,7 @@ export const maxTurns = 16;
 /**
  * The instructions of the role.
  * @param {{ task?: string, step?: object, brief?: string, markup?: string, design?: string,
- *   measurements?: string, assets?: string }} [context]
+ *   measurements?: string, assets?: string, referenceSizes?: object[] }} [context]
  * @returns {string}
  * @exports
  * @ai.hint pure
@@ -49,6 +50,7 @@ export function instructions(context = {}) {
         ? 'The design direction, the measurements and the assets are in the task context. The markup has to match them: the regions, the order of the blocks and the names of the parts.'
         : '';
     const reference = referenceNote(context);
+    const width = pageWidthNote(context);
     const repair = Array.isArray(context.issues) && context.issues.length
         ? `The review of the step found what has to be fixed, and the request names the file, the
 defect and the change that is asked for. Fix it now: read the file, make the change, write the
@@ -65,6 +67,7 @@ ${brief}
 ${markup}
 ${design}
 ${reference}
+${width}
 ${repair}
 
 Rules:
@@ -101,6 +104,8 @@ ${INPUTS_IN_CONTEXT}
   \`search_files\` before you link it. A path you have not seen is a path that does not exist.
 - The markup is valid: the tags are closed, the attributes are quoted, the boolean attributes
   have no value.
+
+${pageFrameRules()}
 
 ${webDevelopment('markup')}
 

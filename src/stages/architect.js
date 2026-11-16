@@ -235,6 +235,7 @@ export async function architectStage({
             stack: config?.stack ?? {},
             design: Boolean(inputBlock),
             reference: reference.names,
+            referenceSizes: reference.sizes,
         },
         root,
         env,

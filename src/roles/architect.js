@@ -12,6 +12,7 @@
 import { UNTRUSTED } from './untrusted.js';
 import { INPUTS_IN_CONTEXT } from './inputs.js';
 import { referenceNote } from './reference.js';
+import { PAGE_WIDTH_TOKEN, pageWidthNote } from './page-frame.js';
 
 /** The name of the role. */
 export const name = 'architect';
@@ -29,7 +30,8 @@ export const maxTurns = 16;
 
 /**
  * The instructions of the role.
- * @param {{ task?: string, plan?: object, stack?: object, design?: string, measurements?: string }} [context]
+ * @param {{ task?: string, plan?: object, stack?: object, design?: string, measurements?: string,
+ *   referenceSizes?: object[] }} [context]
  * @returns {string}
  * @exports
  * @ai.hint pure
@@ -46,6 +48,7 @@ export function instructions(context = {}) {
         ? `The design direction and the measurements are in the task context. They decide the tokens, the spacing and the grid.`
         : '';
     const reference = referenceNote(context);
+    const width = pageWidthNote(context);
     return `You are the architect of a web project. You decide the shape of the code before anyone
 writes it: the modules, the files, the boundaries between them and the tokens they share.
 
@@ -54,6 +57,7 @@ ${plan}
 ${stack}
 ${design}
 ${reference}
+${width}
 
 Rules:
 ${INPUTS_IN_CONTEXT}
@@ -67,6 +71,13 @@ ${INPUTS_IN_CONTEXT}
 - The tokens are named once, in one place: the colours, the sizes, the fonts, the spaces, the
   radii, the shadows, the durations. The names are short and say what they are (\`--color-text\`,
   not \`--c-t\`).
+- The width of the design is a token too: \`${PAGE_WIDTH_TOKEN}\` says how wide the page really is
+  in CSS pixels. The width of the reference picture is not that width — the same design comes
+  at 1152 pixels and at 2304 pixels — so the width comes from the text: the body text of a page
+  is 16..18 CSS pixels, the measurements give its size in the pixels of the picture, and the
+  width of the picture divided by that number gives the width of the design.
+- The page has a canvas: the element with the class \`page\` inside the \`body\`. The styles give it
+  the width of the design and scale it into the window; the markup writes the element.
 - The stack of the project is given. Do not invent a framework, a bundler or a library that the
   plan does not ask for.
 - If the measurements of the reference are missing or thin, measure the reference yourself with

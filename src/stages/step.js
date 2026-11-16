@@ -16,7 +16,7 @@
  * @exports STEPS_DIR, LOOKS_AT_DESIGN, stepsForRole, applyFiles, filesByTool, stepReportPath,
  *          writeStepReport, readStepReport, readStepReports, resumableStep, roleWorkOnDisk,
  *          laterSteps, missingFiles, writtenLater, stepScope, inScope, visibleFiles, filesBlock,
- *          runStepStage
+ *          referenceList, runStepStage
  * @ai.tags stages, steps, files
  * @ai.hint io
  * @ai.hint legacy-0.2
@@ -24,6 +24,8 @@
  * @changed 2026-11-15 Каталог, названный шагом, — это не «файл не написан».
  * @changed 2026-11-15 Стадия пишет файлы своего шага и файлы того же рода.
  * @changed 2026-11-15 Роль видит файлы, которые уже лежат на диске.
+ * @changed 2026-11-16 Размер референса в пикселях едет в роль: по картинке ширину дизайна
+ *                       не определить.
  */
 
 import path from 'node:path';
@@ -66,6 +68,27 @@ const BINARY_EXTENSIONS = new Set([
     'woff', 'woff2', 'ttf', 'otf', 'eot', 'mp3', 'mp4', 'webm', 'ogg', 'wav',
     'pdf', 'zip', 'gz', 'tar', 'exe', 'dll', 'so', 'dylib',
 ]);
+
+/**
+ * The names of the references with the size of the picture, in pixels.
+ *
+ * The size is the number the model cannot see: the API has resized the picture before it
+ * reached the model, so the picture alone cannot say how wide the design is.
+ * @param {{ names?: string[], sizes?: Array<{ path: string, width: number|null, height: number|null }> }} reference
+ * @returns {string}
+ * @exports
+ * @ai.hint pure
+ */
+export function referenceList(reference = {}) {
+    const sizes = new Map((Array.isArray(reference?.sizes) ? reference.sizes : [])
+        .map((item) => [String(item?.path ?? '').trim(), item]));
+    const names = Array.isArray(reference?.names) ? reference.names : [];
+    return names.map((name) => {
+        const size = sizes.get(String(name ?? '').trim());
+        const dim = size?.width && size?.height ? ` (${size.width}×${size.height} pixels)` : '';
+        return `${name}${dim}`;
+    }).join(', ');
+}
 
 /**
  * The steps of the plan that belong to a role.
@@ -808,8 +831,8 @@ export async function runStepStage({
             blocks.push([
                 '## The reference',
                 LOOKS_AT_DESIGN.has(role)
-                    ? `The screenshot of the reference is attached to this request: ${reference.names.join(', ')}.`
-                    : `The screenshot of the reference of the design: ${reference.names.join(', ')}. It is not attached`
+                    ? `The screenshot of the reference is attached to this request: ${referenceList(reference)}.`
+                    : `The screenshot of the reference of the design: ${referenceList(reference)}. It is not attached`
                         + ' to this request: work from the measurements, the palette and the tokens.',
                 'Look at it before you write: the regions, the proportions, the colours and the',
                 'spacing of the result come from that picture.',
@@ -828,6 +851,7 @@ export async function runStepStage({
                 brief,
                 design: Boolean(design),
                 reference: reference.names,
+                referenceSizes: reference.sizes,
                 ...extra,
             },
             root,
@@ -894,6 +918,7 @@ export async function runStepStage({
                     brief,
                     design: Boolean(design),
                     reference: reference.names,
+                    referenceSizes: reference.sizes,
                     ...extra,
                 },
                 root,

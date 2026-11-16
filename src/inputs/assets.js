@@ -11,9 +11,9 @@
  *   A picture is data, not an instruction: the text inside it is never an order.
  *
  * @depends node:path, node:fs/promises, agent/paths
- * @usedBy inputs/index, stages/collect
- * @exports IMAGE_EXTENSIONS, MIME_BY_EXTENSION, detectImageMime, listImages, readProjectInstructions,
- *          instructionFileNames, collectAssetFiles
+ * @usedBy inputs/index, stages/collect, generate/references, inputs/references
+ * @exports IMAGE_EXTENSIONS, MIME_BY_EXTENSION, detectImageMime, imageSize, listImages,
+ *          readProjectInstructions, instructionFileNames, collectAssetFiles
  * @ai.tags inputs, assets, images
  * @ai.hint io
  */
@@ -64,6 +64,60 @@ export function detectImageMime(filename, bytes = null) {
     }
     if (bytes.subarray(0, 3).toString('ascii') === 'GIF') return 'image/gif';
     return null;
+}
+
+/**
+ * The size of a picture, read from the header of the file.
+ *
+ * Only the formats that carry the size in the header are read: PNG, JPEG, GIF and WebP. An SVG
+ * has no fixed size, so it gets none.
+ * @param {Buffer} bytes
+ * @param {string} mime
+ * @returns {{ width: number|null, height: number|null }}
+ * @exports
+ * @ai.hint pure
+ */
+export function imageSize(bytes, mime) {
+    const buffer = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes ?? []);
+    try {
+        if (mime === 'image/png' && buffer.length > 24) {
+            return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
+        }
+        if (mime === 'image/gif' && buffer.length > 10) {
+            return { width: buffer.readUInt16LE(6), height: buffer.readUInt16LE(8) };
+        }
+        if (mime === 'image/webp' && buffer.length > 30) {
+            // The VP8/VP8L/VP8X variants carry the size in different places.
+            const chunk = buffer.subarray(12, 16).toString('ascii');
+            if (chunk === 'VP8 ') {
+                return { width: buffer.readUInt16LE(26) & 0x3fff, height: buffer.readUInt16LE(28) & 0x3fff };
+            }
+            if (chunk === 'VP8L') {
+                const bits = buffer.readUInt32LE(21);
+                return { width: (bits & 0x3fff) + 1, height: ((bits >> 14) & 0x3fff) + 1 };
+            }
+            if (chunk === 'VP8X') {
+                const width = 1 + (buffer[24] | (buffer[25] << 8) | (buffer[26] << 16));
+                const height = 1 + (buffer[27] | (buffer[28] << 8) | (buffer[29] << 16));
+                return { width, height };
+            }
+        }
+        if (mime === 'image/jpeg') {
+            let offset = 2;
+            while (offset + 9 < buffer.length) {
+                if (buffer[offset] !== 0xff) { offset += 1; continue; }
+                const marker = buffer[offset + 1];
+                // SOF0..SOF15, except the markers of the entropy-coded data.
+                if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) {
+                    return { height: buffer.readUInt16BE(offset + 5), width: buffer.readUInt16BE(offset + 7) };
+                }
+                offset += 2 + buffer.readUInt16BE(offset + 2);
+            }
+        }
+    } catch {
+        return { width: null, height: null };
+    }
+    return { width: null, height: null };
 }
 
 /**

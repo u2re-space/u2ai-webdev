@@ -416,6 +416,38 @@ the config:
 }
 ```
 
+## The frame of the page
+
+A reference may be an upscale of a narrower page: a picture of 2000 pixels may show a page of
+1440 pixels, and the model cannot tell from the picture alone — the API resizes the picture
+before the model sees it. The page therefore carries its own width, and the size of the
+reference in pixels travels to the roles that look at it (`readReferences` reads the header of
+the file; `src/inputs/assets.js` keeps the helper, and `src/generate/references.js` re-exports
+it).
+
+- The body is the container of the page: `container-type: size;` on the `body`, with
+  `min-block-size: 100dvh;` — a body with the size containment has no height of its own.
+- The canvas of the page is the element with the class `page` inside the body:
+  `container-type: inline-size;` and `inline-size: var(--real-page-width, 1024px);`. The
+  content of the page is laid out in the width of the design, not in the width of the window.
+- The canvas is scaled into the window: `--zoom: calc(100cqi / var(--real-page-width, 1024px));`
+  in the theme layer, and `zoom: var(--zoom, 1);` on the canvas. The `100cqi` is the inline
+  size of the body — the nearest container of the canvas — so the canvas takes the whole width
+  of the window, and the proportions of the design are kept.
+- `--real-page-width` is the width the design really has, in CSS pixels, and it is a token of
+  the theme layer. The architect decides it: the width of the picture is not that width — the
+  same design comes at 1152 pixels and at 2304 pixels. The width comes from the text: the body
+  text of a page is 16..18 CSS pixels, the measurements of the reference give its size in the
+  pixels of the picture, and the width of the picture divided by that number gives the width of
+  the design.
+- The narrow screen is not scaled: under the breakpoint of the narrow layout — the mobile one,
+  not the width of the design — the canvas becomes fluid (`inline-size: 100%; zoom: 1;`) and the
+  layout of the narrow screen takes over.
+
+The markup writes the canvas and the class, the styles give it the width and the scale, and
+`src/roles/page-frame.js` holds the rules of both. The background of the page belongs to the
+canvas: the body is as tall as the viewport, and the canvas is as tall as the content.
+
 ## The inputs of a run
 
 A run reads the direction of the design from the project itself:

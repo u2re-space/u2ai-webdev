@@ -411,6 +411,7 @@ export function kindRules(kind, recommendations = { libraries: [] }, options = {
         lines.push('vite.config.js is already written with the build targets of the platform profile. Do not plan a step to create it.');
         lines.push('Do not run npm run dev or npm run preview inside a step: they do not exit. Verify with npm run build and read the built files.');
         lines.push('Load the fonts from Google Fonts and the icons from a CDN, or download them with download_font and download_icons when the task needs local files.');
+        lines.push('The page has a canvas: the element with the class `page` inside the `body`. The markup writes it, the styles give it the width of the design (the token `--real-page-width`) and scale it into the window.');
     } else if (kind === 'component') {
         lines.push('A component is a reusable package, not a page. The public entry is index.js, and the demo page is only a host.');
         lines.push('The public API is the contract in .ai/component.json. Implement exactly that API.');

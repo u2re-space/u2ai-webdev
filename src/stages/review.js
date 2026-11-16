@@ -488,6 +488,7 @@ export async function reviewStage({
                 criteria: step.criteria ?? [],
                 screenshots: shots.names,
                 reference: reference.names,
+                referenceSizes: reference.sizes,
                 design: Boolean(inputs),
             },
             root,

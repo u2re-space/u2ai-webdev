@@ -21,7 +21,7 @@
 import path from 'node:path';
 import { readFile } from 'node:fs/promises';
 
-import { listImages } from './assets.js';
+import { listImages, imageSize } from './assets.js';
 import { imagePart } from '../openai/responses.js';
 
 /** The names of a file that says that it is the reference of the design. */
@@ -125,15 +125,20 @@ export async function findReferences({ root, config = {}, task = '', limit = 4 }
  *
  * The picture goes into the request as it is: the API takes the bytes of the image, not its
  * path. A picture that cannot be read is skipped and reported.
+ *
+ * The size of the picture in pixels comes along: the model sees a picture that the API has
+ * resized, and it cannot tell from the picture itself whether the reference is an upscale of
+ * a narrower page. The numbers are the only honest answer.
  * @param {string} root
  * @param {Array<{ path: string }>} files
- * @returns {Promise<{ parts: object[], names: string[], warnings: string[] }>}
+ * @returns {Promise<{ parts: object[], names: string[], sizes: object[], warnings: string[] }>}
  * @exports
  * @ai.hint io
  */
 export async function readReferences(root, files = []) {
     const parts = [];
     const names = [];
+    const sizes = [];
     const warnings = [];
     for (const item of Array.isArray(files) ? files : []) {
         const rel = String(item?.path ?? '').trim();
@@ -144,9 +149,11 @@ export async function readReferences(root, files = []) {
                 || (/\.jpe?g$/i.test(rel) ? 'image/jpeg' : 'image/png');
             parts.push(imagePart(bytes, mime));
             names.push(rel);
+            const size = imageSize(bytes, mime);
+            sizes.push({ path: rel, width: size.width, height: size.height });
         } catch (error) {
             warnings.push(`Референс ${rel} не прочитан: ${error?.message ?? error}`);
         }
     }
-    return { parts, names, warnings };
+    return { parts, names, sizes, warnings };
 }

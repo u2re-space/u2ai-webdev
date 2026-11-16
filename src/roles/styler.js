@@ -12,6 +12,7 @@
 import { UNTRUSTED } from './untrusted.js';
 import { INPUTS_IN_CONTEXT } from './inputs.js';
 import { referenceNote } from './reference.js';
+import { pageScaleRules, pageWidthNote } from './page-frame.js';
 import { webDevelopment } from './web-development.js';
 
 /** The name of the role. */
@@ -32,7 +33,7 @@ export const maxTurns = 16;
 /**
  * The instructions of the role.
  * @param {{ task?: string, step?: object, brief?: string, style?: string, design?: string,
- *   measurements?: string, palette?: string }} [context]
+ *   measurements?: string, palette?: string, referenceSizes?: object[] }} [context]
  * @returns {string}
  * @exports
  * @ai.hint pure
@@ -50,6 +51,7 @@ export function instructions(context = {}) {
         ? 'The design direction, the palette and the measurements are in the task context. The styles have to match them: the colours, the type scale, the spacing and the sizes of the blocks.'
         : '';
     const reference = referenceNote(context);
+    const width = pageWidthNote(context);
     const repair = Array.isArray(context.issues) && context.issues.length
         ? `The review of the step found what has to be fixed, and the request names the file, the
 defect and the change that is asked for. Fix it now: read the file, make the change, write the
@@ -65,6 +67,7 @@ ${brief}
 ${style}
 ${design}
 ${reference}
+${width}
 ${repair}
 
 Rules:
@@ -110,6 +113,8 @@ ${INPUTS_IN_CONTEXT}
 - Give the program its arguments: \`run_command\` takes the program and the arguments as a JSON
   array. A program without its arguments (a bare \`node\`) waits for the input and brings
   nothing back.
+
+${pageScaleRules()}
 
 ${webDevelopment('styler')}
 
