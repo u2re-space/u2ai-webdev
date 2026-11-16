@@ -32,6 +32,7 @@ import { markupStage } from './markup.js';
 import { codingStage } from './coding.js';
 import { stylingStage } from './styling.js';
 import { buildStage } from './build.js';
+import { sightStage } from './sight.js';
 import { vectorStage } from './vector.js';
 import { iconifyStage } from './iconify.js';
 import { reviewStage } from './review.js';
@@ -153,6 +154,22 @@ export const STAGES = Object.freeze([
         apply: (ctx, result) => { ctx.build = result?.build ?? null; },
     },
     {
+        name: 'sight',
+        title: 'Look at the page',
+        // The page is shot after the build: the styles have to be compiled and wired before
+        // there is something to look at.
+        dependsOn: ['build'],
+        run: sightStage,
+        args: (ctx) => ({ apply: ctx.apply !== false }),
+        apply: (ctx, result) => {
+            ctx.shots = [...(ctx.shots ?? []), ...(result?.shots ?? [])];
+            // The words of the page — the console of the browser and the log of the bundler —
+            // travel to the stages after this one.
+            ctx.pageLogs = [...(ctx.pageLogs ?? []), ...(result?.logs ?? [])];
+            ctx.reports.push(...(result?.steps ?? []));
+        },
+    },
+    {
         name: 'vector',
         title: 'Draw the vector graphics',
         dependsOn: ['coding'],
@@ -171,8 +188,15 @@ export const STAGES = Object.freeze([
     {
         name: 'review',
         title: 'Review the result',
-        dependsOn: ['coding', 'styling', 'build', 'vector', 'iconify'],
+        dependsOn: ['coding', 'styling', 'build', 'sight', 'vector', 'iconify'],
         run: reviewStage,
+        // The reviewer sees the page: the screenshots of the stage of the sight are the
+        // pictures of the result, and the reference is the picture of the target. The words of
+        // the page come with them.
+        args: (ctx) => ({
+            screenshots: ctx.shots ?? [],
+            logs: (ctx.pageLogs ?? []).join('\n\n'),
+        }),
         apply: (ctx, result) => { ctx.review = result ?? null; },
     },
     {

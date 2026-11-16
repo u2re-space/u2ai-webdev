@@ -168,3 +168,35 @@ test('the files over the native backend: the write and the read on the disk', as
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test('an error of the filesystem is not hidden as a missing file', async () => {
+  const root = await tempDir();
+  try {
+    const failure = Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
+    const backend = {
+      readFile: async () => { throw failure; },
+      writeFile: async () => {},
+      readdir: async () => { throw failure; },
+      stat: async () => { throw failure; },
+      lstat: async () => { throw failure; },
+    };
+    const access = createAccess({ root, fs: backend });
+    // The permission error travels to the caller instead of an empty answer.
+    await assert.rejects(() => access.fs.readText('page.html'), /permission denied/);
+    await assert.rejects(() => access.fs.list('.'), /permission denied/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('a missing path is still a missing path and not an error', async () => {
+  const root = await tempDir();
+  try {
+    const access = createAccess({ root });
+    const state = await access.fs.stat('nothing.txt');
+    assert.equal(state.exists, false);
+    await assert.rejects(() => access.fs.readText('nothing.txt'), /ENOENT|not found|no such file/i);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

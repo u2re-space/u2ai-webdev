@@ -21,6 +21,16 @@ import { writeFileAtomic } from '../shared/house.js';
 
 const utf8 = new TextDecoder('utf-8', { fatal: true });
 
+/** Return null only when a path disappeared; other filesystem failures are actionable errors. */
+async function statOrNull(target, operation = stat) {
+    try {
+        return await operation(target);
+    } catch (error) {
+        if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') return null;
+        throw error;
+    }
+}
+
 /**
  * True when the first 8 KiB contain a NUL byte.
  * `readTextFile` and `searchFiles` skip those files.
@@ -45,7 +55,7 @@ async function backup(abs, rel, backupDir) {
     await mkdir(path.dirname(target), { recursive: true });
     let destination = target;
     let n = 1;
-    while (await stat(destination).catch(() => null)) destination = `${target}.${n++}.bak`;
+    while (await statOrNull(destination)) destination = `${target}.${n++}.bak`;
     await copyFile(abs, destination);
     return destination;
 }
@@ -62,7 +72,7 @@ async function nearestDirectory(root, rel) {
     while (parts.length) {
         parts.pop();
         const candidate = parts.join('/') || '.';
-        const info = await stat(path.join(root, ...parts)).catch(() => null);
+        const info = await statOrNull(path.join(root, ...parts));
         if (info?.isDirectory()) return candidate;
     }
     return null;
@@ -80,7 +90,7 @@ async function nearestDirectory(root, rel) {
  */
 export async function listFiles({ root, dir = '.', depth = 2, includeHidden = false, maxEntries = 400 }) {
     const { abs, rel } = await resolveInside(root, dir);
-    const info = await stat(abs).catch(() => null);
+    const info = await statOrNull(abs);
     if (!info) {
         const parent = await nearestDirectory(root, rel);
         if (!parent) throw new Error(`Каталог не найден: ${dir}`);
@@ -98,7 +108,12 @@ export async function listFiles({ root, dir = '.', depth = 2, includeHidden = fa
     async function walk(current, prefix, level) {
         if (truncated) return;
         let entries;
-        try { entries = await readdir(current, { withFileTypes: true }); } catch { return; }
+        try {
+            entries = await readdir(current, { withFileTypes: true });
+        } catch (error) {
+            if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') return;
+            throw error;
+        }
         entries.sort((a, b) => (a.isDirectory() === b.isDirectory() ? a.name.localeCompare(b.name) : a.isDirectory() ? -1 : 1));
         for (const entry of entries) {
             if (!includeHidden && entry.name.startsWith('.') && entry.name !== '.github') continue;
@@ -130,7 +145,7 @@ export async function listFiles({ root, dir = '.', depth = 2, includeHidden = fa
  */
 export async function readTextFile({ root, file, startLine = null, endLine = null, maxBytes = 256 * 1024 }) {
     const { abs, rel } = await resolveInside(root, file, { allowRoot: false });
-    const info = await stat(abs).catch(() => null);
+        const info = await statOrNull(abs);
     if (!info) throw new Error(`Файл не найден: ${file}`);
     if (!info.isFile()) throw new Error(`Не файл: ${file}`);
     if (await isBinary(abs, info.size)) throw new Error(`Бинарный файл (${formatBytes(info.size)}); этот инструмент читает только текст.`);
@@ -222,7 +237,12 @@ export async function searchFiles({
     async function walk(current, prefix) {
         if (truncated) return;
         let entries;
-        try { entries = await readdir(current, { withFileTypes: true }); } catch { return; }
+        try {
+            entries = await readdir(current, { withFileTypes: true });
+        } catch (error) {
+            if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') return;
+            throw error;
+        }
         for (const entry of entries) {
             if (truncated) return;
             const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
@@ -245,11 +265,18 @@ export async function searchFiles({
                     if (results.length >= maxResults) { truncated = true; break; }
                     continue;
                 }
-                const info = await stat(full).catch(() => null);
+                const info = await statOrNull(full);
                 if (!info || info.size > maxFileBytes) continue;
                 if (await isBinary(full, info.size)) continue;
                 let text;
-                try { text = utf8.decode(await readFile(full)); } catch { continue; }
+                let bytes;
+                try {
+                    bytes = await readFile(full);
+                } catch (error) {
+                    if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') continue;
+                    throw error;
+                }
+                try { text = utf8.decode(bytes); } catch { continue; }
                 scanned++;
                 const lines = text.split(/\r?\n/);
                 for (let i = 0; i < lines.length; i++) {
@@ -283,7 +310,7 @@ export async function writeTextFile({ root, file, content, overwrite = true, max
     if (Buffer.byteLength(content) > maxBytes) throw new Error(`Содержимое больше лимита ${formatBytes(maxBytes)}.`);
     const { abs, rel } = await resolveInside(root, file, { forWrite: true, allowRoot: false });
     if (rel === '.backup' || rel.startsWith('.backup/')) throw new Error(`Запись в .backup запрещена: ${rel}`);
-    const existing = await stat(abs).catch(() => null);
+    const existing = await statOrNull(abs);
     if (existing?.isDirectory()) throw new Error(`По этому пути находится каталог: ${rel}`);
     if (existing && !overwrite) throw new Error(`Файл уже существует: ${rel} (overwrite=false).`);
     let backupPath = null;
@@ -310,7 +337,7 @@ export async function replaceInFile({ root, file, search, replacement, all = fal
     if (typeof replacement !== 'string') throw new Error('replacement должен быть строкой.');
     const { abs, rel } = await resolveInside(root, file, { forWrite: true, allowRoot: false });
     if (rel === '.backup' || rel.startsWith('.backup/')) throw new Error(`Запись в .backup запрещена: ${rel}`);
-    const info = await stat(abs).catch(() => null);
+    const info = await statOrNull(abs);
     if (!info?.isFile()) throw new Error(`Файл не найден: ${file}`);
     if (info.size > maxBytes) throw new Error(`Файл больше лимита ${formatBytes(maxBytes)}.`);
     let text;
@@ -343,7 +370,7 @@ export async function replaceInFile({ root, file, search, replacement, all = fal
 export async function deleteFile({ root, file, backupDir = null, backupSlot = null }) {
     const { abs, rel } = await resolveInside(root, file, { forWrite: true, allowRoot: false });
     if (rel === '.backup' || rel.startsWith('.backup/')) throw new Error(`Запись в .backup запрещена: ${rel}`);
-    const info = await stat(abs).catch(() => null);
+    const info = await statOrNull(abs);
     if (!info) throw new Error(`Файл не найден: ${file}`);
     if (!info.isFile()) throw new Error('Удалять можно только файлы (не каталоги).');
     const backupPath = await backup(abs, rel, backupDir);
@@ -380,7 +407,7 @@ export async function copyPath({ root, source, destination }) {
     if (from.rel === '.backup' || from.rel.startsWith('.backup/')) throw new Error(`Чтение из .backup запрещено: ${from.rel}`);
     if (to.rel === '.backup' || to.rel.startsWith('.backup/')) throw new Error(`Запись в .backup запрещена: ${to.rel}`);
 
-    const info = await lstat(from.abs).catch(() => null);
+    const info = await statOrNull(from.abs, lstat);
     if (!info) throw new Error(`Источник не найден: ${source}`);
     if (info.isSymbolicLink()) throw new Error(`Копирование символических ссылок запрещено: ${from.rel}`);
     if (!info.isFile() && !info.isDirectory()) throw new Error(`Источник должен быть файлом или каталогом: ${from.rel}`);
@@ -407,7 +434,7 @@ export async function copyPath({ root, source, destination }) {
     }
     await validateTree(from.abs, from.rel);
 
-    const targetInfo = await lstat(to.abs).catch(() => null);
+    const targetInfo = await statOrNull(to.abs, lstat);
     if (targetInfo) throw new Error(`Путь назначения уже существует: ${to.rel}`);
     await mkdir(path.dirname(to.abs), { recursive: true });
     await cp(from.abs, to.abs, { recursive: true, errorOnExist: true, force: false, dereference: false });

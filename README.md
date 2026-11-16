@@ -76,6 +76,7 @@ report into the directory of the run and hands the result to the next one.
 | `coding` | Write the code: the scripts, the modules, the data. |
 | `styling` | Write the styles: the tokens, the layout, the states. |
 | `build` | Connect the styles: the entry point, the compilation, the links of the markup. |
+| `sight` | Open the page in a browser, shoot it, and let the styler compare the picture with the reference and fix the styles. |
 | `vector` | Draw the vector graphics as code: the SVG of the ornaments and the illustrations. |
 | `iconify` | Choose the icons of the interface and check that every one of them is on the disk. |
 | `review` | Review the result: the markup, the code, the styles and the accessibility — and repair what it finds. |
@@ -213,6 +214,120 @@ gives the verdict, and a model that answered without a single call is asked once
 the schema in the channel of the tools. A model that is pinned to a JSON answer
 (`schemaChannel: format`) never calls a tool: for it the truth is the context, and the report
 of the audit says how many files were on the disk and how many calls the auditor made.
+
+### The eye of the run
+
+The styles of a page cannot be judged by the code that writes them. A rule that compiles may
+still break the layout: the type is enormous, the columns run out of the screen, the picture is
+stretched. The stage `sight` closes that gap — it opens the page of the project in a real
+browser, takes a screenshot of it and gives the picture to the styler together with the
+reference of the design, so the role sees what it has written and what it has to reach. The
+styles it fixes land on the disk, and the page is shot again: the loop is bounded by
+`browser.stylingVisionRounds`.
+
+The stage runs after the stage `build`, because the page has to be assembled before it can be
+looked at: the SCSS is compiled and the markup is wired to the stylesheet there. A page that
+cannot be opened — no browser, no entry point, a broken build — is reported and the run goes
+on: the styles are written either way, they are simply not checked by the eye.
+
+**The page it looks at.** Two engines are supported. **Ego Lite** (`ego-browser`) is the engine
+of the house when it is installed: the browser with the window and the interaction. Otherwise
+the run falls back to **headless Chrome/Edge**, which is read-only — it opens a page and takes
+a picture of it.
+
+The live page of the project is preferred: the dev server of Vite (`npm run dev` →
+`http://localhost:5173/`) shows the styles as they are now, compiled by the bundler, so the
+next picture shows the fix right away. A server that already runs is used as it is; a server
+that is not running is started by the run and stopped by it afterwards. The project on Vite
+keeps its styles inside the script (`import './styles.scss'`), so the page of the root has no
+styles at all — the build (`dist/`) is what shows something when there is no live server.
+
+**The words of the page.** A picture says how the page looks; the console says why it does not
+work. The run speaks to the browser over the Chrome DevTools Protocol and collects the
+console, the exceptions and the failed requests while the page loads; the log of the bundler
+comes with them. The role that fixes the page reads both: a failed request names the file
+that is missing, an exception names the line that broke, a warning of the bundler names the
+import that cannot be resolved.
+
+**The memory of the reference.** The notes of the role — what the reference looks like and
+what still differs from it — go into the context of the run. The stages after the styles read
+them, so they know what the page is and what it is not, without seeing the picture.
+
+```json
+{
+  "browser": {
+    "engine": "auto",
+    "executable": null,
+    "timeoutMs": 45000,
+    "viewport": { "width": 1440, "height": 900 },
+    "url": "",
+    "devServer": "auto",
+    "devTimeoutMs": 60000,
+    "stylingVision": "auto",
+    "stylingVisionRounds": 2
+  }
+}
+```
+
+`browser.engine` is `auto` (prefer Ego Lite), `ego` (demand it) or `chrome` (demand a headless
+Chromium). `browser.url` is the live address of the page; empty means that the run serves the
+project itself. `browser.devServer` is `off` (never start it), `auto` (start it when the
+project has a `dev` script and nothing answers) or `always`. `browser.stylingVision` is `off`
+(never shoot), `auto` (shoot when the reference of the design is there — there is nothing to
+compare with otherwise) or `always`.
+
+The same eye is available to the roles as the tool `screenshot`: it shoots a page of the project
+and answers with the file of the picture **and with what the page says about itself**. The
+styler and the editor may call it, so a role can look at the page in the middle of the work,
+not only when the stage asks it to.
+
+The reviewer sees the same pictures and the same words: the screenshots of the stage `sight`
+travel with the review, next to the reference of the design, so the verdict is about the page
+and not only about the code.
+
+### The command `sight`
+
+`ai-webdev sight` looks at the page of a project that is already there and fixes the styles.
+It does not plan, does not write the markup and does not start the whole pipeline: the work
+that is on the disk stays, and only the styles are touched.
+
+```bash
+ai-webdev sight "Make the landing like the reference" --model google/gemini-4-hydrogen
+```
+
+The command finds the reference of the design the way a run finds it, shoots the page of the
+project, gives the picture and the words of the page to the styler and writes the styles it
+fixed. The files of the project that are not styles are not touched.
+
+The run that was interrupted is continued by its id: `ai-webdev run --resume <id>`. The stages
+that are done are skipped, and the stage that fell is done again.
+
+### The hand-over between the roles
+
+A role that meets work of another kind does not do it herself and does not describe it either:
+she hands it over. The markup that does not fit the design goes to the styler, the styler who
+finds the class names broken goes to the markup, the coder who needs a picture of the page goes
+to the role that can take one.
+
+The work goes to a **separate session**: the role that receives it starts with a clean
+conversation, her own instructions, her own tools and her own budget of turns. The conversation of
+the caller is not continued — a session that has already spent its context on the wrong problem
+is the wrong place to solve the right one. What comes back is the report of the role and the
+list of the files it wrote; the disk keeps the truth. The pictures of the reference and the
+context of the step travel with the work: the role continues the work, not the conversation.
+
+The roles that may be handed work are `markup`, `styler`, `coder`, `editor` and `iconifier`.
+The roles of the whole run — the planner, the architect, the reviewer — are not among them:
+they work once for the whole run, and a step does not send them a piece of work.
+
+The hand-over is one level deep: a delegated role never gets the delegation tool itself, so
+there is no chain of sessions that nobody reads. A role may not hand work to itself.
+
+```json
+{
+  "tools": { "delegate": true }
+}
+```
 
 ### The pictures of the reference
 
@@ -353,6 +468,16 @@ instead of the data of its schema is asked once more, and the last turn belongs 
 when the turns of the role run out, it is asked to give the answer alone, without any tool. A
 role that returns no data at all is reported with the reason: a refusal of the model, an error of
 the answer or the text it gave instead of the schema.
+
+The schema travels in the prompt as well, and not only as the `text.format.json_schema` rule of
+the API: a gateway that ignores that rule leaves the model with its own form, and the fields of
+the answer get names nobody expects. The names of the fields are in the prompt, so the model
+knows the contract of its answer even when the rule of the API is ignored.
+
+The answer is checked against the schema after every turn. An answer that does not fit keeps its
+data — the stages know how to fill a missing field — and the stage reports the problems: a run
+never passes a malformed answer in silence. The arguments of a tool call are read as JSON too:
+a call with broken arguments does not run the tool, and the model is told what to fix.
 
 A role of a step has to write the files of the step. An answer that names no file, that writes
 nothing, or that holds nothing but a placeholder is a description of the work, not the work:
@@ -595,8 +720,11 @@ gateway (RouterAI, November 2026):
 | Model | Context | Output | Ceiling | Ladder |
 |---|---|---|---|---|
 | `minimax/minimax-m3.1-flash` | 1M tokens (4 MiB) | 524K | `xhigh` | `low`, `medium`, `high`, `xhigh` |
-| `google/gemini-4-hydrogen` | 1M tokens (4 MiB) | 1M | `xhigh` | `low`, `medium`, `high`, `xhigh` |
-| `moonshotai/kimi-k3.1-pro` | 1M tokens (4 MiB) | 944K | `medium` | `none`, `low`, `medium` |
+| `google/gemini-4-hydrogen` | 1M tokens (4 MiB) | 64K | `xhigh` | `low`, `medium`, `high`, `xhigh` |
+| `moonshotai/kimi-k3.1-pro` | 1M tokens (4 MiB) | 944K | `high` | `none`, `low`, `medium`, `high` |
+| `openai/gpt-6.1-sol` | 1M tokens (4 MiB) | 32K | `xhigh` | `low`, `medium`, `high`, `xhigh` |
+| `openai/gpt-6.1-terra` | 512K tokens (2 MiB) | 16K | `high` | `low`, `medium`, `high` |
+| `openai/gpt-6-luna` | 272K tokens | 128K | `xhigh` | `low`, `medium`, `high`, `xhigh` |
 
 MiniMax refuses to work without reasoning ("Reasoning is mandatory for this endpoint and
 cannot be disabled"), so a request for `none` is raised to `low` instead of being refused.
@@ -604,12 +732,11 @@ Kimi takes the reasoning off without a refusal and answers in a fraction of the 
 0.8 s against about 31 s at `medium` on the same question), so `none` stays on its ladder —
 `ai-webdev run "<task>" --effort none --model moonshotai/kimi-k3.1-pro` is the fast run.
 
-Gemini 4 Hydrogen is the alternative to the Kimi: it decodes up to 1M tokens with the
-continuation and takes the effort up to `xhigh`, so a run that needs a long answer is not cut
-short. The card of the vendor names the four levels of its effort (`low`, `medium`, `high`,
-`xhigh`) and has no `none`, so the reasoning off is raised to `low` there as well. The Kimi
-stays the fallback model of the house: the `fallback.models` chain of the configuration names
-it for the Gemini and for every other model.
+Gemini 4 Hydrogen is the alternative to the Kimi: it takes the effort up to `xhigh` and its
+answer is cut at 64K tokens. The card of the vendor names the four levels of its effort (`low`,
+`medium`, `high`, `xhigh`) and has no `none`, so the reasoning off is raised to `low` there as
+well. The Kimi stays the fallback model of the house: the `fallback.models` chain of the
+configuration names it for the Gemini and for every other model.
 
 ```json
 {
@@ -708,6 +835,7 @@ The sections of the file:
 | `model`, `baseURL`, `apiKey`, `backends`, `modelsBackends`, `fallback` | The API: the model, the hosts, the pool of the fallbacks. |
 | `reasoning`, `limits`, `models` | The effort, the profile of the stages, the summaries, the budgets of the run and the ceilings of the models. |
 | `tools` | The tools the roles may call. |
+| `browser` | The eye of the run: the engine (`auto`, `ego`, `chrome`), the path of the browser, the timeout, the frame of the picture, and the eye of the styles (`stylingVision`, `stylingVisionRounds`). |
 | `stack` | The stack the generator writes for: the framework, the markup, the styles, the script, the icons. |
 | `agent` | The knobs of the run: `fidelity`, `creativity`, `platform`, `kind`, `approve`, `extract`. |
 | `pace` | The dials of the team: `speed`, `quality` and the per-stage dials. |
@@ -844,7 +972,10 @@ still works.
 
 The files of the house are written whole: the bytes go to a file next to the target and the
 target is replaced by a rename. A reader never sees half of a file, and a run that dies in the
-middle leaves the old file and not a broken one.
+middle leaves the old file and not a broken one. The same is true of the JSON of the house: the
+manifest, the state of a run, the plan, the map, the record of a job, the config and the
+`package.json` of the project are written whole. A crash in the middle of a write leaves the
+old file and not a half-written JSON that no one can read.
 
 ## The write policy
 
@@ -1272,6 +1403,11 @@ not opened, the dot-files are hidden unless they are asked for, the sizes are in
 path that does not exist yet answers with the nearest existing parent. `copy` copies a file or a
 tree under the same rules: no secret, no symbolic link, no directory into itself, and the
 destination must not exist unless `overwrite` is asked for.
+
+An error of the filesystem is not hidden as a missing file: only `ENOENT` and `ENOTDIR` mean
+"there is nothing here", and every other failure — a denied permission, a broken device — travels
+to the caller. A run that meets such a failure says what happened instead of reporting an empty
+directory or a file that is not there.
 
 ## Limits
 

@@ -24,8 +24,8 @@ import { ENUMS } from '../config/constants.js';
  *     endpoint refuses to work without reasoning ("Reasoning is mandatory for this endpoint
  *     and cannot be disabled"), so `none` is not on its ladder: a request for `none` is raised
  *     to `low` instead of being refused.
- *   - Gemini 4 Hydrogen — 1M tokens of context (4 MiB of text) and up to 1M of output with the
- *     continuation. The card of the vendor names the four levels of the effort (`low`, `medium`,
+ *   - Gemini 4 Hydrogen — 1M tokens of context (4 MiB of text) and 64K of output. The card
+ *     of the vendor names the four levels of the effort (`low`, `medium`,
  *     `high`, `xhigh`); there is no `none`, so the reasoning off is raised to `low`. The schema
  *     travels as a tool of its own (`auto`): the model calls its tools and submits the answer
  *     with the call of the schema.
@@ -36,13 +36,13 @@ import { ENUMS } from '../config/constants.js';
  *     fallback of the house: the run answers with it when the primary model refuses.
  */
 export const MODEL_PROFILES = Object.freeze({
-    'minimax/minimax-m3.1-flash': { window: 1000 * 1000 * 4, maxOutput: 512 * 1024, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'], schemaChannel: 'format' },
+    'minimax/minimax-m3.1-flash': { window: 1024 * 1024 * 4, maxOutput: 512 * 1024, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'], schemaChannel: 'format' },
     'google/gemini-4-hydrogen': { window: 1024 * 1024 * 4, maxOutput: 64 * 1024, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'], schemaChannel: 'auto' },
-    'moonshotai/kimi-k3.1-pro': { window: 1024 * 1024 * 4, maxOutput: 1024 * 1024, ceiling: 'high', efforts: ['none', 'low', 'medium', 'high'], schemaChannel: 'auto' },
-    'openai/gpt-6.1-sol': { window: 272 * 1024 * 4, maxOutput: 128 * 1024, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'], schemaChannel: 'format' },
-    'openai/gpt-6.1-terra': { window: 272 * 1024 * 4, maxOutput: 128 * 1024, ceiling: 'high', efforts: ['low', 'medium', 'high'], schemaChannel: 'format' },
+    'moonshotai/kimi-k3.1-pro': { window: 1024 * 1024 * 4, maxOutput: 944_000, ceiling: 'high', efforts: ['none', 'low', 'medium', 'high'], schemaChannel: 'auto' },
+    'openai/gpt-6.1-sol': { window: 1024 * 1024 * 4, maxOutput: 32_768, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'], schemaChannel: 'format' },
+    'openai/gpt-6.1-terra': { window: 512 * 1024 * 4, maxOutput: 16_384, ceiling: 'high', efforts: ['low', 'medium', 'high'], schemaChannel: 'format' },
     'openai/gpt-6-luna': { window: 272 * 1024 * 4, maxOutput: 128 * 1024, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'], schemaChannel: 'format' },
-           'gpt-6-luna': { window: 272 * 1024 * 4, maxOutput: 128 * 1024, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'], schemaChannel: 'format' },
+    'gpt-6-luna': { window: 272 * 1024 * 4, maxOutput: 128 * 1024, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'], schemaChannel: 'format' },
     'openai/gpt-image-2.6-sunburst': { window: 0, maxOutput: 0, ceiling: null, efforts: [] },
 });
 

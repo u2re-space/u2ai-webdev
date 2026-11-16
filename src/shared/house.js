@@ -187,11 +187,11 @@ export async function readManifest(root = process.cwd()) {
     if (text === null) return { manifestVersion: MANIFEST_VERSION, systems: {} };
     try {
         const parsed = JSON.parse(text);
-        if (!parsed || typeof parsed !== 'object') throw new Error('the contract is not an object');
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('the contract is not an object');
         if (parsed.manifestVersion !== MANIFEST_VERSION) {
             return { manifestVersion: MANIFEST_VERSION, systems: {} };
         }
-        if (!parsed.systems || typeof parsed.systems !== 'object') parsed.systems = {};
+        if (!parsed.systems || typeof parsed.systems !== 'object' || Array.isArray(parsed.systems)) parsed.systems = {};
         return parsed;
     } catch {
         return { manifestVersion: MANIFEST_VERSION, systems: {} };

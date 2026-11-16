@@ -13,6 +13,7 @@ import { UNTRUSTED } from './untrusted.js';
 import { INPUTS_IN_CONTEXT } from './inputs.js';
 import { referenceNote } from './reference.js';
 import { webDevelopment } from './web-development.js';
+import { DELEGATE_NAMES, delegationNote } from '../agent/delegation.js';
 
 /** The name of the role. */
 export const name = 'coder';
@@ -24,6 +25,7 @@ export const schema = 'code';
 export const tools = [
     'list_files', 'read_file', 'write_file', 'replace_text', 'delete_file', 'make_dir',
     'copy_path', 'search_files', 'run_command', 'read_skill', 'web_guidance',
+    'delegate_role',
 ];
 
 /** How many turns the role may spend. */
@@ -66,6 +68,7 @@ ${repair}
 
 Rules:
 ${INPUTS_IN_CONTEXT}
+${delegationNote(DELEGATE_NAMES)}
 - The platform of today comes before the habit of yesterday: look the guides up with the
   \`web_guidance\` tool before you write a dialog, a form or a table, and follow what they
   say.

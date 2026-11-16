@@ -339,6 +339,10 @@ export async function planStage({
         };
     }
 
+    // The answer of the planner that does not fit the schema is kept, but it is reported:
+    // a run must not pass a malformed plan in silence.
+    const schemaWarnings = (result.schemaProblems ?? []).map((problem) => `План не по схеме: ${problem}.`);
+
     if (!plan?.steps?.length) {
         return {
             stage: 'plan',
@@ -365,7 +369,7 @@ export async function planStage({
         plan,
         file,
         text: planText(plan),
-        warnings: plan.warnings,
+        warnings: [...(plan.warnings ?? []), ...schemaWarnings],
         turns: result.turns,
         usage: result.usage,
         runId: run,

@@ -177,9 +177,18 @@ export function extractToolCalls(raw) {
     for (const item of Array.isArray(raw?.output) ? raw.output : []) {
         if (item?.type !== 'function_call') continue;
         const rawArgs = textOf(item.arguments) || '{}';
-        let args = {};
-        try { args = JSON.parse(rawArgs); } catch { args = {}; }
-        out.push({ id: item.id ?? null, callId: item.call_id ?? null, name: textOf(item.name), arguments: args, raw: rawArgs });
+        let args = null;
+        let parseError = null;
+        try {
+            args = JSON.parse(rawArgs);
+            if (!args || typeof args !== 'object' || Array.isArray(args)) {
+                parseError = 'arguments must be a JSON object';
+                args = null;
+            }
+        } catch (error) {
+            parseError = error?.message ?? 'invalid JSON';
+        }
+        out.push({ id: item.id ?? null, callId: item.call_id ?? null, name: textOf(item.name), arguments: args, parseError, raw: rawArgs });
     }
     return out;
 }

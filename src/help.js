@@ -25,6 +25,10 @@ Usage:
 Commands:
   run <task>                  Take the task through the whole pipeline of the stages.
   plan <task>                 Plan the work and show the plan.
+  sight [task]                Look at the page of the project and fix the styles:
+                              the picture of the result and the reference of the design
+                              go to the styler, and the styles it fixes are written.
+                              The work that is already on the disk stays.
   stages                      Show the stages of the pipeline.
   component [publish|list|search|show|rm|path]
                               The local registry of the components.

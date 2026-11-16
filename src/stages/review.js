@@ -31,7 +31,7 @@ import { checkMarkupStyles, renamedClasses } from '../agent/markup-styles.js';
 import { readReferences } from '../inputs/references.js';
 import { architectureText } from './architect.js';
 import { projectFiles } from './project-files.js';
-import { applyFiles, filesByTool } from './step.js';
+import { applyFiles, filesByTool, LOOKS_AT_DESIGN } from './step.js';
 import { runId, runFile, writeJsonFile, readJsonFile } from './workspace.js';
 
 /** The name of the file of the review inside the directory of the run. */
@@ -215,6 +215,10 @@ export function repairText(step, issues = [], { again = false } = {}) {
         '',
         lines,
         '',
+        'The picture of the page and the picture of the reference of the design are attached to',
+        'this request. Look at them: a defect of the layout is a picture, and the picture says',
+        'more about it than the text does.',
+        '',
         ...(again
             ? ['The last repair did not close the defect: the file on the disk is still broken.',
                 'Read it again and make the change that is asked for — not the same change again.']
@@ -262,6 +266,7 @@ export async function repairIssues({
     env = process.env,
     again = false,
     runContext = null,
+    parts = [],
 } = {}) {
     const list = Array.isArray(issues) ? issues : [];
     const repaired = [];
@@ -303,6 +308,9 @@ export async function repairIssues({
             notify,
             runContext,
             stage: 'repair',
+            // The role that repairs the styles sees the page and the reference: a defect of
+            // the layout is a picture, not a line of text.
+            parts: LOOKS_AT_DESIGN.has(group.role) ? parts : [],
         });
         if (!result.data) {
             warnings.push(`Ремонт роли ${group.role} не удался: ${roleReason(result) || 'роль не вернула ответ'}.`);
@@ -412,7 +420,8 @@ export async function stylePairIssues({
  *
  * @param {{ client: object, config?: object, root?: string, task?: string, plan?: object|null,
  *   architecture?: object|null, inputs?: object|null, reports?: object[], screenshots?: string[],
- *   runId?: string|null, notify?: (event: object) => void, env?: object, runContext?: object|null }} request
+ *   logs?: string, runId?: string|null, notify?: (event: object) => void, env?: object,
+ *   runContext?: object|null }} request
  * @returns {Promise<{ stage: string, ok: boolean, verdict: string, reviews: object[],
  *   issues: object[], file: string|null, warnings: string[], runId: string }>}
  * @exports
@@ -428,6 +437,7 @@ export async function reviewStage({
     inputs = null,
     reports = [],
     screenshots = [],
+    logs = '',
     runId: id = null,
     notify = () => {},
     env = process.env,
@@ -457,6 +467,9 @@ export async function reviewStage({
     const shots = await readScreenshots(root, screenshots);
     const reference = await readReferences(root, inputs?.references ?? []);
     const warnings = [...shots.warnings, ...reference.warnings];
+    // The words of the page: the console of the browser and the log of the bundler. The
+    // reviewer judges the page as it is, and the page says what is wrong with it.
+    const pageLog = String(logs ?? '').trim();
     const reviews = [];
 
     /**
@@ -475,6 +488,14 @@ export async function reviewStage({
         ].join('\n'));
         if (brief) blocks.push(brief);
         if (inputs) blocks.push('The design direction and the measurements are in the task context.');
+        if (pageLog) {
+            blocks.push([
+                '## What the page says about itself',
+                'The console of the browser and the log of the bundler. They name the cause of',
+                'what the screenshot shows.',
+                pageLog,
+            ].join('\n'));
+        }
 
         const result = await runRole({
             client,
@@ -511,6 +532,10 @@ export async function reviewStage({
             recommendations: Array.isArray(data.recommendations) ? data.recommendations : [],
         };
         if (!result.data) warnings.push(`Шаг ${step.id}: ревьюер не вернул ответ.`);
+        // The answer that does not fit the schema is kept, but it is reported.
+        for (const problem of result.schemaProblems ?? []) {
+            warnings.push(`Шаг ${step.id}: ответ ревьюера не по схеме — ${problem}.`);
+        }
         return review;
     };
 
@@ -585,6 +610,8 @@ export async function reviewStage({
                 env,
                 again: round > 0,
                 runContext,
+                // The role that repairs the styles sees the page and the reference.
+                parts: [...shots.parts, ...reference.parts],
             });
             warnings.push(...repair.warnings);
             repairs.push(repair);

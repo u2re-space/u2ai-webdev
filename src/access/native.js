@@ -39,6 +39,16 @@ function state(info) {
     };
 }
 
+/** Return null only for a missing path; permission and device errors must remain visible. */
+async function statOrNull(operation, target) {
+    try {
+        return state(await operation(target));
+    } catch (error) {
+        if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') return null;
+        throw error;
+    }
+}
+
 /**
  * The backend of the file system of Node.js.
  * @returns {object}
@@ -84,12 +94,12 @@ export function createNativeFileSystem() {
          * @param {string} target
          * @returns {Promise<object|null>}
          */
-        stat: async (target) => state(await stat(target).catch(() => null)),
+        stat: async (target) => statOrNull(stat, target),
         /**
          * @param {string} target
          * @returns {Promise<object|null>}
          */
-        lstat: async (target) => state(await lstat(target).catch(() => null)),
+        lstat: async (target) => statOrNull(lstat, target),
         /**
          * @param {string} target
          * @returns {Promise<string>}

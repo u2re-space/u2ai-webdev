@@ -227,6 +227,8 @@ export async function runPipeline({
         setup: null,
         build: null,
         pictures: [],
+        shots: [],
+        pageLogs: [],
         reports: [],
         review: null,
         audit: null,

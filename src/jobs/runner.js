@@ -17,9 +17,10 @@
 
 import { spawn } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { writeFileAtomic } from '../shared/house.js';
 
 /**
  * Run the job of a spec file.
@@ -67,10 +68,10 @@ export async function main(argv = []) {
         });
     });
 
-    await writeFile(exitFile, `${JSON.stringify({
+    await writeFileAtomic(exitFile, `${JSON.stringify({
         code,
         finishedAt: new Date().toISOString(),
-    }, null, 2)}\n`, 'utf8').catch(() => {});
+    }, null, 2)}\n`).catch(() => {});
     return code;
 }
 

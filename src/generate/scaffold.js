@@ -22,6 +22,7 @@
 import path from 'node:path';
 import { mkdir, readFile, writeFile, stat } from 'node:fs/promises';
 import { ENUMS } from '../config/constants.js';
+import { writeFileAtomic } from '../shared/house.js';
 
 /** The kinds of a generation task. */
 export const GENERATION_KINDS = Object.freeze([...ENUMS.generationKinds]);
@@ -601,6 +602,7 @@ export async function mergePackageManifest(root, incoming) {
     if (!existing || typeof existing !== 'object') return { merged: false, added: [] };
     const plan = planScaffoldMerge({ incoming, existing });
     if (!plan.added.length) return { merged: false, added: [] };
-    await writeFile(file, `${JSON.stringify(plan.merged, null, 2)}\n`, 'utf8');
+    // The manifest is written whole: a crash in the middle leaves the old one.
+    await writeFileAtomic(file, `${JSON.stringify(plan.merged, null, 2)}\n`);
     return { merged: true, added: plan.added };
 }

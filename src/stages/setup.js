@@ -24,7 +24,7 @@
  */
 
 import path from 'node:path';
-import { readFile, stat, writeFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { runRole } from '../roles/index.js';
 import { writeTextFile } from '../agent/fs-tools.js';
 import { saveDependency } from '../cli/install.js';
@@ -32,6 +32,7 @@ import { preparedScaffoldFiles, writePreparedScaffold, SCAFFOLD_VERSIONS } from 
 import { runProgram } from '../agent/programs.js';
 import { architectureText } from './architect.js';
 import { runId, runFile, writeJsonFile, readJsonFile } from './workspace.js';
+import { writeFileAtomic } from '../shared/house.js';
 
 /** The name of the file of the setup inside the directory of the run. */
 export const SETUP_FILE = 'setup.json';
@@ -225,7 +226,9 @@ export async function applySetup({ root, data = {}, overwrite = false, maxWriteB
         const before = text ?? '';
         const after = `${JSON.stringify(next, null, 2)}\n`;
         if (before !== after) {
-            await writeFile(path.join(root, 'package.json'), after, 'utf8');
+            // The manifest is written whole: a run that dies in the middle leaves the old
+            // manifest and not half of a new one.
+            await writeFileAtomic(path.join(root, 'package.json'), after);
             manifestChanged = true;
         }
     }
@@ -262,7 +265,7 @@ export async function ensureStyleCompiler({ root, styleLanguage = '', version = 
     const prod = manifest.dependencies && typeof manifest.dependencies === 'object' ? manifest.dependencies : {};
     if (dev.sass || prod.sass) return { added: null, manifest };
     manifest.devDependencies = { ...dev, sass: version };
-    await writeFile(file, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+    await writeFileAtomic(file, `${JSON.stringify(manifest, null, 2)}\n`);
     return { added: `sass@${version} (dev)`, manifest };
 }
 
@@ -606,6 +609,8 @@ export async function setupStage({
         const failed = readiness.checks.filter((item) => !item.ok).map((item) => item.message);
         warnings.push(...failed);
     }
+    // The answer that does not fit the schema is kept, but it is reported.
+    for (const problem of result.schemaProblems ?? []) warnings.push(`Ответ установщика не по схеме: ${problem}.`);
 
     return {
         stage: 'setup',

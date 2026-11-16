@@ -14,7 +14,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 
-import { ROLES, ROLE_NAMES, resolveRole, roleSchema, buildInstructions, runRole, roleReason } from '../src/roles/index.js';
+import { ROLES, ROLE_NAMES, resolveRole, roleSchema, buildInstructions, runRole, roleReason, pictureParts } from '../src/roles/index.js';
+import { runStepStage } from '../src/stages/step.js';
 import { WEB_DEVELOPMENT, webDevelopment } from '../src/roles/web-development.js';
 import { LIVE_ROLE_NAMES } from '../src/stages/roles.js';
 import { toolSpecs } from '../src/agent/tool-specs.js';
@@ -472,6 +473,25 @@ test('the schema of a role comes from the catalogue', () => {
     assert.equal(roleSchema('nothing'), null);
 });
 
+test('the instructions of a role carry the contract of the answer', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-roles-contract-'));
+    const home = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-home-'));
+    const env = { HOME: home, USERPROFILE: home };
+    const config = structuredClone(defaults);
+
+    const text = await buildInstructions({ role: 'markup', config, root, env });
+    // The names of the fields travel in the prompt: a gateway that ignores the JSON-schema
+    // rule of the API still shows the model the contract of the answer.
+    assert.match(text, /The answer of the role is an object with these fields/);
+    assert.match(text, /- summary: string/);
+    assert.match(text, /- files: array of objects with the fields path, content, language/);
+    assert.match(text, /Every field is required/);
+
+    // A role without a schema has no contract.
+    const learner = await buildInstructions({ role: 'learner', config, root, env });
+    assert.doesNotMatch(learner, /The answer of the role is an object/);
+});
+
 test('the instructions of a role carry the standards and the packs', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-roles-'));
     const home = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-home-'));
@@ -598,6 +618,97 @@ test('the loop stops when the turns run out', async () => {
         assert.equal(answer.toolCalls.length, 2);
     } finally {
         api.close();
+    }
+});
+
+test('a picture that a tool made goes back into the conversation as a picture', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-role-picture-'));
+    try {
+        const { mkdir, writeFile } = await import('node:fs/promises');
+        await mkdir(path.join(root, '.ai', 'shots'), { recursive: true });
+        await writeFile(path.join(root, '.ai', 'shots', 'shot-1.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+
+        const requests = [];
+        const queue = [
+            // The role shoots the page and the tool answers with the path of the picture.
+            {
+                id: 'resp-1',
+                status: 'completed',
+                model: 'test-model',
+                output: [{
+                    type: 'function_call',
+                    id: 'fc-1',
+                    call_id: 'c-1',
+                    name: 'screenshot',
+                    arguments: JSON.stringify({ path: 'index.html' }),
+                }],
+            },
+            {
+                id: 'resp-2',
+                status: 'completed',
+                model: 'test-model',
+                output: [{
+                    type: 'function_call',
+                    id: 'fc-2',
+                    call_id: 'c-2',
+                    name: 'code',
+                    arguments: JSON.stringify({
+                        summary: 'The picture was seen.',
+                        files: [],
+                        commands: [],
+                        notes: '',
+                    }),
+                }],
+            },
+        ];
+        const client = {
+            responses: {
+                async create(body) {
+                    requests.push(body);
+                    return queue[Math.min(requests.length - 1, queue.length - 1)];
+                },
+            },
+        };
+        // The tool answers with the path of the picture; the browser is not needed for the test.
+        const toolset = {
+            specsFor: () => [{ type: 'function', name: 'screenshot', description: '', parameters: {} }],
+            execute: async () => 'The screenshot of the page is ready: .ai/shots/shot-1.png',
+        };
+
+        await runRole({
+            client,
+            config: structuredClone(defaults),
+            role: 'coder',
+            input: 'Look at the page.',
+            root,
+            toolset,
+        });
+
+        // The second request holds the picture: the role sees what it has shot.
+        const second = JSON.stringify(requests[1]);
+        assert.match(second, /input_image/);
+        assert.match(second, /The picture the tool has made/);
+    } finally {
+        await import('node:fs/promises').then((fs) => fs.rm(root, { recursive: true, force: true }));
+    }
+});
+
+test('the pictures of the answer of a tool are read from the project', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-role-pictures-'));
+    try {
+        const { mkdir, writeFile } = await import('node:fs/promises');
+        await mkdir(path.join(root, 'shots'), { recursive: true });
+        await writeFile(path.join(root, 'shots', 'a.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+        await writeFile(path.join(root, 'notes.txt'), 'not a picture');
+
+        const parts = await pictureParts(root, 'The shot is here: shots/a.png — and notes.txt is not.');
+        assert.equal(parts.length, 1);
+
+        // The path outside the project is not a picture of the project.
+        assert.deepEqual(await pictureParts(root, '../outside.png'), []);
+        assert.deepEqual(await pictureParts(root, 'nothing here'), []);
+    } finally {
+        await import('node:fs/promises').then((fs) => fs.rm(root, { recursive: true, force: true }));
     }
 });
 
@@ -729,6 +840,121 @@ test('the reason of an answer without data is named', () => {    assert.match(ro
     assert.match(roleReason({ text: 'Сначала изучу проект.' }), /ответ без данных/);
     assert.match(roleReason({}), /ответ пуст/);
     assert.match(roleReason(), /ответ пуст/);
+});
+
+test('the call of a tool with broken JSON does not run the tool and is reported', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-loop-broken-json-'));
+    const home = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-home-'));
+    const env = { HOME: home, USERPROFILE: home };
+
+    const api = await mockApi([
+        {
+            id: 'resp_broken',
+            status: 'completed',
+            model: 'test-model',
+            output: [{
+                type: 'function_call',
+                call_id: 'call_write_file',
+                name: 'write_file',
+                arguments: '{ path: "index.html", content: ',
+            }],
+        },
+        schemaAnswer('code', codeData()),
+    ]);
+
+    try {
+        const config = structuredClone(defaults);
+        config.model = 'test-model';
+        config.backends = [{ baseURL: api.url, apiKey: 'test-key' }];
+        const client = await createClient({ config, env });
+
+        const answer = await runRole({
+            client,
+            config,
+            role: 'coder',
+            input: 'Make the page.',
+            root,
+            env,
+        });
+
+        // The broken call is not a write: the file is not on the disk.
+        assert.equal(await readFile(path.join(root, 'index.html'), 'utf8').catch(() => null), null);
+        // The model is told what is wrong with its call.
+        const second = api.requests[1].input.map((item) => JSON.stringify(item)).join('\n');
+        assert.match(second, /not a JSON object/);
+        assert.match(second, /valid JSON/);
+        // The run continues: the next answer is the answer of the role.
+        assert.equal(answer.stopped, 'completed');
+    } finally {
+        api.close();
+    }
+});
+
+test('an answer that does not fit the schema is kept and its problems are reported', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-loop-schema-keep-'));
+    const home = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-home-'));
+    const env = { HOME: home, USERPROFILE: home };
+
+    // The answer has a field that the schema of the coder does not know.
+    const api = await mockApi([
+        schemaAnswer('code', { ...codeData(), extra: 'unexpected' }),
+    ]);
+
+    try {
+        const config = structuredClone(defaults);
+        config.model = 'test-model';
+        config.backends = [{ baseURL: api.url, apiKey: 'test-key' }];
+        const client = await createClient({ config, env });
+
+        const answer = await runRole({
+            client,
+            config,
+            role: 'coder',
+            input: 'Make the page.',
+            root,
+            env,
+        });
+
+        // The data of the role is kept: the stages know how to fill a missing field.
+        assert.equal(answer.data.summary, 'The page is written.');
+        assert.equal(answer.turns, 1, 'the work of the role is not spent on a second try');
+        // The problems are not hidden.
+        assert.ok(answer.schemaProblems.length, 'the problems of the answer are reported');
+        assert.ok(answer.schemaProblems.some((problem) => problem.includes('extra')));
+    } finally {
+        api.close();
+    }
+});
+
+test('the stage reports the problems of the answer of the role', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-step-schema-warning-'));
+    const api = await mockApi([
+        schemaAnswer('code', { ...codeData(), extra: 'unexpected' }),
+    ]);
+
+    try {
+        const config = structuredClone(defaults);
+        config.model = 'test-model';
+        config.backends = [{ baseURL: api.url, apiKey: 'test-key' }];
+        const client = await createClient({ config, env: process.env });
+
+        const result = await runStepStage({
+            client,
+            config: { output: { work: './.tmp' } },
+            root,
+            task: 'Make the page.',
+            role: 'coder',
+            plan: {
+                summary: 'A page.',
+                steps: [{ id: 'code-1', title: 'Code', role: 'coder', dependsOn: [], files: [], criteria: [] }],
+            },
+            runId: 'run-1',
+        });
+
+        assert.ok(result.warnings.some((item) => /не по схеме/.test(item)), result.warnings.join(' | '));
+    } finally {
+        api.close();
+    }
 });
 
 test('a tool that fails does not break the loop', async () => {    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-loop3-'));

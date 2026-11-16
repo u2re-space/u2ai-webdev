@@ -12,12 +12,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtemp, writeFile, mkdir, readFile } from 'node:fs/promises';
+import { mkdtemp, writeFile, mkdir, readFile, readdir, rm } from 'node:fs/promises';
 
 import { buildGenerationBrief, writeGenerationManifest, readGenerationManifest, GENERATION_KINDS } from '../src/generate/brief.js';
 import {
     filesForKind, filesForStack, npmPackageName, buildPackageManifest, stackText,
     recommendStack, planScaffoldMerge, preparedScaffoldFiles, writePreparedScaffold,
+    mergePackageManifest,
 } from '../src/generate/scaffold.js';
 import { resolvePlatform, platformInstructions, CHROMIUM_156 } from '../src/generate/platform.js';
 import { effectiveFidelity, fidelityContract, clampPercent } from '../src/generate/fidelity.js';
@@ -145,6 +146,39 @@ test('the scaffold writes only the files that are missing', async () => {
     assert.ok(result.skipped.includes('package.json'));
     assert.ok(result.written.includes('vite.config.js'));
     assert.equal(await readFile(path.join(root, 'package.json'), 'utf8'), '{"name":"mine"}\n');
+});
+
+test('the manifest of the project is merged and written whole', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-manifest-'));
+    try {
+        await writeFile(path.join(root, 'package.json'), '{"name":"mine","scripts":{"dev":"vite"}}\n');
+        const result = await mergePackageManifest(root, {
+            dependencies: { vite: '^7.0.0' },
+            scripts: { build: 'vite build' },
+        });
+        assert.equal(result.merged, true);
+        const manifest = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
+        assert.equal(manifest.name, 'mine');
+        assert.equal(manifest.scripts.dev, 'vite');
+        assert.ok(manifest.dependencies?.vite);
+        // The temporary file of the atomic write did not stay in the project.
+        const left = await readdir(root);
+        assert.ok(!left.some((name) => name.includes('.tmp-')), 'the temporary file did not stay');
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
+test('a broken package.json is left alone', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-manifest-broken-'));
+    try {
+        await writeFile(path.join(root, 'package.json'), '{ this is not json\n');
+        const result = await mergePackageManifest(root, { dependencies: { vite: '^7.0.0' } });
+        assert.equal(result.merged, false);
+        assert.equal(await readFile(path.join(root, 'package.json'), 'utf8'), '{ this is not json\n');
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
 });
 
 test('the platform profile is frozen and known', () => {

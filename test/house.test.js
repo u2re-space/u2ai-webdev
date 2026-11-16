@@ -218,6 +218,24 @@ test('старое содержимое переживает упавшую за
     }
 });
 
+test('json-файл пишется целиком: старый json переживает упавшую запись', async () => {
+    const { root, cleanup } = await project();
+    try {
+        const file = path.join(root, 'package.json');
+        await writeFileAtomic(file, '{"name":"old"}\n');
+        // Цель — каталог: переименование временного файла на неё падает.
+        const target = path.join(root, 'locked');
+        await mkdir(target, { recursive: true });
+        await assert.rejects(async () => writeFileAtomic(target, '{"name":"new"}\n'));
+        // Старый json цел и читается.
+        assert.equal(JSON.parse(await readFile(file, 'utf8')).name, 'old');
+        const left = await readdir(root);
+        assert.ok(!left.some((name) => name.includes('.tmp-')), 'временный файл не остался');
+    } finally {
+        await cleanup();
+    }
+});
+
 // --- подпись прогона ---------------------------------------------------------
 
 test('прогон подписывает контракт проекта', async () => {

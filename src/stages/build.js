@@ -33,11 +33,12 @@
 
 import path from 'node:path';
 import os from 'node:os';
-import { mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rm, stat } from 'node:fs/promises';
 
 import { runProgram } from '../agent/programs.js';
 import { findSass, firstError, styleReferences, missingStyleReferences, partialName } from '../agent/syntax.js';
 import { runId, runFile, writeJsonFile, readJsonFile } from './workspace.js';
+import { writeFileAtomic } from '../shared/house.js';
 
 export { styleReferences };
 
@@ -270,7 +271,7 @@ export async function ensureUses(root, styles = {}, { contents = new Map(), appl
         if (!apply) continue;
         const updated = insertUses(text, [`./${plain}`]);
         await mkdir(path.dirname(path.join(root, entry)), { recursive: true });
-        await writeFile(path.join(root, entry), updated, 'utf8');
+        await writeFileAtomic(path.join(root, entry), updated);
         contents?.set?.(entry, updated);
         added.push({ file: entry, partial: orphan });
     }
@@ -508,7 +509,7 @@ export async function ensureHtmlWiring(root, htmlRel, { styles = [], script = nu
         result.added.push(scriptWanted);
     }
     if (apply && updated !== text) {
-        await writeFile(file, updated, 'utf8');
+        await writeFileAtomic(file, updated);
         result.changed = true;
     }
     return result;
@@ -596,7 +597,7 @@ export async function ensureStyleImport(root, scriptRel, styleRel, { apply = tru
         return result;
     }
     const updated = insertImport(text, specifier);
-    await writeFile(file, updated, 'utf8');
+    await writeFileAtomic(file, updated);
     result.changed = true;
     return result;
 }
@@ -691,7 +692,7 @@ export async function removeStyleLink(root, htmlRel, targets, { apply = true } =
     }
     updated = updated.replace(/^[ \t]*\r?\n(?=[ \t]*$)/gm, '');
     if (apply && updated !== text) {
-        await writeFile(file, updated, 'utf8');
+        await writeFileAtomic(file, updated);
         result.changed = true;
     }
     return result;

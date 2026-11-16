@@ -27,6 +27,7 @@ import { randomBytes } from 'node:crypto';
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { defaultHome, homeJobsDir } from '../config/paths.js';
+import { writeFileAtomic } from '../shared/house.js';
 
 /** The states of a job. */
 export const JOB_STATUSES = Object.freeze(['running', 'done', 'failed', 'cancelled']);
@@ -127,7 +128,9 @@ export function createJobManager({
      * @returns {Promise<void>}
      */
     const writeJson = async (file, data) => {
-        await writeFile(file, `${JSON.stringify(data, null, 2)}\n`, 'utf8');
+        // The record of the job is written whole: a crash in the middle leaves the old
+        // record and not a half-written one that no one can read.
+        await writeFileAtomic(file, `${JSON.stringify(data, null, 2)}\n`);
     };
 
     /**

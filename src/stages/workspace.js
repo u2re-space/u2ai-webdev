@@ -128,7 +128,8 @@ export async function readJsonFile(file) {
     if (text === null) return null;
     try {
         const parsed = JSON.parse(text);
-        return parsed && typeof parsed === 'object' ? parsed : null;
+        // Массив — это не объект состояния: его поля не положить на место полей.
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
     } catch {
         return null;
     }

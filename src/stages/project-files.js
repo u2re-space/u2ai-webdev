@@ -18,15 +18,55 @@
  */
 
 import path from 'node:path';
-import { stat } from 'node:fs/promises';
-
-import { listStyleFiles } from './build.js';
+import { readdir, stat } from 'node:fs/promises';
 
 /** Расширения файлов разметки. */
 export const MARKUP_EXTENSIONS = Object.freeze(['.html', '.htm', '.vue', '.svelte', '.jsx', '.tsx']);
 
 /** Расширения файлов стилей. */
 export const STYLE_EXTENSIONS = Object.freeze(['.scss', '.sass', '.css', '.less']);
+
+/** Каталоги, в которых стилей проекта не бывает. */
+const SKIP_DIRS = /^(?:\.git|node_modules|\.hg|\.svn|dist|build|coverage|\.next|\.nuxt|\.cache|\.venv|venv|__pycache__|target|\.backup|\.tmp|\.ai)$/i;
+
+/**
+ * Все таблицы стилей проекта, какие есть на диске.
+ *
+ * Поиск `listStyleFiles` знает только об исходниках (`scss`, `sass`) — собранный `css` для
+ * сборки артефакт. Здесь нужны все: проект может быть на чистом CSS, и роль зрения имеет
+ * право править именно тот файл, который лежит на диске.
+ * @param {string} root
+ * @param {{ limit?: number, depth?: number }} [options]
+ * @returns {Promise<string[]>}
+ * @ai.hint io
+ */
+async function listAllStyleFiles(root, { limit = 200, depth = 6 } = {}) {
+    const found = [];
+    /**
+     * Обойти один каталог.
+     * @param {string[]} parts
+     * @param {number} level
+     * @returns {Promise<void>}
+     */
+    async function walk(parts, level) {
+        if (found.length >= limit || level > depth) return;
+        const entries = await readdir(path.join(root, ...parts), { withFileTypes: true }).catch(() => null);
+        if (!entries) return;
+        for (const entry of entries) {
+            if (found.length >= limit) return;
+            if (entry.isDirectory()) {
+                if (SKIP_DIRS.test(entry.name)) continue;
+                await walk([...parts, entry.name], level + 1);
+                continue;
+            }
+            if (!entry.isFile()) continue;
+            if (!STYLE_EXTENSIONS.includes(path.extname(entry.name).toLowerCase())) continue;
+            found.push(path.posix.join(...parts, entry.name));
+        }
+    }
+    await walk([], 0);
+    return found.sort();
+}
 
 /**
  * Есть ли такой файл в проекте.
@@ -71,7 +111,7 @@ export async function projectFiles(root = process.cwd(), plan = null) {
         }
     }
     if (!styles.size) {
-        for (const rel of await listStyleFiles(root)) styles.add(rel);
+        for (const rel of await listAllStyleFiles(root)) styles.add(rel);
     }
     const markupFiles = [];
     for (const rel of markup) {

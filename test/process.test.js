@@ -337,6 +337,42 @@ test('a stage that was asked for by name runs again on a resumed run', async () 
     assert.ok(continued.warnings.some((item) => /запрошена явно/.test(item)));
 });
 
+test('a stage that the earlier run did not know runs on a resumed run', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-new-stage-'));
+    const done = [];
+    const stages = [
+        { name: 'one', title: 'One', dependsOn: [], run: async () => { done.push('one'); return { ok: true }; } },
+    ];
+
+    await runPipeline({
+        client: { responses: { create: async () => ({ output: [] }) } },
+        config: CONFIG,
+        root,
+        task: 'Make a landing.',
+        runId: 'run-1',
+        stages,
+    });
+    assert.deepEqual(done, ['one']);
+
+    // The stage is new: the progress of the earlier run knows nothing about it, so it runs.
+    const grown = [
+        ...stages,
+        { name: 'sight', title: 'Look', dependsOn: ['one'], run: async () => { done.push('sight'); return { ok: true }; } },
+    ];
+    const continued = await resumePipeline({
+        client: { responses: { create: async () => ({ output: [] }) } },
+        config: CONFIG,
+        root,
+        task: 'Make a landing.',
+        runId: 'run-1',
+        stages: grown,
+    });
+
+    assert.deepEqual(done, ['one', 'sight']);
+    assert.equal(continued.stages[0].status, 'skipped');
+    assert.equal(continued.stages[1].status, 'completed');
+});
+
 test('a stage whose work was lost is done again on a resumed run', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-lost-stage-'));
     const done = [];

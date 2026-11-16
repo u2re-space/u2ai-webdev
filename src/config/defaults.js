@@ -202,6 +202,10 @@ export const defaults = {
     skill: true,
     /** Search and read the guides of the modern web platform. */
     guidance: true,
+    /** Open the page of the project in a browser and take a screenshot of it. */
+    browser: true,
+    /** Hand the work from one role to another, in a separate session. */
+    delegate: true,
     /** Call the external `ai-decompose` CLI. */
     external_decompose: true,
     /** Call the external `ai-measure` CLI. */
@@ -286,11 +290,61 @@ export const defaults = {
     coding: { enabled: true, maxTurns: 24, timeoutMs: null },
     styling: { enabled: true, maxTurns: 16, timeoutMs: null },
     build: { enabled: true, maxTurns: 1, timeoutMs: null },
+    sight: { enabled: true, maxTurns: 16, timeoutMs: null },
     vector: { enabled: true, maxTurns: 8, timeoutMs: null },
     iconify: { enabled: true, maxTurns: 8, timeoutMs: null },
     review: { enabled: true, maxTurns: 12, repair: true, repairRounds: 2, checkStyles: true, timeoutMs: null },
     audit: { enabled: true, maxTurns: 8, timeoutMs: null },
     learn: { enabled: true, maxTurns: 8, timeoutMs: null },
+  },
+
+  // --- browser ----------------------------------------------------------------
+  /**
+   * The browser of the run: the eyes of the stages.
+   *
+   * The styles of a page cannot be judged by the code that writes them. The run opens the page
+   * of the project in a real browser, takes a screenshot of it and gives the picture to the
+   * role that owns the styles, so it can see what it has written and compare it with the
+   * reference of the design.
+   *
+   * Ego Lite (`ego-browser`) is the engine of the house when it is installed. Otherwise the
+   * run falls back to headless Chrome/Edge, which is read-only: it opens a page and takes a
+   * picture of it.
+   */
+  browser: {
+    /** `auto` prefers Ego Lite, `ego` demands it, `chrome` demands a headless Chromium. */
+    engine: 'auto',
+    /** The path of the browser, when the usual places do not hold it. */
+    executable: null,
+    /** How long one call of the browser may take, in milliseconds. */
+    timeoutMs: 45_000,
+    /** The frame of the picture of the page: the width and the height in pixels. */
+    viewport: { width: 1440, height: 900 },
+    /**
+     * The live address of the page: `http://localhost:5173/` for the dev server of Vite.
+     *
+     * An empty address means that the run serves the project itself. A live address is
+     * taken as it is: the styles there are the current ones, compiled by the bundler, so the
+     * next picture shows the fix right away.
+     */
+    url: '',
+    /**
+     * Start the dev server of the project when the page is not served anywhere yet.
+     *
+     * `auto` starts it when the project has a `dev` script and nothing answers on the
+     * address, `off` never starts it, `always` starts it every time.
+     */
+    devServer: 'auto',
+    /** How long the run waits for the dev server to answer, in milliseconds. */
+    devTimeoutMs: 60_000,
+    /**
+     * The stage of the styles takes a screenshot of the page and asks the styler to compare it
+     * with the reference. `off` never shoots, `auto` shoots when the reference is there, `always`
+     * shoots even without it.
+     */
+    stylingVision: 'auto',
+    /** How many times the stage of the styles may look at the page and ask for a fix. */
+    stylingVisionRounds: 2,
   },
 
   /** Where the artifacts of a run are written, relative to cwd. */
@@ -591,6 +645,11 @@ export function defaultConfigText() {
     reasoning: { effort: 'high', summary: 'auto' },
     backends: structuredClone(defaults.backends),
     stack: structuredClone(defaults.stack),
+    browser: {
+      engine: defaults.browser.engine,
+      viewport: structuredClone(defaults.browser.viewport),
+      stylingVision: defaults.browser.stylingVision,
+    },
     agent: { fidelity: defaults.agent.fidelity, creativity: defaults.agent.creativity, platform: defaults.agent.platform },
     pace: { mode: defaults.pace.mode, speed: defaults.pace.speed, quality: defaults.pace.quality },
     stages: Object.fromEntries(ENUMS.stages.map((stage) => [stage, { enabled: true }])),

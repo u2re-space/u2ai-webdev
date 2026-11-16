@@ -13,7 +13,8 @@
  *
  * @depends none
  * @usedBy roles/index, stages/index
- * @exports SCHEMAS, SCHEMA_NAMES, strictObject, schemaFor, schemaNameFor, assertStrictSchema
+ * @exports SCHEMAS, SCHEMA_NAMES, strictObject, schemaFor, schemaNameFor, assertStrictSchema,
+ *          schemaProblems, schemaText
  * @ai.tags schemas, json, strict
  * @ai.hint pure
  */
@@ -257,4 +258,97 @@ export function assertStrictSchema(schema, where = 'schema') {
     };
     walk(schema, where);
     return problems;
+}
+
+/**
+ * Check a value against the JSON-schema subset used by this package's role contracts.
+ * @param {unknown} value
+ * @param {object} schema
+ * @param {string} [where]
+ * @returns {string[]}
+ * @exports
+ * @ai.hint pure
+ */
+export function schemaProblems(value, schema, where = '$') {
+    const problems = [];
+    const check = (item, rule, at) => {
+        if (!rule || typeof rule !== 'object') return;
+        if (rule.type === 'object') {
+            if (!item || typeof item !== 'object' || Array.isArray(item)) {
+                problems.push(`${at}: ожидался объект`);
+                return;
+            }
+            for (const key of rule.required ?? []) {
+                if (!Object.hasOwn(item, key)) problems.push(`${at}.${key}: поле отсутствует`);
+            }
+            for (const [key, child] of Object.entries(item)) {
+                if (!Object.hasOwn(rule.properties ?? {}, key)) {
+                    if (rule.additionalProperties === false) problems.push(`${at}.${key}: лишнее поле`);
+                    continue;
+                }
+                check(child, rule.properties[key], `${at}.${key}`);
+            }
+            return;
+        }
+        if (rule.type === 'array') {
+            if (!Array.isArray(item)) {
+                problems.push(`${at}: ожидался массив`);
+                return;
+            }
+            item.forEach((child, index) => check(child, rule.items, `${at}[${index}]`));
+            return;
+        }
+        const valid = rule.type === 'string'
+            ? typeof item === 'string'
+            : rule.type === 'integer'
+                ? Number.isSafeInteger(item)
+                : rule.type === 'boolean'
+                    ? typeof item === 'boolean'
+                    : true;
+        if (!valid) problems.push(`${at}: ожидался ${rule.type}`);
+    };
+    check(value, schema, where);
+    return problems;
+}
+
+/**
+ * The schema of an answer, as text for the prompt.
+ *
+ * The gateway may ignore the `text.format.json_schema` rule of the Responses API: the model
+ * answers with its own form then, and the fields of the answer have names nobody expects.
+ * The names of the fields travel in the prompt as well, so the model knows the contract of
+ * the answer even when the rule of the API is ignored.
+ * @param {object|null} schema the JSON schema of the answer
+ * @returns {string} the text of the block; empty when there is no schema
+ * @exports
+ * @ai.hint pure
+ */
+export function schemaText(schema) {
+    if (!schema || typeof schema !== 'object') return '';
+    const lines = [];
+    /**
+     * The lines of one node of the schema.
+     * @param {object} node
+     * @param {string} prefix
+     */
+    const walk = (node, prefix) => {
+        for (const [key, child] of Object.entries(node?.properties ?? {})) {
+            const at = prefix ? `${prefix}.${key}` : key;
+            if (child?.type === 'object') {
+                const names = Object.keys(child.properties ?? {});
+                lines.push(`- ${at}: object with the fields ${names.join(', ') || '(none)'}`);
+                walk(child, at);
+            } else if (child?.type === 'array') {
+                const item = child?.items ?? {};
+                const names = item?.type === 'object' ? Object.keys(item.properties ?? {}) : [];
+                lines.push(`- ${at}: array${names.length ? ` of objects with the fields ${names.join(', ')}` : ''}`);
+                if (item?.type === 'object') walk(item, at);
+            } else {
+                lines.push(`- ${at}: ${child?.type ?? 'value'}`);
+            }
+        }
+    };
+    walk(schema, '');
+    if (!lines.length) return '';
+    return `The answer of the role is an object with these fields:\n${lines.join('\n')}\nEvery field is required, and the answer holds no other field.`;
 }

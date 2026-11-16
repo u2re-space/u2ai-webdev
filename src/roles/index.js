@@ -30,12 +30,15 @@
  * @changed 2026-11-15 Роли читают сводку контекста прогона и пишут свои ответы в него.
  */
 
-import { parseResponse, textPart } from '../openai/responses.js';
-import { schemaFor } from '../agent/schemas.js';
+import { parseResponse, textPart, imagePart } from '../openai/responses.js';
+import { readFile } from 'node:fs/promises';
+import { resolveInside } from '../agent/paths.js';
+import { schemaFor, schemaProblems, schemaText } from '../agent/schemas.js';
 import { buildSkillInstructions, discoverSkills, skillsForRole } from '../agent/skills.js';
 import { documentationForRole } from '../agent/docs.js';
 import { sourcesBlock } from '../agent/sources.js';
 import { createToolset } from '../agent/tools.js';
+import { createDelegator } from '../agent/delegation.js';
 import { effortFor } from '../agent/pace.js';
 import { getModelProfile, snapEffort } from '../model/profiles.js';
 import { houseModel } from '../model/trust.js';
@@ -85,7 +88,7 @@ export const ROLE_NAMES = Object.freeze(Object.keys(ROLES));
  * @exports
  * @ai.hint pure
  */
-export const SCHEMA_CORRECTION = 'Your answer carried no data of the schema. Answer once more with the schema of the role — the call that carries it — and with nothing else.';
+export const SCHEMA_CORRECTION = 'Your answer carried no data of the schema, or the data did not match it. Answer once more with the schema of the role — the call that carries it — and with nothing else.';
 
 /**
  * The last call of a role whose turns have run out.
@@ -305,6 +308,11 @@ export async function buildInstructions({ role, config = {}, context = {}, root 
     const prompt = definition.instructions(context);
     if (prompt) blocks.push(prompt);
 
+    // The contract of the answer travels in the prompt as well: a gateway that ignores the
+    // JSON-schema rule of the API still shows the model the names of the fields.
+    const contract = schemaText(schemaFor(definition.schema ?? ''));
+    if (contract) blocks.push(contract);
+
     const extra = config?.roles?.[key]?.instructions ?? config?.roles?.default?.instructions ?? null;
     if (extra) blocks.push(`## Extra instructions\n${String(extra).trim()}`);
 
@@ -364,6 +372,41 @@ export function toolCallDetail(args) {
 }
 
 /**
+ * The pictures that the answer of a tool names.
+ *
+ * A tool that makes a picture — the screenshot of the page, a crop of the measurer — answers
+ * with the path of the file. The path in the text is not a picture: the role has to see what
+ * was made, so the file goes back into the conversation as an image.
+ * @param {string} root
+ * @param {string} text the answer of the tool
+ * @returns {Promise<object[]>} the parts of the request
+ * @exports
+ * @ai.hint io
+ */
+export async function pictureParts(root, text) {
+    const body = String(text ?? '');
+    if (!body.trim()) return [];
+    const found = new Set();
+    for (const match of body.matchAll(/[^\s"'`()]+\.(?:png|jpe?g|webp|gif)/gi)) {
+        const name = match[0].replace(/[.,;]+$/, '');
+        if (!name) continue;
+        found.add(name);
+    }
+    const parts = [];
+    for (const name of [...found].slice(0, 4)) {
+        try {
+            const { abs } = await resolveInside(root, name, { allowRoot: false });
+            const bytes = await readFile(abs);
+            const mime = /\.jpe?g$/i.test(name) ? 'image/jpeg' : 'image/png';
+            parts.push(imagePart(bytes, mime));
+        } catch {
+            // The path is not a picture of the project: nothing to show.
+        }
+    }
+    return parts;
+}
+
+/**
  * Run one role: the model answers, the tools run, their answers go back, and the loop ends.
  *
  * The loop keeps the whole conversation in the `input` array, because the Responses API takes
@@ -372,7 +415,7 @@ export function toolCallDetail(args) {
  * @param {{ client: object, config?: object, role: string, input?: string, parts?: object[],
  *   context?: object, root?: string, env?: object, toolset?: object, maxTurns?: number,
  *   signal?: AbortSignal|null, notify?: (event: object) => void, runContext?: object|null,
- *   stage?: string|null, schemaChannel?: string|null }} request
+ *   stage?: string|null, schemaChannel?: string|null, depth?: number }} request
  * @returns {Promise<{ role: string, text: string, data: object|null, toolCalls: object[],
  *   turns: number, usage: object|null, model: string|null, stopped: string }>}
  * @exports
@@ -395,6 +438,7 @@ export async function runRole({
     runContext = null,
     stage = null,
     schemaChannel: forcedChannel = null,
+    depth = 0,
 }) {
     if (!client?.responses) throw new Error('Клиент API не передан.');
     const key = String(role ?? '').trim().toLowerCase();
@@ -415,10 +459,29 @@ export async function runRole({
         // the bridge works.
         notify,
     });
-    const specs = tools.specsFor(key, definition.tools);
+    // A delegated role never hands work over again: the hand-over is one level deep.
+    const specs = tools.specsFor(key, definition.tools)
+        .filter((spec) => depth === 0 || spec.name !== 'delegate_role');
     const schema = roleSchema(key);
     const schemaName = definition.schema ?? 'response';
     const limit = Number.isInteger(maxTurns) && maxTurns > 0 ? maxTurns : definition.maxTurns;
+
+    // The hand-over of the work to another role: a separate session of that role.
+    const delegate = createDelegator({
+        run: (options) => runRole({ ...options, client, signal, depth: depth + 1 }),
+        config,
+        root,
+        env,
+        notify,
+        runContext,
+        role: key,
+        depth,
+        resolveRole: (name) => resolveRole(name, config),
+        // The delegated role sees the same picture of the reference and the same context of
+        // the step: it continues the work, not the conversation.
+        parts,
+        context,
+    });
 
     const items = [{ role: 'user', content: [textPart(input), ...(parts ?? [])] }];
     const calls = [];
@@ -472,7 +535,21 @@ export async function runRole({
         // The call of the schema is the answer, not a tool to run.
         const answerCall = schema ? toolCalls.find((call) => call.name === schemaName) : null;
         const work = toolCalls.filter((call) => call.name !== schemaName);
-        if (answerCall) parsed.data = answerCall.arguments ?? parsed.data;
+        if (answerCall) {
+            if (answerCall.parseError) {
+                // The answer of the schema came as broken JSON: there is no data to read.
+                parsed.data = null;
+                parsed.schemaProblems = [`$: аргументы вызова не разобраны как JSON (${answerCall.parseError})`];
+            } else {
+                parsed.data = answerCall.arguments ?? parsed.data;
+            }
+        }
+        if (schema && parsed.data && !parsed.schemaProblems) {
+            // The data is kept: the stages know how to fill a missing field. The problems are
+            // reported, so a run never passes a malformed answer in silence.
+            const problems = schemaProblems(parsed.data, schema);
+            if (problems.length) parsed.schemaProblems = problems;
+        }
         return { parsed, work };
     };
 
@@ -486,11 +563,17 @@ export async function runRole({
         if (!work.length) {
             answer = parsed;
             const withoutData = Boolean(schema) && !answer.data;
+            const problems = Array.isArray(answer?.schemaProblems) ? answer.schemaProblems : [];
+            // The answer without data is asked once more: the model gets the schema of the
+            // role again and answers with it.
             if (withoutData && !corrected && turns < limit) {
                 // The model answered with a text instead of the schema: it is asked once more.
                 corrected = true;
                 fallback = parsed;
-                items.push({ role: 'user', content: [textPart(SCHEMA_CORRECTION)] });
+                const detail = problems.length
+                    ? `\nThe answer has these schema problems:\n${problems.map((problem) => `- ${problem}`).join('\n')}`
+                    : '';
+                items.push({ role: 'user', content: [textPart(`${SCHEMA_CORRECTION}${detail}`)] });
                 continue;
             }
 
@@ -536,10 +619,24 @@ export async function runRole({
                 turn: turns,
             });
             let output;
-            try {
-                output = await tools.execute(call.name, call.arguments ?? {});
-            } catch (error) {
-                output = `The tool failed: ${error?.message ?? String(error)}`;
+            if (call.parseError) {
+                // The arguments of the call are broken: the tool is not run, and the model
+                // is told what to fix. The answer starts with the words of a failed tool,
+                // so the run does not count it as work that was done.
+                output = `The tool failed: the arguments of the call are not a JSON object (${call.parseError}). Call the tool again with valid JSON.`;
+            } else if (call.name === 'delegate_role') {
+                // The hand-over of the work: a separate session of the other role.
+                try {
+                    output = await delegate(call.arguments ?? {});
+                } catch (error) {
+                    output = `The tool failed: ${error?.message ?? String(error)}`;
+                }
+            } else {
+                try {
+                    output = await tools.execute(call.name, call.arguments);
+                } catch (error) {
+                    output = `The tool failed: ${error?.message ?? String(error)}`;
+                }
             }
             if (WRITE_TOOLS.includes(call.name) && wroteSomething(output)) writes.push(call);
             const callId = call.callId ?? call.id ?? `${call.name}-${calls.length}`;
@@ -556,6 +653,19 @@ export async function runRole({
                 arguments: JSON.stringify(call.arguments ?? {}),
             });
             items.push({ type: 'function_call_output', call_id: callId, output: String(output ?? '') });
+            // A picture that the tool has made goes back into the conversation as a picture:
+            // the role has to see what it has just shot, and a path in the text is not a
+            // picture. `read_file` refuses a binary file — that refusal was the sign.
+            const pictures = await pictureParts(root, String(output ?? ''));
+            if (pictures.length) {
+                items.push({
+                    role: 'user',
+                    content: [
+                        textPart('The picture the tool has made. Look at it before you continue.'),
+                        ...pictures,
+                    ],
+                });
+            }
         }
 
         if (turns >= limit) {
@@ -607,6 +717,8 @@ export async function runRole({
         data: answer.data ?? null,
         refusal: answer.refusal ?? '',
         error: answer.error ?? null,
+        /** The fields of the answer that do not fit the schema of the role; empty when it fits. */
+        schemaProblems: Array.isArray(answer?.schemaProblems) ? answer.schemaProblems : [],
         toolCalls: calls,
         turns,
         usage: answer.usage ?? null,

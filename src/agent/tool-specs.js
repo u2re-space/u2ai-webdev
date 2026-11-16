@@ -293,6 +293,51 @@ export const TOOL_SPECS = Object.freeze({
         required: ['url'],
         roles: ['learner', 'architect', 'reviewer'],
     },
+    screenshot: {
+        configKey: 'browser',
+        description: 'Take a screenshot of the page of the project in a real browser (Ego Lite when it is '
+            + 'installed, otherwise headless Chrome/Edge) and read the picture. Use it to see the result of '
+            + 'your own work: a layout that compiles may still be broken. The page of the project is served '
+            + 'locally, so the call needs no running server. The answer names the file of the picture — read '
+            + 'it with the tool of the pictures to look at it.',
+        parameters: {
+            type: 'object',
+            properties: {
+                path: str('The page to shoot, relative to the working directory (for example `index.html`). '
+                    + 'Empty = the entry point of the project.'),
+                output: str('Where to write the picture, relative to the working directory. '
+                    + 'Empty = .ai/shots/shot-<time>.png.'),
+                width: int('Width of the picture in pixels. Default 1440.'),
+                height: int('Height of the picture in pixels. Default 900.'),
+                fullPage: bool('1 to shoot the whole page, not only the first screen.'),
+            },
+            required: [],
+            additionalProperties: false,
+        },
+        required: [],
+        roles: [],
+    },
+    delegate_role: {
+        configKey: 'delegate',
+        description: 'Hand one task to another role: the markup, the styler, the coder, the editor or the '
+            + 'iconifier. The role that receives the work starts a separate session — a clean conversation, '
+            + 'its own tools and its own budget of turns — and does not see this one. Use it when the work '
+            + 'is not yours: the structure is wrong, the rules are wrong, the behaviour is wrong. The answer '
+            + 'is the report of that role and the files it wrote.',
+        parameters: {
+            type: 'object',
+            properties: {
+                role: str('The role that receives the work: markup | styler | coder | editor | iconifier.'),
+                task: str('What that role has to do, in full: the file, what is wrong and what the result '
+                    + 'has to be. The role does not see this conversation.'),
+                reason: str('One sentence: why the work goes to that role.'),
+            },
+            required: ['role', 'task'],
+            additionalProperties: false,
+        },
+        required: ['role', 'task'],
+        roles: [],
+    },
     generate_svg: {
         configKey: 'svg',
         description: 'Write an SVG file. The prompt may be SVG markup; a plain text becomes a labelled frame. '

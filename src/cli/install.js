@@ -18,8 +18,9 @@
  */
 
 import path from 'node:path';
-import { cp, mkdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, rm, stat, symlink } from 'node:fs/promises';
 import { openRegistry } from '../registry.js';
+import { writeFileAtomic } from '../shared/house.js';
 import { UsageError } from './errors.js';
 
 /**
@@ -174,7 +175,8 @@ export async function installCommand(ctx) {
     if (flags.save === false) {
         write('package.json не изменён (--no-save).\n');
     } else if (installed.some((item) => !item.skipped)) {
-        await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+        // The manifest is written whole: a failure in the middle leaves the old one.
+        await writeFileAtomic(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
         write('package.json обновлён. Установите ссылки npm install.\n');
     }
 

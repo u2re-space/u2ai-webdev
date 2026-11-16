@@ -113,6 +113,11 @@ export function isInside(root, candidate) {
     return relative === '' || (!path.isAbsolute(relative) && relative !== '..' && !relative.startsWith(`..${path.sep}`));
 }
 
+/** Whether a failed filesystem lookup means only that the path is absent. */
+function isMissingPath(error) {
+    return error?.code === 'ENOENT' || error?.code === 'ENOTDIR';
+}
+
 /**
  * Resolve a path of the model into an absolute path inside the root.
  *
@@ -156,10 +161,16 @@ export async function resolveInside(root, relative, {
         for (;;) {
             // The root itself is trusted: it is the place the user gave to the run.
             if (probe === base) break;
-            const info = await lstat(probe).catch(() => null);
+            let info;
+            try {
+                info = await lstat(probe);
+            } catch (error) {
+                if (!isMissingPath(error)) throw error;
+                info = null;
+            }
             if (info) {
-                const real = await realpath(probe).catch(() => probe);
-                const realRoot = await realpath(base).catch(() => base);
+                const real = await realpath(probe);
+                const realRoot = await realpath(base);
                 if (!isInside(realRoot, real)) throw new Error(words.symlink(rel));
                 break;
             }

@@ -8,10 +8,11 @@
  */
 
 import path from 'node:path';
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, mkdir } from 'node:fs/promises';
 import { defaults } from './defaults.js';
 import { isRecord, deepMerge } from './merge.js';
 import { KiB } from './constants.js';
+import { writeFileAtomic } from '../shared/house.js';
 
 const MAX_PLACEHOLDER_DEPTH = 8;
 const PLACEHOLDER = /\{\{\s*(env|file|fs)\s*:\s*([^}]+?)\s*\}\}/g;
@@ -55,7 +56,9 @@ export async function readConfigFile(file, { optional = false, maxBytes = 256 * 
  */
 export async function writeConfigFile(file, data) {
   await mkdir(path.dirname(file), { recursive: true });
-  await writeFile(file, `${JSON.stringify(data, null, 2)}\n`, 'utf8');
+  // The config is written whole: a crash in the middle leaves the old config and not a
+  // half-written one that the next run cannot read.
+  await writeFileAtomic(file, `${JSON.stringify(data, null, 2)}\n`);
 }
 
 /**

@@ -10,7 +10,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildResponsesBody } from '../src/openai/responses.js';
+import { buildResponsesBody, parseResponse, extractToolCalls } from '../src/openai/responses.js';
 import { getModelProfile, MODEL_PROFILES, snapEffort } from '../src/model/profiles.js';
 import { fallbackChain } from '../src/openai/fallback.js';
 import { defaults } from '../src/config/defaults.js';
@@ -35,6 +35,26 @@ test('the answer is pinned to the schema when the request carries no tool', () =
     assert.equal(body.text.format.name, 'markup');
     // The schema travels as a tool as well: the model may answer with it.
     assert.ok(body.tools.some((tool) => tool.name === 'markup'));
+});
+
+test('the arguments of a tool call are read as JSON or reported as broken', () => {
+    const good = extractToolCalls({
+        output: [{ type: 'function_call', id: 'fc_1', call_id: 'call_1', name: 'write_file', arguments: '{"path":"index.html"}' }],
+    });
+    assert.deepEqual(good[0].arguments, { path: 'index.html' });
+    assert.equal(good[0].parseError, null);
+
+    const broken = extractToolCalls({
+        output: [{ type: 'function_call', id: 'fc_2', call_id: 'call_2', name: 'write_file', arguments: '{ path: ' }],
+    });
+    assert.equal(broken[0].arguments, null);
+    assert.ok(broken[0].parseError, 'the broken arguments are named');
+
+    const notObject = extractToolCalls({
+        output: [{ type: 'function_call', id: 'fc_3', call_id: 'call_3', name: 'write_file', arguments: '"just a string"' }],
+    });
+    assert.equal(notObject[0].arguments, null);
+    assert.ok(notObject[0].parseError);
 });
 
 test('the answer is not pinned when the request carries a tool', () => {

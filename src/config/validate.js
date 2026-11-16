@@ -360,6 +360,28 @@ export function validateConfig(config) {
     if (!(key in defaults.tools) || typeof value !== 'boolean') fail(`tools.${key}: true | false (известные: ${Object.keys(defaults.tools).join(', ')})`);
   }
 
+  if (!isRecord(c.browser)) fail('browser должен быть объектом');
+  for (const key of Object.keys(c.browser)) {
+    if (!(key in defaults.browser)) fail(`browser.${key}: неизвестное поле (допустимо: ${Object.keys(defaults.browser).join(', ')})`);
+  }
+  if (!['auto', 'ego', 'chrome'].includes(c.browser.engine)) fail('browser.engine: auto | ego | chrome');
+  if (c.browser.executable !== null && (typeof c.browser.executable !== 'string' || !c.browser.executable.trim())) {
+    fail('browser.executable: непустая строка или null');
+  }
+  if (!Number.isSafeInteger(c.browser.timeoutMs) || c.browser.timeoutMs < 1000) fail('browser.timeoutMs: целое от 1000');
+  if (!isRecord(c.browser.viewport)) fail('browser.viewport должен быть объектом');
+  for (const key of ['width', 'height']) {
+    if (!Number.isSafeInteger(c.browser.viewport[key]) || c.browser.viewport[key] < 100) fail(`browser.viewport.${key}: целое от 100`);
+  }
+  if (!['off', 'auto', 'always'].includes(c.browser.stylingVision)) fail('browser.stylingVision: off | auto | always');
+  if (!Number.isSafeInteger(c.browser.stylingVisionRounds) || c.browser.stylingVisionRounds < 0) {
+    fail('browser.stylingVisionRounds: целое от 0');
+  }
+  if (c.browser.url !== null && typeof c.browser.url !== 'string') fail('browser.url: непустая строка');
+  if (c.browser.url && !/^https?:\/\//i.test(c.browser.url.trim())) fail('browser.url: адрес с http:// или https://');
+  if (!['off', 'auto', 'always'].includes(c.browser.devServer)) fail('browser.devServer: off | auto | always');
+  if (!Number.isSafeInteger(c.browser.devTimeoutMs) || c.browser.devTimeoutMs < 1000) fail('browser.devTimeoutMs: целое от 1000');
+
   validateStack(c.stack, fail);
   validateAgent(c.agent, fail);
   validatePace(c.pace, fail);

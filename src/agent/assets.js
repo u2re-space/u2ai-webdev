@@ -14,10 +14,11 @@
  */
 
 import path from 'node:path';
-import { mkdir, writeFile, stat } from 'node:fs/promises';
+import { mkdir, stat } from 'node:fs/promises';
 import { resolveInside } from './paths.js';
 import { formatBytes } from '../util/text.js';
 import { iconName, iconSetConfig, iconUrl, ICON_SET_NAMES } from './icon-sets.js';
+import { writeFileAtomic } from '../shared/house.js';
 
 const MAX_FONT_BYTES = 32 * 1024 * 1024;
 const MAX_ICON_BYTES = 2 * 1024 * 1024;
@@ -94,7 +95,7 @@ export async function generateSvg({ prompt, width = 512, height = 512, output = 
     if (!requested) requested = `assets/svg-${Date.now()}.svg`;
     const { abs, rel } = await resolveInside(cwd, requested, { forWrite: true, allowRoot: false });
     await mkdir(path.dirname(abs), { recursive: true });
-    await writeFile(abs, svgContent, 'utf8');
+    await writeFileAtomic(abs, svgContent);
     const info = await stat(abs);
 
     return { rel, bytes: info.size };
@@ -190,7 +191,7 @@ export async function downloadFont({ name = '', style = '', url = null, output =
     const outPath = output || `fonts/${slug}-${weight}${italic ? 'italic' : ''}.${ext}`;
     const { abs, rel } = await resolveInside(cwd, outPath, { forWrite: true, allowRoot: false });
     await mkdir(path.dirname(abs), { recursive: true });
-    await writeFile(abs, fontData);
+    await writeFileAtomic(abs, fontData);
     const info = await stat(abs);
 
     return { rel, bytes: info.size, family };
@@ -284,7 +285,7 @@ export async function downloadIcons({ name = '', icon = null, icons = [], varian
             const svg = (await readCapped(res, MAX_ICON_BYTES)).toString('utf8');
             const rel = `${outDir}${iconName}.svg`;
             const { abs } = await resolveInside(cwd, rel, { forWrite: true, allowRoot: false });
-            await writeFile(abs, svg, 'utf8');
+            await writeFileAtomic(abs, svg);
             paths.push(rel);
         } catch (error) {
             if (error?.name === 'AbortError') throw error;

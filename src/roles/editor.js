@@ -23,7 +23,7 @@ export const schema = 'code';
 export const tools = [
     'list_files', 'read_file', 'write_file', 'replace_text', 'search_files',
     'generate_svg', 'call_ai_image', 'ai_cli', 'ai_cli_help', 'run_command', 'read_skill',
-    'web_guidance',
+    'web_guidance', 'screenshot',
 ];
 
 /** How many turns the role may spend. */

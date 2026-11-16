@@ -219,7 +219,8 @@ export async function openContext({
     if (stored) {
         try {
             const parsed = JSON.parse(stored);
-            if (parsed && typeof parsed === 'object') Object.assign(state, parsed, { id });
+            // Массив — это не состояние: его поля не положить в состояние.
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) Object.assign(state, parsed, { id });
         } catch { /* сломанное состояние — подсказка, а не повод упасть */ }
     }
 

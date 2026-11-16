@@ -864,6 +864,9 @@ export async function runStepStage({
         });
         turns += result.turns;
         usage = usage ?? result.usage;
+        for (const problem of result.schemaProblems ?? []) {
+            warnings.push(`Шаг ${step.id}: ответ роли ${role} не по схеме — ${problem}.`);
+        }
 
         const data = result.data ?? {};
         const files = Array.isArray(data.files) ? data.files : [];

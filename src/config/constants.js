@@ -25,7 +25,7 @@ export const ENUMS = Object.freeze({
   /** Pipeline stages in execution order. */
   stages: Object.freeze([
     'collect', 'pictures', 'plan', 'architect', 'setup',
-    'markup', 'coding', 'styling', 'build',
+    'markup', 'coding', 'styling', 'build', 'sight',
     'vector', 'iconify',
     'review', 'audit', 'learn',
   ]),

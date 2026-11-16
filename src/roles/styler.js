@@ -14,6 +14,7 @@ import { INPUTS_IN_CONTEXT } from './inputs.js';
 import { referenceNote } from './reference.js';
 import { pageScaleRules, pageWidthNote } from './page-frame.js';
 import { webDevelopment } from './web-development.js';
+import { DELEGATE_NAMES, delegationNote } from '../agent/delegation.js';
 
 /** The name of the role. */
 export const name = 'styler';
@@ -25,6 +26,7 @@ export const schema = 'style';
 export const tools = [
     'list_files', 'read_file', 'write_file', 'replace_text', 'search_files',
     'run_command', 'download_font', 'call_ai_measure', 'read_skill', 'web_guidance',
+    'screenshot', 'delegate_role',
 ];
 
 /** How many turns the role may spend. */
@@ -72,6 +74,7 @@ ${repair}
 
 Rules:
 ${INPUTS_IN_CONTEXT}
+${delegationNote(DELEGATE_NAMES)}
 - Look the guides up with the \`web_guidance\` tool before you write the rules of a layout,
   an animation or a scroll: the platform of today already holds the answer.
 - The title of the step is not the kind of work: a step whose title says "describe" or

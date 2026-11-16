@@ -392,6 +392,20 @@ export function createRenderer({
             else if (type === 'stage.skip') this.stageDone(event.stage, 'skipped');
             else if (type === 'role.tool') this.tool(event.name, event.arguments ?? null);
             else if (type === 'role.tool.result') this.toolResult(event);
+            else if (type === 'delegate.start') {
+                if (json) {
+                    emit('delegate.start', { from: event.from ?? null, to: event.to ?? null, task: event.task ?? '', reason: event.reason ?? '' });
+                } else {
+                    this.note(`роль ${event.from ?? '?'} передаёт работу роли ${event.to ?? '?'}: ${event.task ?? ''}`);
+                }
+            }
+            else if (type === 'delegate.done') {
+                if (json) {
+                    emit('delegate.done', { from: event.from ?? null, to: event.to ?? null, turns: event.turns ?? 0 });
+                } else {
+                    this.note(`работа роли ${event.to ?? '?'} закончена: ${event.turns ?? 0} ходов`);
+                }
+            }
             else if (type === 'request.wait') this.wait(event.elapsedMs ?? 0);
             else if (type === 'request.retry') this.retry(event);
             else if (type === 'request.error') this.warning(`запрос не удался: ${event.error ?? ''}`);

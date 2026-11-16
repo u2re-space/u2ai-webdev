@@ -282,8 +282,8 @@ export async function loadRunMap({ root, config = {}, runId = '' }) {
     if (text === null) return null;
     try {
         const parsed = JSON.parse(text);
-        if (!parsed || typeof parsed !== 'object' || parsed.version !== RUN_MAP_VERSION) return null;
-        if (!parsed.files || typeof parsed.files !== 'object') parsed.files = {};
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || parsed.version !== RUN_MAP_VERSION) return null;
+        if (!parsed.files || typeof parsed.files !== 'object' || Array.isArray(parsed.files)) parsed.files = {};
         return parsed;
     } catch {
         return null;

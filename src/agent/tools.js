@@ -23,7 +23,7 @@
  */
 
 import path from 'node:path';
-import { stat } from 'node:fs/promises';
+import { mkdir, stat } from 'node:fs/promises';
 import { toolSpecs as buildSpecs } from './tool-specs.js';
 import { listFiles, readTextFile, searchFiles, writeTextFile, replaceInFile, deleteFile, makeDirectory, copyPath } from './fs-tools.js';
 import { listProjectBackups, restoreProjectBackup } from './project-backup.js';
@@ -34,6 +34,9 @@ import { readSkill } from './skills.js';
 import { guidanceSearchText, guidanceRetrieveText, GUIDANCE_SOURCE } from './guidance.js';
 import { runProgram as runProgramIn } from './programs.js';
 import { isInside, resolveInside } from './paths.js';
+import { findChromium, findEgo, resolveEngine, screenshotPage, startStaticServer } from './browser.js';
+import { ensurePage } from '../stages/dev-server.js';
+import { shootPage } from '../stages/vision.js';
 import { mapFiles } from './run-map.js';
 import { findMeasurement } from '../inputs/measured.js';
 import {
@@ -268,6 +271,39 @@ async function fetchPage({ url, maxBytes = 64 * 1024, timeoutMs = 30_000 }) {
     const text = type.includes('html') ? htmlToText(body) : body;
     const clipped = text.length > maxBytes ? `${text.slice(0, maxBytes)}\n…страница обрезана` : text;
     return { text: clipped, bytes: Buffer.byteLength(clipped), status: response.status, url: response.url };
+}
+
+/**
+ * The entry point of the project: the page the browser opens.
+ *
+ * The model may name a page; otherwise the entry point of the project is found the way the
+ * build stage finds it: `index.html` of the root, of `src/` or of `public/`.
+ * @param {string} root
+ * @param {string} [page]
+ * @returns {Promise<string>} the path of the page, relative to the root
+ * @ai.hint io
+ */
+/**
+ * The page of the project the browser opens.
+ *
+ * The project on Vite keeps its styles inside the script, so the page of the root has no styles
+ * at all: the build (`dist/`) is what shows something when there is no live server.
+ * @param {string} root
+ * @param {string} [page]
+ * @returns {Promise<string>}
+ * @ai.hint io
+ */
+async function entryPage(root, page = '') {
+    const named = String(page ?? '').trim();
+    if (named) {
+        const { rel } = await resolveInside(root, named, { allowRoot: false });
+        return rel;
+    }
+    for (const name of ['dist/index.html', 'index.html', 'src/index.html', 'public/index.html']) {
+        const found = await stat(path.join(root, name)).then((info) => info.isFile()).catch(() => false);
+        if (found) return name;
+    }
+    throw new Error('Страница не найдена: в проекте нет index.html. Соберите проект или назовите страницу.');
 }
 
 /**
@@ -776,6 +812,47 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                     maxBytes: Number.isSafeInteger(Number(args.maxBytes)) ? Number(args.maxBytes) : 64 * 1024,
                 });
                 return `HTTP ${answer.status} · ${answer.url}\n\n${answer.text}`;
+            }
+            case 'screenshot': {
+                // The live page of the project: the dev server that already runs is used as
+                // it is, and a server that is not running is started for the time of the
+                // call. The static root of a project on Vite has no styles at all — the
+                // styles live inside the script — so the role would see a page that is not
+                // the page of the project.
+                const live = await ensurePage({
+                    root,
+                    config,
+                    env,
+                    timeoutMs: Number.isSafeInteger(config?.browser?.devTimeoutMs) ? config.browser.devTimeoutMs : 60_000,
+                });
+                let shot = null;
+                try {
+                    shot = await shootPage({
+                        root,
+                        config,
+                        env,
+                        page: String(args.path ?? ''),
+                        output: String(args.output ?? ''),
+                        width: Number.isSafeInteger(Number(args.width)) ? Number(args.width) : 1440,
+                        height: Number.isSafeInteger(Number(args.height)) ? Number(args.height) : 900,
+                        url: live.url,
+                    });
+                } finally {
+                    await live.stop?.();
+                }
+                await rememberInMap(shot.rel);
+                const lines = [
+                    `Снимок страницы готов: ${shot.rel}`,
+                    `bytes: ${shot.bytes}`,
+                    `движок: ${shot.engine}`,
+                ];
+                if (shot.log) {
+                    lines.push('', 'Что страница говорит о себе:', shot.log);
+                }
+                lines.push(
+                    'Посмотрите на снимок: так видно, что сломалось в вёрстке, чего не видно в коде.',
+                );
+                return lines.join('\n');
             }
             case 'generate_svg': {
                 const output = args.path ? (await writePath(args.path)).rel : '';

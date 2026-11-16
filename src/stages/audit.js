@@ -285,6 +285,8 @@ export async function auditStage({
 
     const data = result.data ?? {};
     if (!result.data) warnings.push('Аудитор не вернул ответ.');
+    // The answer that does not fit the schema is kept, but it is reported.
+    for (const problem of result.schemaProblems ?? []) warnings.push(`Ответ аудитора не по схеме: ${problem}.`);
 
     const audit = {
         ok: Boolean(result.data),

@@ -262,13 +262,15 @@ export async function architectStage({
 
     const architecture = normalizeArchitecture(result.data, config);
     const file = await writeArchitecture(root, config, run, architecture);
+    // The answer that does not fit the schema is kept, but it is reported.
+    const schemaWarnings = (result.schemaProblems ?? []).map((problem) => `Структура не по схеме: ${problem}.`);
     return {
         stage: 'architect',
         ok: true,
         architecture,
         brief: architectureText(architecture),
         file,
-        warnings: architecture.warnings,
+        warnings: [...(architecture.warnings ?? []), ...schemaWarnings],
         turns: result.turns,
         usage: result.usage,
         runId: run,

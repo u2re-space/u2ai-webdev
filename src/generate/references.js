@@ -23,9 +23,10 @@
 
 import crypto from 'node:crypto';
 import path from 'node:path';
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, stat } from 'node:fs/promises';
 import { isInside, toPosix } from '../agent/paths.js';
 import { detectImageMime, imageSize } from '../inputs/assets.js';
+import { writeFileAtomic } from '../shared/house.js';
 
 /** The size of a picture is read by the house: `inputs/assets.js` keeps the helper. */
 export { imageSize };
@@ -156,7 +157,9 @@ export async function stageOneReference(ref, { root, maxBytes = 20 * 1024 * 1024
     const abs = path.join(dir, name);
     await mkdir(dir, { recursive: true });
     // The name is the hash of the content, so the file is the same one on every run.
-    await writeFile(abs, bytes).catch(() => {});
+    // The write is not swallowed: a reference that is not on the disk is a warning of the
+    // run, not a picture that the model will never see.
+    await writeFileAtomic(abs, bytes);
 
     return {
         rel: toPosix(path.join(REFS_DIR, name)),

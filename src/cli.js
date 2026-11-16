@@ -29,6 +29,7 @@ import { UsageError, CommandError } from './cli/errors.js';
 import { checkNode } from './cli/compatibility.js';
 import { createRenderer, detectMode } from './cli/renderer.js';
 import { runCommand, planCommand, stagesCommand, configOverrides } from './cli/run.js';
+import { sightCommand } from './cli/sight.js';
 import { installCommand } from './cli/install.js';
 import { componentCommand } from './cli/component.js';
 import { configCommand } from './cli/config.js';
@@ -132,6 +133,7 @@ export function parseArgv(argv = []) {
 const COMMANDS = Object.freeze({
     run: runCommand,
     plan: planCommand,
+    sight: sightCommand,
     stages: stagesCommand,
     install: installCommand,
     component: componentCommand,
