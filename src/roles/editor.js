@@ -10,6 +10,7 @@
  */
 
 import { UNTRUSTED } from './untrusted.js';
+import { FAMILY_CLI_NOTE } from './cli-note.js';
 import { referenceNote } from './reference.js';
 
 /** The name of the role. */
@@ -21,7 +22,8 @@ export const schema = 'code';
 /** The tools the role may call. */
 export const tools = [
     'list_files', 'read_file', 'write_file', 'replace_text', 'search_files',
-    'generate_svg', 'call_ai_image', 'run_command', 'read_skill', 'web_guidance',
+    'generate_svg', 'call_ai_image', 'ai_cli', 'ai_cli_help', 'run_command', 'read_skill',
+    'web_guidance',
 ];
 
 /** How many turns the role may spend. */
@@ -59,6 +61,7 @@ ${design}
 ${reference}
 
 Rules:
+${FAMILY_CLI_NOTE}
 - The guides of the platform are the yardstick of the polish: look one up with the
   \`web_guidance\` tool when you fix a control, a form or a motion.
 - Edit in place. Read the file, change the part that needs it, and keep the rest as it is. A

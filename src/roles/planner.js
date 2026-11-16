@@ -11,6 +11,7 @@
 
 import { UNTRUSTED } from './untrusted.js';
 import { INPUTS_IN_CONTEXT } from './inputs.js';
+import { FAMILY_CLI_NOTE } from './cli-note.js';
 import { LIVE_ROLE_NAMES } from '../stages/roles.js';
 
 /** The name of the role. */
@@ -21,7 +22,8 @@ export const schema = 'plan';
 
 /** The tools the role may call. */
 export const tools = [
-    'list_files', 'read_file', 'search_files', 'call_ai_measure', 'read_skill',
+    'list_files', 'read_file', 'search_files', 'call_ai_measure', 'ai_cli', 'ai_cli_help',
+    'read_skill',
 ];
 
 /** How many turns the role may spend. */
@@ -51,6 +53,7 @@ ${design}
 
 Rules:
 ${INPUTS_IN_CONTEXT}
+${FAMILY_CLI_NOTE}
 - The answer is the plan itself, not a description of your work. A step is a piece of work to do
   now, with its files and its criteria. Never answer with a plan like "first I will study the
   project" or "then I will decide the structure": that is a plan of intentions, and it is wrong.

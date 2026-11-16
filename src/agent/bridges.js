@@ -8,47 +8,34 @@
  * The binary is looked up in this order: the environment variable of the bridge, the checkout of
  * the sibling package, the installed `node_modules`, and the `PATH`.
  *
- * @depends node:path, node:fs/promises, node:child_process, node:url, shared/child-log
+ * The catalogue of the CLIs of the house lives in one place — `agent/cli-family` — and the
+ * bridges are the three of them that the pipeline calls by itself. The free door of the
+ * family (`ai_cli`) opens to all of them, the bridges included.
+ *
+ * @depends node:path, node:fs/promises, node:child_process, node:url, shared/child-log,
+ *          agent/cli-family
  * @usedBy agent/tools, stages/collect, stages/pictures
  * @exports EXTERNAL_CLIS, externalCliCandidates, resolveExternalCli, runBridge, bridgeEnabled, bridgeKey
  * @ai.tags tools, bridges, external
  * @ai.hint io
  * @changed 2026-11-15 The log of the child comes live: the run shows the lines of the sibling
  *                       CLI while it works, and not only when it is over.
+ * @changed 2026-11-16 The catalogue of the family lives in `agent/cli-family`: the bridges
+ *                       and the free door of the family look the binaries the same way.
  */
 
-import path from 'node:path';
-import { stat } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import { createLineReader } from '../shared/child-log.js';
+import { FAMILY_CLIS, FAMILY_ROOT, familyCandidates, resolveFamilyCli } from './cli-family.js';
 
 /** The root of this package: the sibling packages are looked up next to it. */
-const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+const PACKAGE_ROOT = FAMILY_ROOT;
 
 /** The external CLIs this package may call. */
 export const EXTERNAL_CLIS = Object.freeze({
-    'ai-decompose': {
-        command: 'ai-decompose',
-        env: 'AI_DECOMPOSE_BIN',
-        package: '@u2ai/decomposer',
-        checkout: 'u2ai-decomposer',
-        script: path.join('bin', 'ai-decompose.js'),
-    },
-    'ai-measure': {
-        command: 'ai-measure',
-        env: 'AI_MEASURE_BIN',
-        package: '@u2ai/measurer',
-        checkout: 'u2ai-measurer',
-        script: path.join('bin', 'ai-measure.js'),
-    },
-    'ai-image': {
-        command: 'ai-image',
-        env: 'AI_IMAGE_BIN',
-        package: '@u2ai/images',
-        checkout: 'u2ai-images',
-        script: path.join('bin', 'ai-image.js'),
-    },
+    'ai-decompose': FAMILY_CLIS['ai-decompose'],
+    'ai-measure': FAMILY_CLIS['ai-measure'],
+    'ai-image': FAMILY_CLIS['ai-image'],
 });
 
 /**
@@ -60,44 +47,7 @@ export const EXTERNAL_CLIS = Object.freeze({
  * @ai.hint pure
  */
 export function externalCliCandidates(name, { root = PACKAGE_ROOT, env = process.env } = {}) {
-    const spec = EXTERNAL_CLIS[name];
-    if (!spec) return [];
-    const candidates = [];
-    if (env[spec.env]) candidates.push(path.resolve(env[spec.env]));
-    // The checkout of the sibling package, next to this one or inside it.
-    candidates.push(path.join(root, spec.checkout, spec.script));
-    candidates.push(path.join(root, '..', spec.checkout, spec.script));
-    candidates.push(path.join(root, 'submodules', spec.checkout, spec.script));
-    // The installed package.
-    candidates.push(path.join(root, 'node_modules', ...spec.package.split('/'), spec.script));
-    return candidates;
-}
-
-/**
- * The executable of an external CLI in PATH.
- * @param {string} name
- * @param {object} env
- * @returns {Promise<{ command: string, args: string[], shell?: boolean }|null>}
- * @ai.hint io
- */
-async function findOnPath(name, env) {
-    const spec = EXTERNAL_CLIS[name];
-    if (!spec) return null;
-    const names = process.platform === 'win32'
-        ? [`${spec.command}.cmd`, `${spec.command}.exe`, spec.command]
-        : [spec.command];
-    for (const dir of String(env.PATH ?? '').split(path.delimiter)) {
-        if (!dir) continue;
-        for (const candidate of names) {
-            const full = path.join(dir, candidate);
-            if (!await stat(full).then(() => true).catch(() => false)) continue;
-            if (process.platform === 'win32' && candidate.endsWith('.cmd')) {
-                return { command: full, args: [], shell: true };
-            }
-            return { command: full, args: [] };
-        }
-    }
-    return null;
+    return familyCandidates(name, { root, env });
 }
 
 /**
@@ -111,13 +61,7 @@ async function findOnPath(name, env) {
  * @ai.hint io
  */
 export async function resolveExternalCli(name, { root = PACKAGE_ROOT, env = process.env } = {}) {
-    for (const candidate of externalCliCandidates(name, { root, env })) {
-        if (!await stat(candidate).then(() => true).catch(() => false)) continue;
-        if (candidate.endsWith('.js')) return { command: process.execPath, args: [candidate] };
-        if (candidate.endsWith('.cmd')) return { command: candidate, args: [], shell: true };
-        return { command: candidate, args: [] };
-    }
-    return await findOnPath(name, env);
+    return await resolveFamilyCli(name, { root, env });
 }
 
 /**

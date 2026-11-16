@@ -11,6 +11,7 @@
 
 import { UNTRUSTED } from './untrusted.js';
 import { INPUTS_IN_CONTEXT } from './inputs.js';
+import { FAMILY_CLI_NOTE } from './cli-note.js';
 import { referenceNote } from './reference.js';
 import { PAGE_WIDTH_TOKEN, pageWidthNote } from './page-frame.js';
 
@@ -22,7 +23,8 @@ export const schema = 'architecture';
 
 /** The tools the role may call. */
 export const tools = [
-    'list_files', 'read_file', 'search_files', 'call_ai_measure', 'read_skill', 'web_guidance',
+    'list_files', 'read_file', 'search_files', 'call_ai_measure', 'ai_cli', 'ai_cli_help',
+    'read_skill', 'web_guidance',
 ];
 
 /** How many turns the role may spend. */
@@ -61,6 +63,7 @@ ${width}
 
 Rules:
 ${INPUTS_IN_CONTEXT}
+${FAMILY_CLI_NOTE}
 - The platform of today is the platform you design for: look the guides up with the
   \`web_guidance\` tool before you design a control, a form or a layout, and let the
   structure follow them.

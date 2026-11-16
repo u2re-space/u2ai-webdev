@@ -7,6 +7,7 @@
  * @changed 2026-11-13 The skeleton of the help: the full command surface lands with the CLI.
  * @changed 2026-11-13 The whole surface: run, plan, stages, component, install, jobs, memory.
  * @changed 2026-11-13 The command of the configuration: config.
+ * @changed 2026-11-16 The CLIs of the house: the roles may call them with any flag of theirs.
  */
 
 /**
@@ -76,6 +77,19 @@ Options of the run:
   --config <file>             The config file of the run.
   -h, --help                  Print this help.
   -v, --version               Print the version.
+
+The CLIs of the house:
+  The roles of a run may call the CLIs of the family \`ai-*\` themselves. The tool \`ai_cli\`
+  takes the name of the CLI and the arguments of its command line, one argument per element,
+  and the tool \`ai_cli_help\` gives the manual of the family: which CLI does what, the flags
+  they share, and the flags and the commands of every one of them. Every CLI of the family
+  answers \`--help\` with the whole table of its commands and its flags, and the help is a
+  local text — it calls no model and costs nothing.
+
+  The rules are the rules of every tool: the command is started without a shell, it runs in
+  the working directory of the run, every path of it stays inside that directory, the file
+  that is written lands in a directory the stage opened for writing, and a command that does
+  not finish on its own is refused. The switch tools.external_cli turns both tools off.
 
 The run reads the inputs of the project: DESIGN.md, measurements.json, palette.json,
 tokens.css and the pictures of the assets. The tokens of tokens.css win over the other

@@ -9,7 +9,8 @@
  * `ai-measure`), which run as subprocesses.
  *
  * @depends node:path, node:child_process, agent/fs-tools, agent/project-backup, agent/assets,
- *          agent/bridges, agent/tool-specs, agent/paths, agent/run-map, inputs/measured
+ *          agent/bridges, agent/tool-specs, agent/paths, agent/run-map, agent/cli-family,
+ *          inputs/measured
  * @exports createToolset, toolSpecs, enabledToolNames, mcpToolEntries, htmlToText,
  *          BLOCKING_COMMANDS, WINDOWS_EXTENSIONS, quoteWindowsArg, findProgram, killTree
  * @ai.tags tools, agent
@@ -17,6 +18,8 @@
  * @changed 2026-11-15 Карта прогона и кэш контекста отвечают на чтения и поиск.
  * @changed 2026-11-15 `call_ai_measure` не запускает измеритель, если лист уже есть.
  * @changed 2026-11-15 `call_ai_measure` не зовёт команду `design`: направление дизайна пишут роли.
+ * @changed 2026-11-16 Свободная дверь к CLI семейства: `ai_cli` зовёт любой CLI дома с любым
+ *                       флагом, `ai_cli_help` даёт руководство по нему.
  */
 
 import path from 'node:path';
@@ -33,6 +36,17 @@ import { runProgram as runProgramIn } from './programs.js';
 import { isInside, resolveInside } from './paths.js';
 import { mapFiles } from './run-map.js';
 import { findMeasurement } from '../inputs/measured.js';
+import {
+    FAMILY_CLIS,
+    FAMILY_ROOT,
+    FAMILY_TIMEOUT_MS,
+    familyDoc,
+    familyNames,
+    familyOutputArg,
+    familyPathArgs,
+    resolveFamilyCli,
+    runFamilyCli,
+} from './cli-family.js';
 
 export { toolSpecs, enabledToolNames } from './tool-specs.js';
 export { WINDOWS_EXTENSIONS, quoteWindowsArg, findProgram, killTree } from './programs.js';
@@ -400,6 +414,23 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
         const located = await resolveInside(root, String(value ?? ''), { forWrite: true, allowRoot: false });
         if (!allowed.some((dir) => isInside(dir, located.abs))) {
             throw new Error(`Запись вне разрешённого каталога запрещена: ${located.rel}`);
+        }
+        return located;
+    }
+
+    /**
+     * Resolve a directory the files of a command land in, and refuse the ones outside the
+     * allowed dirs.
+     *
+     * The root itself is allowed here: a command that writes into the working directory is
+     * the normal case, and the stage that opened the directories knows what it opened.
+     * @param {string} value
+     * @returns {Promise<{ abs: string, rel: string }>}
+     */
+    async function writeDirPath(value) {
+        const located = await resolveInside(root, String(value ?? ''), { forWrite: true, allowRoot: true });
+        if (!allowed.some((dir) => isInside(dir, located.abs))) {
+            throw new Error(`The write outside the allowed directory is refused: ${located.rel}`);
         }
         return located;
     }
@@ -798,6 +829,55 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                 return await callMeasure(args);
             case 'call_ai_image':
                 return await callBridge('ai-image', args);
+            case 'ai_cli': {
+                const name = String(args.cli ?? '').trim();
+                if (!name) return 'The CLI is not named.';
+                if (!FAMILY_CLIS[name]) {
+                    return `The CLI "${name}" is not one of the house: ${familyNames().join(', ')}. `
+                        + 'Read the manual with the tool `ai_cli_help`.';
+                }
+                const list = parseArgsList(args.args);
+                const line = [name, ...list].join(' ');
+                // A server or a watcher does not finish on its own: it would hold the run
+                // until the timeout, and the work of the run would wait for nothing.
+                if (BLOCKING_COMMANDS.test(line)) {
+                    return 'The command is not started: it does not finish on its own. '
+                        + 'Check the files of the project or start such a command in the background of a shell.';
+                }
+                // Every path of the command stays inside the root of the run.
+                for (const arg of familyPathArgs(list)) {
+                    try {
+                        await resolveInside(root, arg, { allowRoot: false });
+                    } catch (error) {
+                        return `The CLI "${name}": ${error.message}`;
+                    }
+                }
+                // The files of the result land in a directory the stage opened for writing.
+                const output = familyOutputArg(list);
+                if (output) {
+                    try {
+                        await writeDirPath(output);
+                    } catch (error) {
+                        return `The CLI "${name}": ${error.message}`;
+                    }
+                }
+                const found = await resolveFamilyCli(name, { root: FAMILY_ROOT, env });
+                if (!found) {
+                    const spec = FAMILY_CLIS[name];
+                    return `The CLI "${name}" is not installed: set ${spec.env} `
+                        + `or install ${spec.package ?? 'the package'}.`;
+                }
+                const timeoutMs = Number.isSafeInteger(Number(args.timeoutMs))
+                    ? Number(args.timeoutMs)
+                    : FAMILY_TIMEOUT_MS;
+                const result = await runFamilyCli({ found, args: list, cwd: root, env, timeoutMs });
+                const parts = [`${name} → code ${result.code ?? 0}${result.timedOut ? ' (the time is over)' : ''}`];
+                if (result.stdout.trim()) parts.push(result.stdout.trim());
+                if (result.stderr.trim()) parts.push(result.stderr.trim());
+                return parts.join('\n');
+            }
+            case 'ai_cli_help':
+                return familyDoc(args.topic);
             default:
                 return `Неизвестный инструмент: ${name}`;
         }

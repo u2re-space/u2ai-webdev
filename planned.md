@@ -1709,6 +1709,38 @@ CLI `ai-webdev` (`@u2ai/webdev`) с собственным конфигом `~/.
 
 ---
 
+### step-90 — Свободная дверь к CLI семейства `ai-*`
+
+- [x] Повод: мосты (`call_ai_measure`, `call_ai_decompose`, `call_ai_image`) узкие по замыслу —
+      каждый зовёт один CLI для одной работы. Роли, которой нужен флаг CLI, версия пакета или
+      команда, которую мост не покрывает, не имела куда пойти, и флаги приходилось угадывать,
+      а угаданный флаг стоит неудачного вызова и потерянного хода
+- [x] `src/agent/cli-family.js` — каталог семейства (`ai`, `ai-webdev`, `ai-decompose`,
+      `ai-measure`, `ai-image`: команда, переменная окружения, пакет, каталоги, скрипт, краткое
+      описание), `familyCandidates`, `resolveFamilyCli`, `runFamilyCli` (запуск без shell,
+      `.cmd` через `cmd.exe` с `quoteWindowsArg`, потолок 600000 мс), `familyPathArgs`,
+      `familyOutputArg`, `familyDoc` (топики `family`, `flags`, `commands`, `all`)
+- [x] `src/agent/bridges.js` — каталог мостов переехал в `agent/cli-family`: мосты и свободная
+      дверь ищут бинарники одинаково
+- [x] `src/agent/tool-specs.js` — новые инструменты `ai_cli` (имя CLI, аргументы, `timeoutMs`)
+      и `ai_cli_help` (топик), оба под ключом `config.tools.external_cli`
+- [x] `src/agent/tools.js` — `ai_cli` проверяет имя CLI, отказывает командам-серверам
+      (`BLOCKING_COMMANDS`), держит пути внутри корня прогона, проверяет `--out/--output` по
+      разрешённым каталогам стадии, запускает CLI и отдаёт код, stdout и stderr;
+      `ai_cli_help` отдаёт руководство
+- [x] `src/roles/cli-note.js` — правило дома: «спроси CLI через `ai_cli` `--help`»
+- [x] роли `planner`, `architect`, `editor`, `reviewer`, `auditor`, `installer` — инструменты
+      `ai_cli`/`ai_cli_help` и правило о `--help` в списке правил
+- [x] `src/config/defaults.js` — `tools.external_cli: true`
+- [x] `src/help.js`, `index.js` — раздел «The CLIs of the house» и публичный экспорт каталога
+- [x] `test/cli-family.test.js` — 13 тестов: каталог, руководство, поиск путей и места записи,
+      запуск CLI, отказ чужому CLI, отказ пути снаружи, отказ серверу, «не установлен»,
+      выключатель конфигурации, роли
+- [x] README (EN) — раздел «The CLIs of the house»
+- [x] Проверка: `npm test` — 550 тестов, все проходят; `npm run check` — 182 файла
+
+---
+
 ## 2. Порядок работы и зависимости шагов
 
 ```

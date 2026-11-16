@@ -1155,6 +1155,49 @@ In the `--json` mode the line of a child is an event of the run:
 {"time":"2026-11-15T10:00:00.000Z","type":"bridge.log","name":"ai-image","stream":"stdout","line":"the answer carries 1 picture(s)"}
 ```
 
+## The CLIs of the house
+
+The bridges are narrow on purpose: a bridge calls one CLI of the house for one job. A role that
+needs something else — the flags of a CLI, the version of a package, a command that no bridge
+covers — gets a free door instead: the tool `ai_cli`.
+
+| CLI | What it does |
+|---|---|
+| `ai` | The umbrella: ask, chat, run, gen, image, decompose, component, serve, mcp. |
+| `ai-webdev` | This CLI: the web project itself. |
+| `ai-decompose` | Splits a reference into screens and fragments. |
+| `ai-measure` | Measures a reference: the frames, the gaps, the sizes, the colours. |
+| `ai-image` | Makes the pictures of the project and cuts them. |
+
+A call names the CLI and the arguments of its command line, one argument per element:
+
+```json
+{"cli": "ai-decompose", "args": ["--help"]}
+{"cli": "ai-measure", "args": ["measure", "landing.png", "--out", "measurements"]}
+```
+
+The rule of the house about the flags is one line: **ask the CLI**. Every CLI of the family
+answers `--help` with the whole table of its commands and its flags, and `--version` with its
+version. The help is a local text — it calls no model and costs nothing, while a guessed flag
+costs a failed call and a wasted turn. The manual of the family — which CLI does what, the
+flags they share, the flags and the commands of every one of them — is in the tool
+`ai_cli_help`.
+
+The rules of a free call are the rules of every tool of the house:
+
+- the command is started without a shell, so the arguments are exact;
+- it runs in the working directory of the run;
+- every path of the command stays inside the working directory;
+- the file that is written lands in a directory the stage opened for writing;
+- a command that does not finish on its own is refused (a server, a watcher);
+- the config of the CLI may be named: the config of the home lives outside the working
+  directory and is always allowed.
+
+The binary of a CLI is looked up in the environment variable of the CLI (`AI_BIN`,
+`AI_WEBDEV_BIN`, `AI_DECOMPOSE_BIN`, `AI_MEASURE_BIN`, `AI_IMAGE_BIN`), in the checkout of the
+sibling package, in `node_modules` and in the `PATH`. The switch `tools.external_cli` turns
+both tools off.
+
 ## Examples
 
 ```bash

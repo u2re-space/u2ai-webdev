@@ -12,6 +12,7 @@
  */
 
 import { UNTRUSTED } from './untrusted.js';
+import { FAMILY_CLI_NOTE } from './cli-note.js';
 
 /** The name of the role. */
 export const name = 'auditor';
@@ -21,7 +22,8 @@ export const schema = 'review';
 
 /** The tools the role may call. */
 export const tools = [
-    'list_files', 'read_file', 'search_files', 'run_command', 'fetch_url', 'read_skill', 'web_guidance',
+    'list_files', 'read_file', 'search_files', 'run_command', 'fetch_url', 'ai_cli', 'ai_cli_help',
+    'read_skill', 'web_guidance',
 ];
 
 /** How many turns the role may spend. */
@@ -50,6 +52,7 @@ ${stack}
 ${design}
 
 Rules:
+${FAMILY_CLI_NOTE}
 - Read the project before the verdict: list the files with \`list_files\`, read the ones that
   matter with \`read_file\`, and run the build of the project with \`run_command\`. The listing
   of the project is in the task context: every path in it exists, and a path outside of it

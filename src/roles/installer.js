@@ -10,6 +10,7 @@
  */
 
 import { UNTRUSTED } from './untrusted.js';
+import { FAMILY_CLI_NOTE } from './cli-note.js';
 
 /** The name of the role. */
 export const name = 'installer';
@@ -20,7 +21,7 @@ export const schema = 'setup';
 /** The tools the role may call. */
 export const tools = [
     'list_files', 'read_file', 'write_file', 'replace_text', 'search_files',
-    'run_command', 'run_script', 'read_skill',
+    'run_command', 'run_script', 'ai_cli', 'ai_cli_help', 'read_skill',
 ];
 
 /** How many turns the role may spend. */
@@ -56,6 +57,7 @@ ${stack}
 ${manager}
 
 Rules:
+${FAMILY_CLI_NOTE}
 - The steps of the plan belong to the other roles: the markup, the code and the styles are
   written by them. You prepare the ground for them — the dependencies, the scripts, the
   config of the bundler and the proof that the project starts. The files that the plan names

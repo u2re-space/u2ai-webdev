@@ -208,6 +208,8 @@ export const defaults = {
     external_measure: true,
     /** Call the external `ai-image` CLI. */
     external_image: true,
+    /** Call any CLI of the house with the flags of its own command line. */
+    external_cli: true,
   },
 
   // --- the stack the generator writes for ------------------------------------
