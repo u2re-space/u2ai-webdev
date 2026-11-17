@@ -69,8 +69,14 @@ export const DOCUMENTATION_SOURCES = Object.freeze({
   cssCascade: 'https://drafts.csswg.org/css-cascade-5/',
   cssContain: 'https://drafts.csswg.org/css-contain/',
   cssImages: 'https://drafts.csswg.org/css-images-5/',
-  cssMasking: 'https://drafts.csswg.org/css-masking/',
   cssFonts: 'https://drafts.csswg.org/css-fonts/',
+  cssMasking: 'https://drafts.csswg.org/css-masking/',
+  cssNesting: 'https://drafts.csswg.org/css-nesting/',
+  cssSelectors: 'https://drafts.csswg.org/selectors/',
+  cssUI: 'https://drafts.csswg.org/css-ui/',
+  cssDisplay: 'https://drafts.csswg.org/css-display/',
+  cssScrollSnap: 'https://drafts.csswg.org/css-scroll-snap-2/',
+  cssScrollbars: 'https://drafts.csswg.org/css-scrollbars/',
   magickOptions: 'https://imagemagick.org/command-line-options/',
   magickTools: 'https://imagemagick.org/command-line-tools/',
   phosphorIcons: 'https://phosphoricons.com/',
@@ -81,7 +87,7 @@ export const DOCUMENTATION_SOURCES = Object.freeze({
 export const defaults = {
   // --- API -----------------------------------------------------------------
   /** Text model for the role agents. */
-  model: 'minimax/minimax-m3.1-flash',//'moonshotai/kimi-k3.1-pro',
+  model: 'google/gemini-4-hydrogen',//'moonshotai/kimi-k3.1-pro',
   /** Endpoint of the text API; backends[] below can override it. */
   baseURL: 'https://routerai.ru/api/v1',
   apiKey: null,
@@ -639,6 +645,7 @@ export const defaults = {
         'canIUse', 'cssTricks', 'chromeStatus',
       ],
       architect: [
+        'cssNesting', 'cssSelectors', 'cssUI', 'cssScrollSnap', 'cssScrollbars',
         'mdnCss', 'mdnJavaScript', 'ecma262', 'typescript', 'sass', 'canIUse',
         'cssTricks', 'chromeStatus', 'cssLogical', 'cssProperty', 'cssLayer',
         'cssConditional', 'cssAnchor', 'cssUnits', 'cssAnimation', 'cssShapes',
@@ -647,6 +654,7 @@ export const defaults = {
         'phosphorIcons', 'lucideIcons', 'googleFonts',
       ],
       director: [
+        'cssNesting', 'cssSelectors', 'cssUI', 'cssScrollSnap', 'cssScrollbars',
         'mdnCss', 'mdnJavaScript', 'ecma262', 'typescript', 'sass', 'canIUse',
         'cssTricks', 'chromeStatus', 'cssLogical', 'cssProperty', 'cssLayer',
         'cssConditional', 'cssAnchor', 'cssUnits', 'cssAnimation', 'cssShapes',
@@ -655,6 +663,7 @@ export const defaults = {
         'phosphorIcons', 'lucideIcons', 'googleFonts',
       ],
       coder: [
+        'cssNesting', 'cssSelectors', 'cssUI', 'cssScrollSnap', 'cssScrollbars',
         'cssUnits', 'cssGrid', 'cssFlex', 'htmlSemantics', 'a11y',
         'mdnCss', 'mdnJavaScript', 'ecma262', 'typescript', 'sass', 'canIUse',
         'cssTricks', 'chromeStatus', 'cssLogical', 'cssProperty', 'cssLayer',
@@ -668,6 +677,7 @@ export const defaults = {
         'mdnCss', 'phosphorIcons', 'lucideIcons',
       ],
       styler: [
+        'cssNesting', 'cssSelectors', 'cssUI', 'cssScrollSnap', 'cssScrollbars',
         'cssUnits', 'cssShapes', 'cssGrid', 'cssFlex', 'cssFonts', 'cssColors', 'wcagColors',
         'mdnCss', 'sass', 'canIUse', 'cssLogical', 'cssProperty', 'cssLayer',
         'cssConditional', 'cssAnchor', 'cssAnimation', 'cssMotion', 'cssTransform',
