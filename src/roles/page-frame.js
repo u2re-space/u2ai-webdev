@@ -62,8 +62,10 @@ export function pageFrameRules() {
 
 \`\`\`css
 @property --background-color    { syntax: "<color>"; initial-value: #fff0; inherits: true; };
-@property --body-scrollbar-size { syntax: "<length>"; initial-value: 0.9rem; inherits: true; };
+@property --body-scrollbar-size { syntax: "<length>"; initial-value: 0.5rem; inherits: true; };
 @property --zoom { syntax: "<number>"; initial-value: 1; inherits: true; };
+
+/* also needs to generate \`@property\` for ${PAGE_WIDTH_TOKEN}, ${PAGE_HEIGHT_TOKEN} and other tokens... */
 
 @layer containement {
   *, *::before, *::after {
@@ -84,7 +86,7 @@ export function pageFrameRules() {
   body {
     /* \`--body-scrollbar-size\` needs to accounting when doing paddings or margins */
     --background-color: light-dark(#fff, #111);
-    --body-scrollbar-size: 0.9rem;
+    --body-scrollbar-size: 0.5rem;
     scroll-snap-type: y mandatory;
 
     container-type: size;
@@ -105,7 +107,7 @@ export function pageFrameRules() {
   }
 
   ${PAGE_CLASS} {
-    --zoom: calc(100cqi / calc(var(${PAGE_WIDTH_TOKEN}, ${DEFAULT_PAGE_WIDTH}) + var(--body-scrollbar-size, 0.9rem)));
+    --zoom: calc(calc(100cqi - var(--body-scrollbar-size, 0.5rem)) / var(${PAGE_WIDTH_TOKEN}, ${DEFAULT_PAGE_WIDTH}));
 
     zoom: var(--zoom, 1);
     container-type: inline-size;
@@ -144,7 +146,7 @@ export function pageScaleRules() {
   \`container-type: inline-size;\` and
   \`inline-size: var(${PAGE_WIDTH_TOKEN}, ${DEFAULT_PAGE_WIDTH});\`. The content of the page is
   laid out in the width of the design, not in the width of the window.
-- The canvas is scaled into the window: \`${ZOOM_TOKEN}: calc(100cqi / calc(var(${PAGE_WIDTH_TOKEN}, ${DEFAULT_PAGE_WIDTH}) + var(--body-scrollbar-size, 0.9rem)));\`
+- The canvas is scaled into the window: \`${ZOOM_TOKEN}: calc(calc(100cqi - var(--body-scrollbar-size, 0.5rem)) / var(${PAGE_WIDTH_TOKEN}, ${DEFAULT_PAGE_WIDTH}));\`
   in the theme layer, and \`zoom: var(${ZOOM_TOKEN}, 1);\` on the canvas. The \`100cqi\` is the
   inline size of the body — the nearest container of the canvas — so the canvas takes the
   whole width of the window, and the proportions of the design are kept.
