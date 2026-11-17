@@ -9,6 +9,7 @@
  * @ai.hint pure
  */
 import { normalizeUsage, outputText, refusalText } from './api.js';
+import { assetPart, scrubDataUrls, scrubItems } from '../shared/data-urls.js';
 
 const isRecord = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const textOf = (value) => (typeof value === 'string' ? value : '');
@@ -104,16 +105,39 @@ export function buildResponsesBody({
     parallelToolCalls = null,
 } = {}) {
     const body = { model };
-    if (textOf(instructions).trim()) body.instructions = textOf(instructions);
+    // The instructions are text: a data URL in them is cut out and replaced with a note.
+    const clean = scrubDataUrls(textOf(instructions));
+    if (clean.text.trim()) body.instructions = clean.text;
     if (previousResponseId) body.previous_response_id = previousResponseId;
 
     // Input: a ready item list is passed through, text and parts are packed into one user message.
+    //
+    // The data URLs are cut out of the text of the conversation and put into the request as
+    // what they are: a picture goes as a picture, a file goes as a file. The model sees the
+    // same thing, and the text does not carry a wall of base64.
     if (Array.isArray(input)) {
-        body.input = input;
+        const scrubbed = scrubItems(input);
+        body.input = scrubbed.items;
+        const parts = scrubbed.assets.map((asset) => assetPart(asset)).filter(Boolean);
+        if (parts.length) {
+            body.input = [
+                ...body.input,
+                {
+                    role: 'user',
+                    content: [
+                        textPart('The data of the messages above is attached here: the picture and the files travel as themselves, not as text.'),
+                        ...parts,
+                    ],
+                },
+            ];
+        }
     } else {
         const content = [];
-        const text = textOf(input);
-        if (text.trim()) content.push(textPart(text));
+        const scrubbed = scrubDataUrls(textOf(input));
+        if (scrubbed.text.trim()) content.push(textPart(scrubbed.text));
+        for (const part of scrubbed.assets.map((asset) => assetPart(asset)).filter(Boolean)) {
+            content.push(part);
+        }
         for (const part of Array.isArray(parts) ? parts : []) {
             if (!part) continue;
             content.push(part);

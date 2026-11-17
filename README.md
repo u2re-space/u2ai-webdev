@@ -1231,6 +1231,39 @@ time of every read and the time of the first one. A file that is read in several
 pieces it was read in — the second read does not wipe the first one. A write says that what was
 read is not what is on the disk any more, so the fact never lies about the file.
 
+### The data URLs of a message
+
+A message that carries a picture as text carries it twice: once as the base64 and once as the
+words around it. Nobody reads the base64 — the model sees a wall of characters, the request
+grows by a third of the picture for nothing, and some gateways refuse such a message
+altogether.
+
+So the house cuts every data URL out of the text and puts the payload into the request as what
+it is:
+
+| What was in the text | What goes into the request |
+|---|---|
+| `data:image/png;base64,…` | an image part (`input_image`) — the model sees the picture |
+| `data:application/pdf;base64,…` | a file part (`input_file`, `file_data` in base64) |
+| `data:text/plain,…` | a text part (`input_text`) |
+
+In the text itself a short note takes the place of the data URL:
+
+```
+The picture of the reference: [picture attached: image/png, 12.4 KB]
+```
+
+The cut happens in three places, and the third one is the safety net:
+
+1. the answer of a tool (`function_call_output`) — the payload goes into the request right
+   after the answer, as the part it is;
+2. the items of the conversation — the same, and the assets are appended at the end;
+3. **the builder of the request** — every text that leaves the house is cut there, whatever
+   path it took: the prompt of a stage, the message of a client, the answer of a tool.
+
+The words of a message without a data URL are not touched: the house cuts the data URLs and
+nothing else.
+
 ## The map of the run
 
 The map of a run is the index of the files of the working directory: their lines, their symbols,

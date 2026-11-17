@@ -62,9 +62,15 @@ function userContent(parts) {
                 break;
             }
             case 'input_file': {
+                // The file travels in the shape of the Responses API (`file_data` and
+                // `filename`) and in the shape of the chat API (`file: {file_data}`).
                 const file = isRecord(part.file) ? part.file : {};
-                if (typeof file.file_data === 'string' && file.file_data) {
-                    out.push({ type: 'file', file: { file_data: file.file_data, ...(file.filename ? { filename: file.filename } : {}) } });
+                const data = typeof part.file_data === 'string' && part.file_data
+                    ? part.file_data
+                    : (typeof file.file_data === 'string' ? file.file_data : null);
+                const filename = part.filename ?? file.filename ?? null;
+                if (data) {
+                    out.push({ type: 'file', file: { file_data: data, ...(filename ? { filename } : {}) } });
                 } else if (typeof file.file_id === 'string' && file.file_id) {
                     out.push({ type: 'file', file: { file_id: file.file_id } });
                 } else if (typeof part.file === 'string' && part.file) {

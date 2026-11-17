@@ -31,6 +31,7 @@
  */
 
 import { parseResponse, textPart, imagePart } from '../openai/responses.js';
+import { assetPart, scrubDataUrls } from '../shared/data-urls.js';
 import { readFile } from 'node:fs/promises';
 import { resolveInside } from '../agent/paths.js';
 import { schemaFor, schemaProblems, schemaText } from '../agent/schemas.js';
@@ -656,7 +657,22 @@ export async function runRole({
                 name: call.name,
                 arguments: JSON.stringify(call.arguments ?? {}),
             });
-            items.push({ type: 'function_call_output', call_id: callId, output: String(output ?? '') });
+            // A data URL in the answer of the tool is cut out of the text: the payload goes
+            // into the request as what it is — a picture, a file, a text — and the text keeps
+            // a short note. The model sees the same thing, and the text does not carry a wall
+            // of base64.
+            const scrubbed = scrubDataUrls(String(output ?? ''));
+            items.push({ type: 'function_call_output', call_id: callId, output: scrubbed.text });
+            const assets = scrubbed.assets.map((asset) => assetPart(asset)).filter(Boolean);
+            if (assets.length) {
+                items.push({
+                    role: 'user',
+                    content: [
+                        textPart('The data of the answer above is attached here: it travels as itself, not as text.'),
+                        ...assets,
+                    ],
+                });
+            }
             // A picture that the tool has made goes back into the conversation as a picture:
             // the role has to see what it has just shot, and a path in the text is not a
             // picture. `read_file` refuses a binary file — that refusal was the sign.
