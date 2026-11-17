@@ -290,6 +290,7 @@ export function inputContext(collected = {}) {
                 const size = item.widthRem ? ` (${item.widthRem}rem wide)` : '';
                 const crop = item.crop ? ` → ${item.crop}` : '';
                 lines.push(`- ${item.name || item.kind} [${item.kind}] ${box}${size}${crop}`);
+                if (item.text) lines.push(`  Exact text (preserve line breaks): ${JSON.stringify(item.text)}`);
             }
         }
         if (sheet.regions.length) {

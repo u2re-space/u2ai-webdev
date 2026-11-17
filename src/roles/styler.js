@@ -98,6 +98,12 @@ ${devToolsNote({
 - Use more actively CSS math \`calc(<expression>)\`, \`calc-size(<keyword>, <expression>)\` (expression with \`size\` keyword), \`round\`, \`abs\`, \`sign\`, \`mod\` (and etc., incl. trigonometry), and other modern math functions/expressions.
 - Use more actively CSS interaction, such \`user-select\`, \`pointer-events\`, \`touch-action\`, etc.
 - Use CSS \`white-space\` and \`text-wrap\` properties where is it suitable.
+- The body scrolls: set \`scrollbar-width: thin;\` and
+  \`scrollbar-color: contrast-color(var(--background-color)) var(--background-color);\` on it.
+  \`--background-color\` is the page surface and scrollbar track; the contrasting first color
+  is the thumb. Preserve at least 3:1 contrast, with a stronger
+  \`prefers-contrast: more\` override. If adding \`::-webkit-scrollbar\` fallbacks, scope them
+  to \`@supports not (scrollbar-color: auto)\` and reset \`scrollbar-width: auto\` inside.
 - For scrollable content, use additionally CSS scroll snap features.
 - The layout is grid for the page and for the areas, flex for the rows. 
   A row of cards is \`repeat(auto-fit, minmax(240px, 1fr))\`, not a fixed width with a margin.

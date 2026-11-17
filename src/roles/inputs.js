@@ -19,4 +19,4 @@
  * @exports
  * @ai.hint pure
  */
-export const INPUTS_IN_CONTEXT = '- The design direction, the measurements, the palette and the tokens are already in your context. Do not read those files again: read only the files of the project that are not in the context.';
+export const INPUTS_IN_CONTEXT = '- The design direction, the measurements, the palette and the tokens are already in your context. Do not read those files again: read only the files of the project that are not in the context. If an element has exact recognized text, reproduce it verbatim; preserve every newline as a visible line break in the markup or styles, and do not turn it into spaces.';

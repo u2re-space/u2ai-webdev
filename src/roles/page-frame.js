@@ -96,7 +96,7 @@ export function pageFrameRules() {
     min-block-size: 100dvb;
     max-inline-size: 100dvi;
     scrollbar-width: thin;
-    scrollbar-color: var(--background-color) contrast-color(var(--background-color));
+    scrollbar-color: contrast-color(var(--background-color)) var(--background-color);
     scrollbar-gutter: stable; /* or \`auto\` if system supports adaptive \`--body-scrollbar-size\` */
     overflow: hidden;
     overflow-y: auto;
@@ -104,6 +104,31 @@ export function pageFrameRules() {
     padding: 0px;
 
     background-color: var(--background-color, #fff0);
+  }
+
+  @media (prefers-contrast: more) {
+    body {
+      scrollbar-color: light-dark(#000, #fff) var(--background-color);
+    }
+  }
+
+  @supports not (scrollbar-color: auto) {
+    body {
+      scrollbar-width: auto;
+    }
+
+    body::-webkit-scrollbar {
+      width: 12px;
+      height: 12px;
+    }
+
+    body::-webkit-scrollbar-thumb {
+      background: CanvasText;
+    }
+
+    body::-webkit-scrollbar-track {
+      background: var(--background-color);
+    }
   }
 
   ${PAGE_CLASS} {
@@ -142,6 +167,13 @@ export function pageScaleRules() {
   \`min-block-size: 100dvh;\`.
 - The background of the page belongs to the canvas, not to the body: the body is as tall as
   the viewport, and the canvas is as tall as the content.
+- Set \`--background-color\` to the actual page surface color from the design tokens; it is the
+  scrollbar track color too, not the thumb color. Use \`scrollbar-width: thin;\` and
+  \`scrollbar-color: contrast-color(var(--background-color)) var(--background-color);\` on the
+  scrolling body so the thumb remains distinct from its track. Keep at least 3:1 contrast
+  against the surface; increase it for \`prefers-contrast: more\`. If adding legacy
+  \`::-webkit-scrollbar\` rules, put them under \`@supports not (scrollbar-color: auto)\` and reset
+  \`scrollbar-width: auto\` there.
 - The canvas of the page is the element with the class \`${PAGE_CLASS}\` inside the body:
   \`container-type: inline-size;\` and
   \`inline-size: var(${PAGE_WIDTH_TOKEN}, ${DEFAULT_PAGE_WIDTH});\`. The content of the page is

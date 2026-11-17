@@ -71,6 +71,12 @@ test('the styles give the canvas the width of the design and the scale', () => {
     // The body with the size containment has no height of its own.
     assert.match(text, /min-block-size: 100dvh;/);
     assert.match(text, /The background of the page belongs to the canvas/);
+    assert.ok(text.includes('scrollbar-width: thin;'), 'scrollbar width is not explicit');
+    assert.ok(
+        text.includes('scrollbar-color: contrast-color(var(--background-color)) var(--background-color);'),
+        'scrollbar thumb and track colors are missing or reversed',
+    );
+    assert.ok(text.includes('@supports not (scrollbar-color: auto)'), 'scrollbar fallback is missing');
     // The narrow screen is not scaled.
     assert.match(text, /inline-size: 100%; zoom: 1;/);
 });

@@ -136,6 +136,7 @@ export function parseMeasurements(input) {
         return {
             name: String(item?.name ?? ''),
             kind: String(item?.kind ?? ''),
+            text: String(item?.text ?? ''),
             box,
             widthRem: box ? remOf(box.width, sheet) : null,
             heightRem: box ? remOf(box.height, sheet) : null,

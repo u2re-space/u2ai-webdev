@@ -20,6 +20,7 @@ import { parsePalette, contrastRatio, paletteTokens } from '../src/inputs/palett
 import { parseTokensCss, tokenValue } from '../src/inputs/tokens.js';
 import { detectImageMime, listImages, readProjectInstructions } from '../src/inputs/assets.js';
 import { collectInputs, inputContext, inputSummary } from '../src/inputs/index.js';
+import { ROLES } from '../src/roles/index.js';
 import { findMeasurement } from '../src/inputs/measured.js';
 import { measuredCrops, cropKind, cropNameOf } from '../src/inputs/measuredCrops.js';
 import { findReferences, readReferences } from '../src/inputs/references.js';
@@ -60,6 +61,7 @@ const MEASUREMENTS = {
         {
             name: 'card',
             kind: 'box',
+            text: 'Based in\nBoston,\nMA.',
             box: { x: 100, y: 200, width: 320, height: 180 },
             radius: 12,
             gap: 16,
@@ -138,6 +140,7 @@ test('the measurement sheet is read with the sizes in rem', () => {
     assert.equal(sheet.present, true);
     assert.equal(sheet.rootFontSize, 16);
     assert.equal(sheet.elements.length, 1);
+    assert.equal(sheet.elements[0].text, 'Based in\nBoston,\nMA.');
     assert.equal(sheet.elements[0].widthRem, 20);
     assert.equal(sheet.elements[0].gapRem, 1);
     assert.equal(sheet.elements[0].typography.fontSizeRem, 1);
@@ -218,6 +221,12 @@ test('the inputs of a run are collected and put into one context', async () => {
     assert.match(text, /--color-bg/);
     assert.match(text, /--space-2/);
     assert.match(text, /Measurements/);
+    assert.ok(text.includes('"Based in\\nBoston,\\nMA."'), 'recognized text or its line breaks were lost');
+});
+
+test('the input rules require recognized line breaks to be preserved', () => {
+    assert.match(ROLES.markup.instructions({}), /preserve every newline as a visible line break/);
+    assert.match(ROLES.styler.instructions({}), /preserve every newline as a visible line break/);
 });
 
 test('a missing input is a warning, not an error', async () => {
