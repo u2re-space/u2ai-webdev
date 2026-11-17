@@ -1247,10 +1247,19 @@ it is:
 | `data:application/pdf;base64,…` | a file part (`input_file`, `file_data` in base64) |
 | `data:text/plain,…` | a text part (`input_text`) |
 
-In the text itself a short note takes the place of the data URL:
+**The name of the caller is a claim, the bytes are the fact.** The house looks at the payload
+before it decides: a picture that came as `application/octet-stream` is a picture, a JSON that
+came as a blob is text, and a binary that came as `text/plain` is a file. The house knows PNG,
+JPEG, GIF, WebP, BMP, ICO, TIFF, QOI, AVIF, HEIC, PDF, ZIP, GZIP, 7-Zip, RAR, ELF, EXE, WASM,
+OGG, WAV, AVI and MP4 by their first bytes, and it reads a text as a text when there is no
+zero byte and no control character in it. A payload that claims to be base64 but does not
+survive the round trip is read as the text it is.
+
+In the text itself a short note takes the place of the data URL — and when the name of the
+caller and the content differ, both are named:
 
 ```
-The picture of the reference: [picture attached: image/png, 12.4 KB]
+The picture of the reference: [picture attached: application/octet-stream → image/png, 317.8 KB]
 ```
 
 The cut happens in three places, and the third one is the safety net:

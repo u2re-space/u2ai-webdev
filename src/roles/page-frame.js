@@ -28,6 +28,7 @@ export const PAGE_CLASS = 'page';
 
 /** The token that holds the width of the design, in CSS pixels. */
 export const PAGE_WIDTH_TOKEN = '--real-page-width';
+export const PAGE_HEIGHT_TOKEN = '--real-page-height';
 
 /** The token that holds the scale of the canvas. */
 export const ZOOM_TOKEN = '--zoom';
@@ -54,7 +55,73 @@ export function pageFrameRules() {
   not repeat these properties in a style attribute: it carries the element and the class the
   styles describe.
 - The class \`${PAGE_CLASS}\` is a contract with the styles: it keeps its name, and the styles
-  describe it.`;
+  describe it.
+
+
+### Additionally, add at start of CSS such rules: 
+
+\`\`\`css
+@property --background-color    { syntax: "<color>"; initial-value: #fff0; inherits: true; };
+@property --body-scrollbar-size { syntax: "<length>"; initial-value: 0.9rem; inherits: true; };
+@property --zoom { syntax: "<number>"; initial-value: 1; inherits: true; };
+
+@layer containement {
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    margin: 0px;
+    padding: 0px;
+    overflow: hidden;
+    inline-size: 100dvi;
+    block-size: 100dvb;
+    max-inline-size: 100dvi;
+    max-block-size: 100dvb;
+    container-type: size;
+  }
+
+  body {
+    /* \`--body-scrollbar-size\` needs to accounting when doing paddings or margins */
+    --background-color: light-dark(#fff, #111);
+    --body-scrollbar-size: 0.9rem;
+    scroll-snap-type: y mandatory;
+
+    container-type: size;
+    inline-size: 100dvi;
+    block-size: 100dvb;
+    max-block-size: 100dvb;
+    min-block-size: 100dvb;
+    max-inline-size: 100dvi;
+    scrollbar-width: thin;
+    scrollbar-color: var(--background-color) contrast-color(var(--background-color));
+    scrollbar-gutter: stable; /* or \`auto\` if system supports adaptive \`--body-scrollbar-size\` */
+    overflow: hidden;
+    overflow-y: auto;
+    margin: 0px;
+    padding: 0px;
+
+    background-color: var(--background-color, #fff0);
+  }
+
+  ${PAGE_CLASS} {
+    --zoom: calc(100cqi / calc(var(${PAGE_WIDTH_TOKEN}, ${DEFAULT_PAGE_WIDTH}) + var(--body-scrollbar-size, 0.9rem)));
+
+    zoom: var(--zoom, 1);
+    container-type: inline-size;
+    min-block-size: 100%; /* 
+      or \`max(var(${PAGE_HEIGHT_TOKEN}, 100%), 100%);\`
+      or \`calc-size(var(${PAGE_HEIGHT_TOKEN}, 100%), max(100%, size));\`
+    */
+    block-size: max-content;
+    overflow: visible;
+    inline-size: 100cqi;
+    max-inline-size: 100cqi;
+    margin: 0px;
+  }
+}
+\`\`\`
+`;
 }
 
 /**
@@ -77,7 +144,7 @@ export function pageScaleRules() {
   \`container-type: inline-size;\` and
   \`inline-size: var(${PAGE_WIDTH_TOKEN}, ${DEFAULT_PAGE_WIDTH});\`. The content of the page is
   laid out in the width of the design, not in the width of the window.
-- The canvas is scaled into the window: \`${ZOOM_TOKEN}: calc(100cqi / var(${PAGE_WIDTH_TOKEN}, ${DEFAULT_PAGE_WIDTH}));\`
+- The canvas is scaled into the window: \`${ZOOM_TOKEN}: calc(100cqi / calc(var(${PAGE_WIDTH_TOKEN}, ${DEFAULT_PAGE_WIDTH}) + var(--body-scrollbar-size, 0.9rem)));\`
   in the theme layer, and \`zoom: var(${ZOOM_TOKEN}, 1);\` on the canvas. The \`100cqi\` is the
   inline size of the body — the nearest container of the canvas — so the canvas takes the
   whole width of the window, and the proportions of the design are kept.
@@ -88,7 +155,7 @@ export function pageScaleRules() {
   the picture, and the width of the picture divided by that number gives the width of the
   design.
 - The narrow screen is not scaled: under the breakpoint of the narrow layout — the mobile one,
-  not the width of the design — the canvas becomes fluid (\`inline-size: 100%; zoom: 1;\`) and
+  not the width of the design — the canvas becomes fluid (\`inline-size: 100%; zoom: 1; --zoom: 1;\`) and
   the layout of the narrow screen takes over.`;
 }
 
