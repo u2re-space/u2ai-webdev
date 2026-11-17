@@ -27,6 +27,8 @@ import { ENUMS } from '../config/constants.js';
 export const DOCUMENTATION = Object.freeze({
     cssUnits: `# CSS units
 
+<https://drafts.csswg.org/css-values-5/>
+
 Absolute: \`px\` (CSS pixels), \`in\`, \`cm\`, \`mm\`, \`q\`, \`pt\`, \`pc\`. 1in = 96px, 1pt = 1.333px.
 
 Font-relative: \`rem\` = the root font size, \`em\` = the font size of the element itself,
@@ -46,6 +48,8 @@ Rules for writing:
 
     cssShapes: `# CSS shapes
 
+<https://drafts.csswg.org/css-shapes-2/>
+
 Border radius: \`border-radius: <radius>\` — one value for all corners, four values for
 top-left / top-right / bottom-right / bottom-left, or a shorthand with a slash: \`8px / 16px\`.
 
@@ -62,6 +66,8 @@ The radius of a card comes from the design: one radius per project, not a radius
 
     cssGrid: `# CSS grid
 
+<https://drafts.csswg.org/css-grid-3/>
+
 \`display: grid\` with \`grid-template-columns\` (\`repeat(3, 1fr)\`, \`minmax(240px, 1fr)\`,
 \`200px 1fr\`) and \`grid-template-rows\`. The gap is \`gap: <row> <column>\` (one value = both).
 Items are placed by \`grid-column\`, \`grid-row\`, \`grid-area\`, or automatically by the flow.
@@ -71,6 +77,8 @@ Use grid for the page and for the card interiors; do not nest more than two grid
 is the usual answer for a responsive row of cards.`,
 
     cssFlex: `# CSS flexbox
+
+<https://drafts.csswg.org/css-flexbox/>
 
 \`display: flex\` (\`inline-flex\` for an inline box). The main axis is the row by default, the
 cross axis is the column; \`flex-direction\` changes that.
@@ -83,6 +91,8 @@ Use flex for the rows: a toolbar, a button with an icon, a pair of labels. Use g
 columns and the areas.`,
 
     cssFonts: `# CSS fonts
+
+<https://drafts.csswg.org/css-fonts/>
 
 \`font-family\` — a list of families with fallbacks. A family with spaces needs quotes.
 Generic families: \`serif\`, \`sans-serif\`, \`monospace\`, \`cursive\`, \`fantasy\`, \`system-ui\`,
@@ -100,6 +110,8 @@ Rules for writing:
 
     cssColors: `# CSS colours
 
+<https://drafts.csswg.org/css-color-5/>
+
 The colours of a project are tokens: \`--color-bg\`, \`--color-surface\`, \`--color-text\`,
 \`--color-muted\`, \`--color-accent\`, \`--color-border\`. A rule names a token, never a hex value.
 
@@ -111,6 +123,8 @@ Rules for writing:
 - the state of a control (hover, active, focus, disabled) is a token too, not an ad-hoc shade.`,
 
     cssMotion: `# CSS motion
+
+<https://drafts.csswg.org/motion/>
 
 Transitions: \`transition: <property> <duration> <easing> <delay>\`; the default duration is 0s.
 Easings: \`linear\`, \`ease\`, \`ease-in\`, \`ease-out\`, \`ease-in-out\`, \`cubic-bezier(...)\`.
@@ -189,6 +203,9 @@ A checklist before the review:
 
     wcagColors: `# WCAG colour rules
 
+- <https://drafts.csswg.org/css-color-5/>
+- <https://w3c.github.io/wcag/guidelines/22/>
+
 Contrast ratio: (L1 + 0.05) / (L2 + 0.05), where L is the relative luminance of the colour.
 1 = identical, 21 = black on white.
 
@@ -204,6 +221,8 @@ Rules for writing:
 - a colour that fails the threshold is a decision to report, not to hide.`,
 
     phosphorIcons: `# Phosphor icons
+
+<https://phosphoricons.com/>
 
 Phosphor (MIT): a family of 900+ icons in six weights (thin, light, regular, bold, fill, duotone)
 and four styles (regular, duotone, fill). The markup is a web font or an SVG sprite.
@@ -221,6 +240,8 @@ Rules for picking:
 
     lucideIcons: `# Lucide icons
 
+<https://lucide.dev/icons/>
+
 Lucide (ISC): a family of 1400+ icons, all drawn on a 24×24 grid with a 2px stroke, the round
 caps and the 2px corner radius.
 
@@ -236,6 +257,8 @@ Rules for picking:
 - an icon that means "delete" is \`trash-2\`, an icon that means "close" is \`x\`.`,
 
     googleFonts: `# Google Fonts
+
+<https://fonts.google.com/>
 
 Google Fonts (SIL Open Font License): the catalogue of the open fonts — Roboto, Open Sans,
 Inter, Lora, Playfair Display, Montserrat, Source Sans 3, IBM Plex Sans, Merriweather, Poppins.

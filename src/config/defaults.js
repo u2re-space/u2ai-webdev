@@ -75,13 +75,17 @@ export const DOCUMENTATION_SOURCES = Object.freeze({
   cssSelectors: 'https://drafts.csswg.org/selectors/',
   cssUI: 'https://drafts.csswg.org/css-ui/',
   cssDisplay: 'https://drafts.csswg.org/css-display/',
+  cssFlex: 'https://drafts.csswg.org/css-flexbox/',
+  cssGrid: 'https://drafts.csswg.org/css-grid-3/',
   cssScrollSnap: 'https://drafts.csswg.org/css-scroll-snap-2/',
   cssScrollbars: 'https://drafts.csswg.org/css-scrollbars/',
+  cssColors: 'https://drafts.csswg.org/css-color-5/',
   magickOptions: 'https://imagemagick.org/command-line-options/',
   magickTools: 'https://imagemagick.org/command-line-tools/',
   phosphorIcons: 'https://phosphoricons.com/',
   lucideIcons: 'https://lucide.dev/icons/',
   googleFonts: 'https://fonts.google.com/',
+  wcagColors: 'https://w3c.github.io/wcag/guidelines/22/'
 });
 
 export const defaults = {
@@ -645,32 +649,32 @@ export const defaults = {
         'canIUse', 'cssTricks', 'chromeStatus',
       ],
       architect: [
-        'cssNesting', 'cssSelectors', 'cssUI', 'cssScrollSnap', 'cssScrollbars',
+        'cssNesting', 'cssSelectors', 'cssUI', 'cssScrollSnap', 'cssScrollbars', 'cssColors',
         'mdnCss', 'mdnJavaScript', 'ecma262', 'typescript', 'sass', 'canIUse',
         'cssTricks', 'chromeStatus', 'cssLogical', 'cssProperty', 'cssLayer',
         'cssConditional', 'cssAnchor', 'cssUnits', 'cssAnimation', 'cssShapes',
         'cssMotion', 'cssTransform', 'cssCascade', 'cssContain', 'cssImages',
         'cssMasking', 'cssFonts', 'eslint', 'stylelint', 'prettier',
-        'phosphorIcons', 'lucideIcons', 'googleFonts',
+        'phosphorIcons', 'lucideIcons', 'googleFonts', 'cssGrid', 'cssFlex'
       ],
       director: [
-        'cssNesting', 'cssSelectors', 'cssUI', 'cssScrollSnap', 'cssScrollbars',
+        'cssNesting', 'cssSelectors', 'cssUI', 'cssScrollSnap', 'cssScrollbars', 'cssColors',
         'mdnCss', 'mdnJavaScript', 'ecma262', 'typescript', 'sass', 'canIUse',
         'cssTricks', 'chromeStatus', 'cssLogical', 'cssProperty', 'cssLayer',
         'cssConditional', 'cssAnchor', 'cssUnits', 'cssAnimation', 'cssShapes',
         'cssMotion', 'cssTransform', 'cssCascade', 'cssContain', 'cssImages',
         'cssMasking', 'cssFonts', 'eslint', 'stylelint', 'prettier',
-        'phosphorIcons', 'lucideIcons', 'googleFonts',
+        'phosphorIcons', 'lucideIcons', 'googleFonts', 'cssGrid', 'cssFlex'
       ],
       coder: [
         'cssNesting', 'cssSelectors', 'cssUI', 'cssScrollSnap', 'cssScrollbars',
-        'cssUnits', 'cssGrid', 'cssFlex', 'htmlSemantics', 'a11y',
+        'cssUnits', 'cssGrid', 'cssFlex', 'htmlSemantics', 'a11y', 'cssColors',
         'mdnCss', 'mdnJavaScript', 'ecma262', 'typescript', 'sass', 'canIUse',
         'cssTricks', 'chromeStatus', 'cssLogical', 'cssProperty', 'cssLayer',
         'cssConditional', 'cssAnchor', 'cssAnimation', 'cssShapes', 'cssMotion',
         'cssTransform', 'cssCascade', 'cssContain', 'cssImages', 'cssMasking',
         'cssFonts', 'eslint', 'stylelint', 'prettier', 'phosphorIcons',
-        'lucideIcons', 'googleFonts',
+        'lucideIcons', 'googleFonts', 'cssGrid', 'cssFlex'
       ],
       markup: [
         'htmlSemantics', 'a11y', 'svg',
@@ -679,10 +683,10 @@ export const defaults = {
       styler: [
         'cssNesting', 'cssSelectors', 'cssUI', 'cssScrollSnap', 'cssScrollbars',
         'cssUnits', 'cssShapes', 'cssGrid', 'cssFlex', 'cssFonts', 'cssColors', 'wcagColors',
-        'mdnCss', 'sass', 'canIUse', 'cssLogical', 'cssProperty', 'cssLayer',
+        'mdnCss', 'sass', 'canIUse', 'cssLogical', 'cssProperty', 'cssLayer', 'cssColors',
         'cssConditional', 'cssAnchor', 'cssAnimation', 'cssMotion', 'cssTransform',
         'cssCascade', 'cssContain', 'cssImages', 'cssMasking', 'stylelint',
-        'prettier', 'googleFonts',
+        'prettier', 'googleFonts', 'cssGrid', 'cssFlex'
       ],
       iconifier: ['phosphorIcons', 'lucideIcons', 'googleFonts'],
       editor: ['svg', 'mdnCss', 'phosphorIcons', 'lucideIcons'],
