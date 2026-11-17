@@ -14,7 +14,19 @@ import path from 'node:path';
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 
 import { cropName, cropCandidates, cropRelative, resolveCropFile } from '../src/inputs/crops.js';
-import { pictureName, pictureCrops, picturesStage, pictureSubject, pictureKinds, writePictures, readPictures } from '../src/stages/pictures.js';
+import {
+    pictureName,
+    pictureCrops,
+    picturesStage,
+    pictureSubject,
+    pictureKinds,
+    pictureModels,
+    pictureQuality,
+    pickPicture,
+    modelTag,
+    writePictures,
+    readPictures,
+} from '../src/stages/pictures.js';
 import { pipelineFiles } from '../src/pipeline.js';
 
 /**
@@ -63,22 +75,43 @@ function config() {
 }
 
 /**
- * The stand-in for `ai-image`: it writes the file the stage asked for and remembers the call.
+ * The stand-in for `ai-image`: it writes the file the stage asked for, answers the question
+ * of `info` and remembers every call.
+ *
+ * The file that is written holds the name of the model that made it, and the sunburst cuts
+ * the edge tighter than the seedream: the stage has to keep the sunburst.
  * @param {string} root the project directory
- * @returns {Promise<{ bin: string, log: string }>} the path of the fake and of its log
+ * @returns {Promise<{ bin: string, calls: string }>} the path of the fake and of its log
  */
 async function fakeImage(root) {
-    const log = path.join(root, 'call.json');
+    const calls = path.join(root, 'calls.ndjson');
     const bin = path.join(root, 'fake-ai-image.js');
     await writeFile(bin, [
-        "import { writeFile } from 'node:fs/promises';",
+        "import { readFile, writeFile, appendFile } from 'node:fs/promises';",
         'const args = process.argv.slice(2);',
+        `await appendFile(${JSON.stringify(calls)}, JSON.stringify(args) + '\\n');`,
+        "if (args[0] === 'info') {",
+        "    const body = await readFile(args[1], 'utf8');",
+        "    const soft = body.includes('sunburst') ? 0.01 : 0.04;",
+        "    process.stdout.write(JSON.stringify({ type: 'result', status: 'ok', alpha: { opaque: false, cleared: 0.25, soft, real: true } }));",
+        '    process.exit(0);',
+        '}',
         "const out = args[args.indexOf('--out') + 1];",
-        `await writeFile(${JSON.stringify(log)}, JSON.stringify(args));`,
-        "await writeFile(out, 'prepared');",
+        "const model = args[args.indexOf('--image-model') + 1] ?? 'default';",
+        "await writeFile(out, model);",
         "process.stdout.write('ok');",
     ].join('\n'));
-    return { bin, log };
+    return { bin, calls };
+}
+
+/**
+ * The calls the fake has seen.
+ * @param {string} file the log of the calls
+ * @returns {Promise<string[][]>}
+ */
+async function readCalls(file) {
+    const text = await readFile(file, 'utf8');
+    return text.split('\n').filter(Boolean).map((line) => JSON.parse(line));
 }
 
 /**
@@ -172,22 +205,59 @@ test('the subject of the cut-out names the object of the crop', () => {
     assert.equal(pictureSubject(crop, { subject: '   ' }), '');
 });
 
+test('the models of the pictures are the models of the house and the ones of the config', () => {
+    // The list of the house: the seedream and the sunburst of OpenAI.
+    assert.deepEqual(pictureModels({}), [
+        'bytedance-seed/seedream-5-5',
+        'openai/gpt-image-2.6-sunburst',
+    ]);
+    // The model of the config goes first.
+    assert.equal(pictureModels({ model: 'sourceful/riverflow-v2.6-pro' })[0], 'sourceful/riverflow-v2.6-pro');
+    // The list of the config is asked too.
+    assert.deepEqual(pictureModels({ models: ['a/b', 'c/d'] }).slice(0, 2), ['a/b', 'c/d']);
+    // A model that is named twice is asked once.
+    const list = pictureModels({ model: 'bytedance-seed/seedream-5-5', models: ['bytedance-seed/seedream-5-5'] });
+    assert.equal(list.filter((item) => item === 'bytedance-seed/seedream-5-5').length, 1);
+});
+
+test('the tier of the quality of the pictures is high unless the config says otherwise', () => {
+    assert.equal(pictureQuality({}), 'high');
+    assert.equal(pictureQuality({ quality: 'xhigh' }), 'xhigh');
+    assert.equal(pictureQuality({ quality: 'auto' }), 'high');
+    assert.equal(pictureQuality({ quality: '' }), 'high');
+});
+
+test('the better cut-out is the one with the tighter edge', () => {
+    const candidates = [
+        { model: 'seedream', facts: { cleared: 0.25, soft: 0.04, real: true } },
+        { model: 'sunburst', facts: { cleared: 0.25, soft: 0.01, real: true } },
+    ];
+    assert.equal(pickPicture(candidates).model, 'sunburst');
+
+    // A cut-out that is not real loses to any real one.
+    const broken = [
+        { model: 'painted', facts: { cleared: 0.9, soft: 0.0, real: false } },
+        { model: 'cut', facts: { cleared: 0.2, soft: 0.03, real: true } },
+    ];
+    assert.equal(pickPicture(broken).model, 'cut');
+
+    // Without the facts the order of the models is the order of the trust.
+    assert.equal(pickPicture([{ model: 'first' }, { model: 'second' }]).model, 'first');
+    assert.equal(pickPicture([]), null);
+});
+
+test('the name of a model in a file name is safe', () => {
+    assert.equal(modelTag('openai/gpt-image-2.6-sunburst'), 'openai-gpt-image-2-6-sunburst');
+    assert.equal(modelTag(''), 'model');
+});
+
 test('the stage of the pictures prepares the crops with the bridge of the images', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-pictures-'));
     await mkdir(path.join(root, 'measurements', 'crops'), { recursive: true });
     await writeFile(path.join(root, 'measurements', 'crops', '08-region-bishop-artwork.png'), 'png');
 
     // The stand-in for `ai-image`: it writes the file the stage asked for and remembers the call.
-    const log = path.join(root, 'call.json');
-    const fake = path.join(root, 'fake-ai-image.js');
-    await writeFile(fake, [
-        "import { writeFile } from 'node:fs/promises';",
-        "const args = process.argv.slice(2);",
-        "const out = args[args.indexOf('--out') + 1];",
-        `await writeFile(${JSON.stringify(log)}, JSON.stringify(args));`,
-        "await writeFile(out, 'prepared');",
-        "process.stdout.write('ok');",
-    ].join('\n'));
+    const { bin: fake, calls } = await fakeImage(root);
 
     const result = await picturesStage({
         root,
@@ -200,16 +270,45 @@ test('the stage of the pictures prepares the crops with the bridge of the images
     assert.equal(result.pictures.length, 1);
     assert.equal(result.pictures[0].name, 'black chess bishop');
     assert.equal(result.pictures[0].file, 'assets/import/bishop-artwork.png');
-    const written = await readFile(path.join(root, 'assets', 'import', 'bishop-artwork.png'), 'utf8');
-    assert.equal(written, 'prepared');
-
     // The subject goes to the bridge: the fragments of the neighbours have to go away.
-    const call = JSON.parse(await readFile(log, 'utf8'));
-    assert.equal(call[0], 'background');
+    const seen = await readCalls(calls);
+    const call = seen.find((args) => args[0] === 'background');
+    assert.ok(call);
     assert.equal(call[call.indexOf('--subject') + 1], 'black chess bishop');
     assert.equal(call[call.indexOf('--alpha-mode') + 1], 'auto');
-    // No model of its own: the model of the configuration of `ai-image` is used.
-    assert.equal(call.includes('--image-model'), false);
+    // The models of the house are asked, and the tier of the quality goes with them.
+    assert.equal(call[call.indexOf('--image-model') + 1], 'bytedance-seed/seedream-5-5');
+    assert.equal(call[call.indexOf('--quality') + 1], 'high');
+});
+
+test('the stage of the pictures asks every model and keeps the better cut-out', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-pictures-models-'));
+    await mkdir(path.join(root, 'measurements', 'crops'), { recursive: true });
+    await writeFile(path.join(root, 'measurements', 'crops', '08-region-bishop-artwork.png'), 'png');
+
+    const { bin: fake, calls } = await fakeImage(root);
+    const result = await picturesStage({
+        root,
+        config: config(),
+        inputs: { measurements: sheet() },
+        env: { ...process.env, AI_IMAGE_BIN: fake },
+    });
+
+    assert.equal(result.ok, true);
+    // Both models of the house were asked.
+    const asked = (await readCalls(calls)).filter((args) => args[0] === 'background');
+    assert.equal(asked.length, 2);
+    assert.equal(asked[0][asked[0].indexOf('--image-model') + 1], 'bytedance-seed/seedream-5-5');
+    assert.equal(asked[1][asked[1].indexOf('--image-model') + 1], 'openai/gpt-image-2.6-sunburst');
+
+    // The sunburst cuts the edge tighter, and the tighter edge wins.
+    assert.equal(result.pictures[0].model, 'openai/gpt-image-2.6-sunburst');
+    assert.deepEqual(result.pictures[0].models, [
+        'bytedance-seed/seedream-5-5',
+        'openai/gpt-image-2.6-sunburst',
+    ]);
+    const written = await readFile(path.join(root, 'assets', 'import', 'bishop-artwork.png'), 'utf8');
+    assert.equal(written, 'openai/gpt-image-2.6-sunburst');
 });
 
 test('the stage of the pictures works with the sheet that was found', async () => {
@@ -217,15 +316,7 @@ test('the stage of the pictures works with the sheet that was found', async () =
     await mkdir(path.join(root, 'measurements', 'crops'), { recursive: true });
     await writeFile(path.join(root, 'measurements', 'crops', '08-region-bishop-artwork.png'), 'png');
 
-    const log = path.join(root, 'call.json');
-    const fake = path.join(root, 'fake-ai-image.js');
-    await writeFile(fake, [
-        "import { writeFile } from 'node:fs/promises';",
-        "const args = process.argv.slice(2);",
-        "const out = args[args.indexOf('--out') + 1];",
-        `await writeFile(${JSON.stringify(log)}, JSON.stringify(args));`,
-        "await writeFile(out, 'prepared');",
-    ].join('\n'));
+    const { bin: fake, calls } = await fakeImage(root);
 
     const settings = config();
     settings.inputs.measurements = ['measurements.json', 'measurements/measurements.json'];
@@ -246,15 +337,7 @@ test('the model of the pictures goes to the bridge when the config names it', as
     await mkdir(path.join(root, 'measurements', 'crops'), { recursive: true });
     await writeFile(path.join(root, 'measurements', 'crops', '08-region-bishop-artwork.png'), 'png');
 
-    const log = path.join(root, 'call.json');
-    const fake = path.join(root, 'fake-ai-image.js');
-    await writeFile(fake, [
-        "import { writeFile } from 'node:fs/promises';",
-        "const args = process.argv.slice(2);",
-        "const out = args[args.indexOf('--out') + 1];",
-        `await writeFile(${JSON.stringify(log)}, JSON.stringify(args));`,
-        "await writeFile(out, 'prepared');",
-    ].join('\n'));
+    const { bin: fake, calls } = await fakeImage(root);
 
     const settings = config();
     settings.pictures.model = 'bytedance-seed/seedream-5-5';
@@ -266,7 +349,8 @@ test('the model of the pictures goes to the bridge when the config names it', as
     });
 
     assert.equal(result.ok, true);
-    const call = JSON.parse(await readFile(log, 'utf8'));
+    const seen = await readCalls(calls);
+    const call = seen.find((args) => args[0] === 'background');
     assert.equal(call[call.indexOf('--image-model') + 1], 'bytedance-seed/seedream-5-5');
 });
 
@@ -331,7 +415,7 @@ test('the crops of the measurer are prepared when the sheet names none', async (
         { name: 'brand-logo', kind: 'asset', crop: 'crops/01-asset-brand-logo.png', use: 'artwork' },
         { name: 'hero-title', kind: 'detail', crop: 'crops/02-detail-hero-title.png', use: 'text block' },
     ]);
-    const { bin, log } = await fakeImage(root);
+    const { bin, calls } = await fakeImage(root);
 
     const result = await picturesStage({
         root,
@@ -350,7 +434,8 @@ test('the crops of the measurer are prepared when the sheet names none', async (
     assert.equal(result.pictures[0].use, 'artwork');
 
     // The bridge was asked once: the detail is not a picture.
-    const call = JSON.parse(await readFile(log, 'utf8'));
+    const seen = await readCalls(calls);
+    const call = seen.find((args) => args[0] === 'background');
     assert.equal(call[1], 'measurements/crops/01-asset-brand-logo.png');
     assert.match(result.text, /Обрезки взяты с диска/);
 });

@@ -61,8 +61,10 @@ test('the styles give the canvas the width of the design and the scale', () => {
     assert.match(text, /container-type: size;/);
     assert.match(text, /container-type: inline-size;/);
     assert.ok(text.includes(`inline-size: var(${PAGE_WIDTH_TOKEN}, ${DEFAULT_PAGE_WIDTH});`), 'no width');
+    // The scale takes the scrollbar of the body away: the canvas has to fit the window
+    // without the bar, or the page is wider than the window it is shown in.
     assert.ok(
-        text.includes(`${ZOOM_TOKEN}: calc(100cqi / var(${PAGE_WIDTH_TOKEN}, ${DEFAULT_PAGE_WIDTH}));`),
+        text.includes(`${ZOOM_TOKEN}: calc(calc(100cqi - var(--body-scrollbar-size, 0.5rem)) / var(${PAGE_WIDTH_TOKEN}, ${DEFAULT_PAGE_WIDTH}));`),
         'no scale',
     );
     assert.ok(text.includes(`zoom: var(${ZOOM_TOKEN}, 1);`), 'no zoom');

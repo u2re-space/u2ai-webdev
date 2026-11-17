@@ -418,6 +418,16 @@ export function createRenderer({
                     this.note(`работа роли ${event.to ?? '?'} закончена: ${event.turns ?? 0} ходов`);
                 }
             }
+            else if (type === 'picture.attempt') {
+                // The crop is prepared by one model; the run shows which one and how the
+                // cut-out came out.
+                const facts = event.facts ?? {};
+                const alpha = Number.isFinite(facts.soft) ? `, мягкий край ${(facts.soft * 100).toFixed(1)}%` : '';
+                this.note(`картинка ${event.name ?? ''} от ${event.model ?? '?'}${alpha}`);
+            }
+            else if (type === 'picture.ready') {
+                this.note(`картинка готова: ${event.name ?? ''} → ${event.file ?? ''}${event.model ? ` (${event.model})` : ''}`);
+            }
             else if (type === 'request.wait') this.wait(event.elapsedMs ?? 0);
             else if (type === 'request.retry') this.retry(event);
             else if (type === 'request.error') this.warning(`запрос не удался: ${event.error ?? ''}`);

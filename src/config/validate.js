@@ -289,6 +289,13 @@ function validatePictures(pictures, fail) {
   if (pictures.model !== null && (typeof pictures.model !== 'string' || !pictures.model.trim())) {
     fail(`${where}.model: непустая строка или null`);
   }
+  if (pictures.models != null && (!Array.isArray(pictures.models)
+    || !pictures.models.every((item) => typeof item === 'string' && item.trim()))) {
+    fail(`${where}.models: массив непустых строк или null`);
+  }
+  if (pictures.quality != null && (typeof pictures.quality !== 'string' || !pictures.quality.trim())) {
+    fail(`${where}.quality: непустая строка или null`);
+  }
   if (typeof pictures.dir !== 'string' || !pictures.dir.trim()) fail(`${where}.dir: непустая строка`);
   if (!(Number.isSafeInteger(pictures.max) && pictures.max > 0)) fail(`${where}.max: целое > 0`);
 }

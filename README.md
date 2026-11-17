@@ -509,6 +509,31 @@ The section `model` names the model that prepares the pictures: it is passed to 
 of ByteDance by default, which cuts the subject out with a native alpha and keeps the frame of
 the crop.
 
+**Every model of the list is asked.** One model and one attempt is a lottery: the seedream
+cuts the edge tight most of the time, and the sunburst of OpenAI draws the same object smoother
+the other time — and a chewed edge is visible on the page. The house asks the models of the
+list (`pictures.models`, and the models of the house by default: the seedream and the sunburst)
+and keeps the better cut-out. The better one is the one that is a real cut-out at all, then the
+one with the tighter edge, then the one whose background is really gone — the facts are the ones
+the picture CLI measures every time it cuts a picture out.
+
+**The tier of the quality goes with the request.** The field is `quality` in the body of the
+request, and the models of OpenAI take it: `high` is the tier of the model itself, `xhigh` is
+the step above it. The models that know no such field (the seedream, the riverflow) never see
+it — the field stays out of their body.
+
+```json
+{
+  "pictures": {
+    "model": null,
+    "models": ["bytedance-seed/seedream-5-5", "openai/gpt-image-2.6-sunburst"],
+    "quality": "high"
+  }
+}
+```
+
+Every model on the list is a paid call for every crop, so the list is short on purpose.
+
 The subject is what the cut-out has to keep: `{name}` is the name of the item in the sheet,
 `{use}` is its use, `{kind}` is its kind. It is passed to `ai-image` as `--subject`, so the
 model knows that the piece of the board that fell into the cut of the bishop, and the piece of

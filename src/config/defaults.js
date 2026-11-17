@@ -485,9 +485,28 @@ export const defaults = {
      * The model that prepares the pictures.
      *
      * `null` keeps the model of the configuration of `ai-image` — the seedream of ByteDance
-     * by default. A name here is passed to the CLI as `--image-model`.
+     * by default. A name here is passed to the CLI as `--image-model` and goes first in the
+     * list of the models that are asked.
      */
     model: null,
+    /**
+     * The models that prepare the pictures, one after another.
+     *
+     * One model is a lottery: the cut-out of the seedream is tight most of the time and the
+     * cut-out of the sunburst of OpenAI is smoother the other times. The house asks the
+     * models of this list and keeps the better cut-out — a real one first, then the tighter
+     * edge, then the background that is really gone. Every model on the list is a paid call
+     * for every crop, so the list is short.
+     */
+    models: [],
+    /**
+     * The tier of the quality the picture models are asked for.
+     *
+     * The field is `quality` in the body of the request, and the models that take it are the
+     * gpt-image family of OpenAI: `high` is the tier of the model itself, `xhigh` is the step
+     * above it. The models that know no such field never see it.
+     */
+    quality: 'high',
     /** Where the prepared pictures land, relative to the project. */
     dir: 'assets/import',
     /** How many pictures one run prepares. */

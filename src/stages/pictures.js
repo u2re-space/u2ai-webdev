@@ -24,7 +24,9 @@
  *          inputs/measuredCrops, agent/bridges, agent/paths
  * @usedBy stages/index, pipeline
  * @exports picturesStage, pictureName, pictureCrops, pictureSubject, pictureKinds,
- *          PICTURES_FILE, picturesPath, writePictures, readPictures
+ *          PICTURES_FILE, picturesPath, writePictures, readPictures, pictureModels,
+ *          pictureQuality, judgePicture, pickPicture, modelTag, DEFAULT_PICTURE_MODELS,
+ *          DEFAULT_PICTURE_QUALITY
  * @ai.tags stages, pictures, images
  * @ai.hint io
  * @changed 2026-11-14 The crops of the reference are prepared with `ai-image`.
@@ -36,7 +38,7 @@
  */
 
 import path from 'node:path';
-import { mkdir, stat } from 'node:fs/promises';
+import { copyFile, mkdir, stat } from 'node:fs/promises';
 import { resolveCropFile, cropRelative } from '../inputs/crops.js';
 import { inputCandidates, findInput } from '../inputs/candidates.js';
 import { parseMeasurements } from '../inputs/measurements.js';
@@ -49,7 +51,148 @@ import { workRel } from '../shared/house.js';
 export const PICTURES_FILE = 'pictures.json';
 
 /**
- * The path of the file of the prepared pictures.
+ * The models the pictures are prepared with, when the configuration names none.
+ *
+ * One model and one attempt is a lottery: the seedream of ByteDance draws the cut-out well
+ * most of the time, and the sunburst of OpenAI draws it smoother the other times. The house
+ * asks both and keeps the better cut-out — the one whose edge is tighter and whose
+ * background is really gone.
+ *
+ * The list is short on purpose: every model on it is a paid call for every crop.
+ */
+export const DEFAULT_PICTURE_MODELS = Object.freeze([
+    'bytedance-seed/seedream-5-5',
+    'openai/gpt-image-2.6-sunburst',
+]);
+
+/**
+ * The tier of the quality the models of OpenAI are asked for.
+ *
+ * The field of the tier is `quality` in the body of the request, and the models that take it
+ * are the gpt-image family: `high` is the tier of the model itself, `xhigh` is the step above
+ * it. The models that know no such field (seedream, riverflow) never see it.
+ */
+export const DEFAULT_PICTURE_QUALITY = 'high';
+
+/**
+ * The models the pictures are prepared with.
+ *
+ * The configuration names them (`pictures.models`); the single model of the old name
+ * (`pictures.model`) goes first, and the list of the house follows. A model that is named
+ * twice is asked once.
+ * @param {object} settings the `pictures` section of the config
+ * @returns {string[]}
+ * @exports
+ * @ai.hint pure
+ */
+export function pictureModels(settings = {}) {
+    const named = Array.isArray(settings.models)
+        ? settings.models.map((item) => String(item ?? '').trim()).filter(Boolean)
+        : [];
+    const first = String(settings.model ?? '').trim();
+    const list = [...(first ? [first] : []), ...named];
+    const out = [];
+    for (const model of [...list, ...DEFAULT_PICTURE_MODELS]) {
+        if (!model || out.includes(model)) continue;
+        out.push(model);
+    }
+    return out;
+}
+
+/**
+ * The tier of the quality the picture models are asked for.
+ * @param {object} settings the `pictures` section of the config
+ * @returns {string|null}
+ * @exports
+ * @ai.hint pure
+ */
+export function pictureQuality(settings = {}) {
+    const asked = String(settings.quality ?? '').trim().toLowerCase();
+    if (!asked || asked === 'auto') return DEFAULT_PICTURE_QUALITY;
+    return asked;
+}
+
+/**
+ * The name of a model in a file name: the slash and the colon of an id are not welcome there.
+ * @param {string} model
+ * @returns {string}
+ * @exports
+ * @ai.hint pure
+ */
+export function modelTag(model) {
+    return String(model ?? '').trim().replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'model';
+}
+
+/**
+ * The facts of a prepared picture: what the picture CLI says about it.
+ *
+ * The facts are the house's own measure of a cut-out: how much of the frame is cleared, how
+ * much of it sits in the soft band of the edge and whether the alpha is a real one. The
+ * picture CLI knows them — it measures them every time it cuts a picture out.
+ * @param {{ root: string, config?: object, env?: object, file: string }} request
+ * @returns {Promise<{ cleared: number|null, soft: number|null, real: boolean|null }>}
+ * @exports
+ * @ai.hint io
+ */
+export async function judgePicture({ root, config = {}, env = process.env, file }) {
+    const rel = path.relative(root, file).split(path.sep).join('/');
+    try {
+        const answer = await runBridge({
+            name: 'ai-image',
+            args: ['info', rel, '--json'],
+            config,
+            cwd: root,
+            env,
+        });
+        const text = String(answer?.stdout ?? '');
+        const start = text.indexOf('{');
+        const parsed = start === -1 ? null : JSON.parse(text.slice(start));
+        const alpha = parsed?.alpha ?? {};
+        return {
+            cleared: Number.isFinite(alpha.cleared) ? alpha.cleared : null,
+            soft: Number.isFinite(alpha.soft) ? alpha.soft : null,
+            real: typeof alpha.real === 'boolean' ? alpha.real : null,
+        };
+    } catch {
+        return { cleared: null, soft: null, real: null };
+    }
+}
+
+/**
+ * The better cut-out of the candidates.
+ *
+ * The order of the house: a real cut-out first (a picture that is opaque or that has a halo
+ * around the object is not a cut-out), then the tighter edge (the smaller the soft band, the
+ * smoother the edge), then the background that is really gone (the bigger the cleared share).
+ * The first candidate wins when the facts cannot be measured: the order of the models is the
+ * order of the trust.
+ * @param {Array<{ model: string, facts?: object|null }>} candidates
+ * @returns {object} the winner
+ * @exports
+ * @ai.hint pure
+ */
+export function pickPicture(candidates = []) {
+    const list = Array.isArray(candidates) ? candidates.filter(Boolean) : [];
+    if (!list.length) return null;
+    const score = (item) => {
+        const facts = item.facts ?? {};
+        const real = facts.real === false ? 1 : 0;
+        const soft = Number.isFinite(facts.soft) ? facts.soft : 1;
+        const cleared = Number.isFinite(facts.cleared) ? facts.cleared : 0;
+        return [real, soft, -cleared];
+    };
+    const sorted = list.map((item, index) => ({ item, index, key: score(item) }));
+    sorted.sort((left, right) => {
+        for (let i = 0; i < left.key.length; i++) {
+            if (left.key[i] !== right.key[i]) return left.key[i] - right.key[i];
+        }
+        return left.index - right.index;
+    });
+    return sorted[0].item;
+}
+
+/**
+ * The file of the run that holds the prepared pictures.
  * @param {string} root
  * @param {object} config
  * @param {string} [id]
@@ -297,43 +440,69 @@ export async function picturesStage({
         const command = String(settings.commands?.[crop.kind] ?? settings.command ?? 'background');
         // The subject tells the model what to keep: the fragments of the neighbours go away.
         const subject = pictureSubject(crop, settings);
-        const args = [command, path.relative(root, source).split(path.sep).join('/')];
-        if (command === 'edit') {
-            let prompt = String(settings.prompts?.[crop.kind] ?? settings.prompts?.default ?? DEFAULT_PROMPT);
-            if (subject) prompt += ` Keep only the ${subject}; every other object disappears.`;
-            args.push(prompt);
-        }
-        args.push('--out', out.split(path.sep).join('/'));
-        if (command === 'background' || command === 'alpha') {
-            args.push('--alpha-mode', String(settings.alphaMode ?? 'auto'));
-            if (subject) args.push('--subject', subject);
-        }
-        // The model of the pictures: null keeps the model of the configuration of `ai-image`.
-        const model = String(settings.model ?? '').trim();
-        if (model) args.push('--image-model', model);
+        const models = pictureModels(settings);
+        const quality = pictureQuality(settings);
+        // The candidates of the crop: every model of the list is asked, and the best cut-out
+        // wins. One model is a lottery — the edge of one cut-out is tight and the edge of the
+        // next one is chewed.
+        const candidates = [];
+        for (const model of models) {
+            const args = [command, path.relative(root, source).split(path.sep).join('/')];
+            if (command === 'edit') {
+                let prompt = String(settings.prompts?.[crop.kind] ?? settings.prompts?.default ?? DEFAULT_PROMPT);
+                if (subject) prompt += ` Keep only the ${subject}; every other object disappears.`;
+                args.push(prompt);
+            }
+            const candidate = path.join(root, workDir, 'pictures', `${name}-${modelTag(model)}.png`);
+            await mkdir(path.dirname(candidate), { recursive: true });
+            args.push('--out', path.relative(root, candidate).split(path.sep).join('/'));
+            if (command === 'background' || command === 'alpha') {
+                args.push('--alpha-mode', String(settings.alphaMode ?? 'auto'));
+                if (subject) args.push('--subject', subject);
+            }
+            // The model of the pictures and the tier of the quality: the field of the tier
+            // goes into the body of the request of the models that take it.
+            args.push('--image-model', model);
+            if (quality) args.push('--quality', quality);
 
-        const result = await runBridge({
-            name: 'ai-image',
-            args,
-            config,
-            cwd: root,
-            env,
-            // The log of `ai-image` comes live: the stage shows what the picture CLI does
-            // while it works, and not only when the picture is ready.
-            onLine: (event) => notify({ type: 'bridge.log', name: 'ai-image', stream: event.stream, line: event.line }),
-        });
-        if (result.skipped) {
-            warnings.push('Мост ai-image выключен: обрезки остаются как есть.');
-            break;
+            const result = await runBridge({
+                name: 'ai-image',
+                args,
+                config,
+                cwd: root,
+                env,
+                // The log of `ai-image` comes live: the stage shows what the picture CLI does
+                // while it works, and not only when the picture is ready.
+                onLine: (event) => notify({ type: 'bridge.log', name: 'ai-image', stream: event.stream, line: event.line }),
+            });
+            if (result.skipped) {
+                warnings.push('Мост ai-image выключен: обрезки остаются как есть.');
+                break;
+            }
+            const written = await stat(candidate).catch(() => null);
+            if (!result.ok || !written?.isFile()) {
+                const detail = (result.stderr || result.stdout || result.reason || '').trim().split('\n')[0];
+                warnings.push(`Обрезок не подготовлен (${crop.name}, ${model}): ${detail || 'неизвестная причина'}`);
+                continue;
+            }
+            const facts = await judgePicture({ root, config, env, file: candidate });
+            candidates.push({ model, file: candidate, bytes: written.size, facts });            notify({ type: 'picture.attempt', name: crop.name, model, file: candidate, facts });
         }
-        const written = await stat(path.join(root, out)).catch(() => null);
-        if (!result.ok || !written?.isFile()) {
-            const detail = (result.stderr || result.stdout || result.reason || '').trim().split('\n')[0];
-            warnings.push(`Обрезок не подготовлен (${crop.name}): ${detail || 'неизвестная причина'}`);
+        if (!candidates.length) {
+            // Ни одна модель не справилась: обрезок остаётся как есть.
             continue;
         }
-
+        // The better cut-out wins: a real cut-out first, then the tighter edge, then the
+        // background that is really gone.
+        const best = pickPicture(candidates);
         const file = cropRelative(root, path.join(root, out));
+        await mkdir(path.dirname(path.join(root, out)), { recursive: true });
+        await copyFile(best.file, path.join(root, out)).catch(() => {});
+        const written = await stat(path.join(root, out)).catch(() => null);
+        if (!written?.isFile()) {
+            warnings.push(`Обрезок не сохранён (${crop.name}): ${best.model}`);
+            continue;
+        }
         pictures.push({
             name: crop.name,
             kind: crop.kind,
@@ -341,8 +510,13 @@ export async function picturesStage({
             file,
             bytes: written.size,
             use: crop.use,
+            // The model that won and the ones that were asked: the report of the stage says
+            // which cut-out is on the disk and why.
+            model: best.model,
+            models: candidates.map((item) => item.model),
+            quality,
         });
-        notify({ type: 'picture.ready', name: crop.name, kind: crop.kind, file });
+        notify({ type: 'picture.ready', name: crop.name, kind: crop.kind, file, model: best.model });
     }
 
     const skippedRest = crops.length > limit ? [`Обрезков больше, чем лимит (${limit}).`] : [];
