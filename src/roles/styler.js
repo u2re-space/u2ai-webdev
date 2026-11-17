@@ -15,6 +15,7 @@ import { referenceNote } from './reference.js';
 import { pageScaleRules, pageWidthNote } from './page-frame.js';
 import { webDevelopment } from './web-development.js';
 import { DELEGATE_NAMES, delegationNote } from '../agent/delegation.js';
+import { economyNote, economyTools } from './economy.js';
 
 /** The name of the role. */
 export const name = 'styler';
@@ -27,6 +28,7 @@ export const tools = [
     'list_files', 'read_file', 'write_file', 'replace_text', 'search_files',
     'run_command', 'download_font', 'call_ai_measure', 'read_skill', 'web_guidance',
     'screenshot', 'delegate_role',
+    ...economyTools(),
 ];
 
 /** How many turns the role may spend. */
@@ -56,9 +58,9 @@ export function instructions(context = {}) {
     const width = pageWidthNote(context);
     const repair = Array.isArray(context.issues) && context.issues.length
         ? `The review of the step found what has to be fixed, and the request names the file, the
-defect and the change that is asked for. Fix it now: read the file, make the change, write the
-file back under the same path. The answer is the repaired file on the disk, never a description
-of the change.`
+defect and the change that is asked for. Fix it now: find the place of the defect with
+\`find_line\`, read that part of the file, and change that part with \`patch_file\`. The answer is
+the repaired file on the disk, never a description of the change.`
         : '';
     return `You are the styler of a web project. You write the CSS (or SCSS) of one step and you
 make the result look the way the design direction says.
@@ -75,6 +77,7 @@ ${repair}
 Rules:
 ${INPUTS_IN_CONTEXT}
 ${delegationNote(DELEGATE_NAMES)}
+${economyNote()}
 - Look the guides up with the \`web_guidance\` tool before you write the rules of a layout,
   an animation or a scroll: the platform of today already holds the answer.
 - The title of the step is not the kind of work: a step whose title says "describe" or

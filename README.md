@@ -1064,6 +1064,37 @@ And the roles write into it: their answers, their decisions, the plan and the le
 all land in the journal and in the state. The next stage starts from that instead of asking the
 model the same thing again.
 
+## The economy of the run
+
+The tokens of a run are the money of the run, and the same work can cost ten times more or
+ten times less. The house keeps the price down with four tools that the roles `markup`,
+`styler` and `coder` have:
+
+| Tool | What it does | What it saves |
+|---|---|---|
+| `read_file` with `startLine` / `endLine` | reads a range of a file, and the answer says which lines it is (`строки 2-4 из 9`) | the rest of the file |
+| `find_line` | finds the **number** of the lines that hold a piece of text (or a shape, with `regex: true`) | the search of the model, and the read that follows it |
+| `patch_file` | changes the lines **by their numbers**: the patch carries the new text of the lines that change, the rest of the file is neither sent nor rewritten | the whole file in the request and in the answer |
+| `batch` | runs a list of actions (reads, searches, patches) in one call and answers with the answer of every action, in order | the turns of the run |
+
+The line is the address of a place. A role that has to change one rule finds the place with
+`find_line`, reads that range alone, and patches that range alone:
+
+```
+find_line  src/styles.scss  "grid-template-columns"   →  8|   grid-template-columns: 362px 1fr 158px;
+read_file  src/styles.scss  6..9                      →  the four lines around it
+patch_file src/styles.scss  [{8, 8, "  grid-template-columns: 1fr;"}]
+```
+
+The patch is applied from the bottom of the file up, so the numbers of the lines that were not
+touched stay the numbers they had. A patch that names a line that is not there changes nothing:
+the file is checked before anything is written, and the old version goes to the backup.
+
+The moment of the read is a fact of the context of the run: the file, the range of the lines, the
+time of every read and the time of the first one. A file that is read in several pieces keeps the
+pieces it was read in — the second read does not wipe the first one. A write says that what was
+read is not what is on the disk any more, so the fact never lies about the file.
+
 ## The map of the run
 
 The map of a run is the index of the files of the working directory: their lines, their symbols,

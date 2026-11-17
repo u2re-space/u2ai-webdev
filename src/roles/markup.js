@@ -15,6 +15,7 @@ import { referenceNote } from './reference.js';
 import { pageFrameRules, pageWidthNote } from './page-frame.js';
 import { webDevelopment } from './web-development.js';
 import { DELEGATE_NAMES, delegationNote } from '../agent/delegation.js';
+import { economyNote, economyTools } from './economy.js';
 
 /** The name of the role. */
 export const name = 'markup';
@@ -26,6 +27,7 @@ export const schema = 'markup';
 export const tools = [
     'list_files', 'read_file', 'write_file', 'replace_text', 'search_files', 'read_skill', 'web_guidance',
     'delegate_role',
+    ...economyTools(),
 ];
 
 /** How many turns the role may spend. */
@@ -55,10 +57,11 @@ export function instructions(context = {}) {
     const width = pageWidthNote(context);
     const repair = Array.isArray(context.issues) && context.issues.length
         ? `The review of the step found what has to be fixed, and the request names the file, the
-defect and the change that is asked for. Fix it now: read the file, make the change, write the
-file back under the same path. The answer is the repaired file on the disk, never a description
-of the change. The class names are a contract with the styles: keep the names the styles
-describe, do not rename them and do not drop a class that has a rule.`
+defect and the change that is asked for. Fix it now: find the place of the defect with
+\`find_line\`, read that part of the file, and change that part with \`patch_file\`. The answer is
+the repaired file on the disk, never a description of the change. The class names are a
+contract with the styles: keep the names the styles describe, do not rename them and do not
+drop a class that has a rule.`
         : '';
     return `You are the markup specialist of a web project. You write the structure of the
 page: the elements, the order, the names and the attributes that give the page its meaning.
@@ -75,6 +78,7 @@ ${repair}
 Rules:
 ${INPUTS_IN_CONTEXT}
 ${delegationNote(DELEGATE_NAMES)}
+${economyNote()}
 - The platform of today comes before the habit of yesterday: look the guides up with the
   \`web_guidance\` tool before you write a dialog, a form or a table, and follow what they
   say.

@@ -4,12 +4,14 @@
  * @purpose List, read, search, edit, and copy files inside the working directory.
  * @depends node:path, node:fs/promises, agent/paths, agent/project-backup, util/text
  * @usedBy agent/tools, agent/team
- * @exports listFiles, readTextFile, searchFiles, globMatcher, writeTextFile, replaceInFile,
- *          deleteFile, makeDirectory, copyPath
+ * @exports listFiles, readTextFile, findLines, patchFile, searchFiles, globMatcher, writeTextFile,
+ *          replaceInFile, deleteFile, makeDirectory, copyPath
  * @ai.tags filesystem, tools
  * @ai.hint io
  * @ai.hint legacy-0.2
  * @changed 2026-10-21 A direct search can include noisy directories; a missing path lists its parent.
+ * @changed 2026-11-17 Строки адресуемы: поиск номера строки и патч по номерам — файл не
+ *                       переписывается целиком ради одной правки.
  */
 
 import path from 'node:path';
@@ -357,6 +359,133 @@ export async function replaceInFile({ root, file, search, replacement, all = fal
     const projectBackup = await saveProjectBackup({ root, rel, abs, slot: backupSlot || 'write' });
     await writeFileAtomic(abs, updated);
     return { rel, replacements: all ? count : 1, bytes: Buffer.byteLength(updated), backupPath, projectBackup };
+}
+
+/**
+ * Find the lines of a file that hold a piece of text.
+ *
+ * The line number is the address of a place in the file: with it a role can read that place
+ * alone and change it alone. A model that has to rewrite the whole file to fix one rule pays
+ * for the whole file in every turn.
+ * @param {{ root: string, file: string, text?: string|null, regex?: boolean, from?: number|null,
+ *   to?: number|null, limit?: number, maxBytes?: number }} options
+ * @returns {Promise<{ rel: string, hits: object[], totalLines: number, bytes: number }>}
+ * @exports
+ * @ai.hint io
+ */
+export async function findLines({
+    root,
+    file,
+    text = null,
+    regex = false,
+    from = null,
+    to = null,
+    limit = 40,
+    maxBytes = 4 * 1024 * 1024,
+} = {}) {
+    const { abs, rel } = await resolveInside(root, file, { allowRoot: false });
+    const info = await statOrNull(abs);
+    if (!info) throw new Error(`Файл не найден: ${file}`);
+    if (!info.isFile()) throw new Error(`Не файл: ${file}`);
+    if (await isBinary(abs, info.size)) throw new Error(`Бинарный файл (${formatBytes(info.size)}); этот инструмент читает только текст.`);
+    if (info.size > maxBytes) throw new Error(`Файл больше лимита ${formatBytes(maxBytes)}.`);
+    let content;
+    try { content = utf8.decode(await readFile(abs)); } catch { throw new Error(`Файл ${rel} не в UTF-8.`); }
+    const lines = content.split(/\r?\n/);
+    const first = Math.max(1, from ?? 1);
+    const last = Math.min(lines.length, to ?? lines.length);
+    const needle = String(text ?? '');
+    if (!needle) throw new Error('Укажите текст, который нужно найти.');
+    let matcher = null;
+    if (regex) {
+        try {
+            matcher = new RegExp(needle, 'i');
+        } catch (error) {
+            throw new Error(`Некорректное регулярное выражение: ${error.message}`);
+        }
+    }
+    const hits = [];
+    let matched = 0;
+    for (let number = first; number <= last; number++) {
+        const line = lines[number - 1] ?? '';
+        const found = matcher
+            ? matcher.test(line)
+            : line.toLowerCase().includes(needle.toLowerCase());
+        if (!found) continue;
+        matched += 1;
+        if (hits.length < Math.max(1, limit)) {
+            hits.push({ line: number, text: line.slice(0, 400) });
+        }
+    }
+    return { rel, hits, totalLines: lines.length, matched, bytes: info.size };
+}
+
+/**
+ * Change the lines of a file by their numbers.
+ *
+ * The patch carries only the lines that change: the role sends the new text of the lines it
+ * fixes, not the whole file. The file is rewritten once, atomically, and the old version goes
+ * to the backup.
+ *
+ * The edits are applied from the bottom of the file up, so the numbers of the lines that were
+ * not touched stay the numbers they had.
+ * @param {{ root: string, file: string, edits: object[], maxBytes?: number, backupDir?: string|null,
+ *   backupSlot?: string|null }} options
+ * @returns {Promise<{ rel: string, applied: number, lines: number, bytes: number, backupPath: string|null }>}
+ * @exports
+ * @ai.hint io
+ */
+export async function patchFile({
+    root,
+    file,
+    edits = [],
+    maxBytes = 4 * 1024 * 1024,
+    backupDir = null,
+    backupSlot = null,
+} = {}) {
+    const { abs, rel } = await resolveInside(root, file, { forWrite: true, allowRoot: false });
+    if (rel === '.backup' || rel.startsWith('.backup/')) throw new Error(`Запись в .backup запрещена: ${rel}`);
+    const list = Array.isArray(edits) ? edits : [];
+    if (!list.length) throw new Error('Патч пуст: перечислите строки, которые меняются.');
+    const info = await statOrNull(abs);
+    if (!info) throw new Error(`Файл не найден: ${file}`);
+    if (!info.isFile()) throw new Error(`Не файл: ${file}`);
+    if (info.size > maxBytes) throw new Error(`Файл больше лимита ${formatBytes(maxBytes)}.`);
+    let content;
+    try { content = utf8.decode(await readFile(abs)); } catch { throw new Error(`Файл ${rel} не в UTF-8.`); }
+    const lines = content.split(/\r?\n/);
+
+    // The edits are checked before anything is written: a patch that names a line that is not
+    // there changes nothing.
+    const prepared = [];
+    for (const edit of list) {
+        const start = Number(edit?.startLine ?? edit?.start ?? 0);
+        const end = Number(edit?.endLine ?? edit?.end ?? start);
+        const text = typeof edit?.text === 'string' ? edit.text : '';
+        if (!Number.isSafeInteger(start) || start < 1) throw new Error('Патч: строка начала должна быть числом от 1.');
+        if (!Number.isSafeInteger(end) || end < start) throw new Error(`Патч: диапазон строк ${start}-${end} неверен.`);
+        if (end > lines.length) throw new Error(`Патч: строки ${start}-${end} нет в файле (в файле ${lines.length} строк).`);
+        prepared.push({ start, end, text });
+    }
+    // The numbers of the lines that were not touched stay the numbers they had: the edits go
+    // from the bottom of the file up.
+    prepared.sort((left, right) => right.start - left.start);
+    for (const edit of prepared) {
+        const replacement = edit.text === '' ? [] : edit.text.split(/\r?\n/);
+        lines.splice(edit.start - 1, edit.end - edit.start + 1, ...replacement);
+    }
+    const updated = lines.join('\n');
+    const backupPath = await backup(abs, rel, backupDir);
+    const projectBackup = await saveProjectBackup({ root, rel, abs, slot: backupSlot || 'write' });
+    await writeFileAtomic(abs, updated);
+    return {
+        rel,
+        applied: prepared.length,
+        lines: prepared.reduce((sum, edit) => sum + (edit.end - edit.start + 1), 0),
+        bytes: Buffer.byteLength(updated),
+        backupPath,
+        projectBackup,
+    };
 }
 
 /**

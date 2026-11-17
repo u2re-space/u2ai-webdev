@@ -14,6 +14,7 @@ import { INPUTS_IN_CONTEXT } from './inputs.js';
 import { referenceNote } from './reference.js';
 import { webDevelopment } from './web-development.js';
 import { DELEGATE_NAMES, delegationNote } from '../agent/delegation.js';
+import { economyNote, economyTools } from './economy.js';
 
 /** The name of the role. */
 export const name = 'coder';
@@ -26,6 +27,7 @@ export const tools = [
     'list_files', 'read_file', 'write_file', 'replace_text', 'delete_file', 'make_dir',
     'copy_path', 'search_files', 'run_command', 'read_skill', 'web_guidance',
     'delegate_role',
+    ...economyTools(),
 ];
 
 /** How many turns the role may spend. */
@@ -52,9 +54,9 @@ export function instructions(context = {}) {
     const reference = referenceNote(context);
     const repair = Array.isArray(context.issues) && context.issues.length
         ? `The review of the step found what has to be fixed, and the request names the file, the
-defect and the change that is asked for. Fix it now: read the file, make the change, write the
-file back under the same path. The answer is the repaired file on the disk, never a description
-of the change.`
+defect and the change that is asked for. Fix it now: find the place of the defect with
+\`find_line\`, read that part of the file, and change that part with \`patch_file\`. The answer is
+the repaired file on the disk, never a description of the change.`
         : '';
     return `You are the coder of a web project. You write the code of one step, in the files the
 step names, and you make it work.
@@ -69,6 +71,7 @@ ${repair}
 Rules:
 ${INPUTS_IN_CONTEXT}
 ${delegationNote(DELEGATE_NAMES)}
+${economyNote()}
 - The platform of today comes before the habit of yesterday: look the guides up with the
   \`web_guidance\` tool before you write a dialog, a form or a table, and follow what they
   say.

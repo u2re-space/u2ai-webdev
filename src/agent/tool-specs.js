@@ -52,7 +52,7 @@ export const TOOL_SPECS = Object.freeze({
     },
     read_file: {
         configKey: 'read',
-        description: 'Read a text file of the working directory. A line range may be given to read a part of a big file.',
+        description: 'Read a text file of the working directory. A line range may be given to read a part of a big file — the answer names the lines it has read, so the next read does not repeat them.',
         parameters: {
             type: 'object',
             properties: {
@@ -64,6 +64,86 @@ export const TOOL_SPECS = Object.freeze({
             additionalProperties: false,
         },
         required: ['path'],
+        roles: [],
+    },
+    find_line: {
+        configKey: 'read',
+        description: 'Find the lines of a file that hold a piece of text and return their numbers. The number '
+            + 'is the address of a place in the file: read that place alone with `read_file` and change it '
+            + 'alone with `patch_file`. Much cheaper than reading and rewriting the whole file.',
+        parameters: {
+            type: 'object',
+            properties: {
+                path: str('Path of the file, relative to the working directory.'),
+                text: str('The piece of text to look for.'),
+                regex: bool('1 to read the text as a regular expression.'),
+                startLine: int('First line of the search, 1-based.'),
+                endLine: int('Last line of the search, inclusive.'),
+                limit: int('How many matches to return. Default 40.'),
+            },
+            required: ['path', 'text'],
+            additionalProperties: false,
+        },
+        required: ['path', 'text'],
+        roles: [],
+    },
+    patch_file: {
+        configKey: 'write',
+        description: 'Change the lines of a file by their numbers. The patch carries only the lines that change — '
+            + 'the whole file is not sent and not rewritten. The edits go from the bottom of the file up, so the '
+            + 'numbers of the other lines stay the numbers they were.',
+        parameters: {
+            type: 'object',
+            properties: {
+                path: str('Path of the file, relative to the working directory.'),
+                edits: {
+                    type: 'array',
+                    description: 'The changes: the range of the lines and the new text of them.',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            startLine: int('The first line of the range, 1-based.'),
+                            endLine: int('The last line of the range, inclusive. The same as startLine for one line.'),
+                            text: str('The new text of the range. An empty text deletes the lines.'),
+                        },
+                        required: ['startLine', 'text'],
+                        additionalProperties: false,
+                    },
+                },
+            },
+            required: ['path', 'edits'],
+            additionalProperties: false,
+        },
+        required: ['path', 'edits'],
+        roles: [],
+    },
+    batch: {
+        configKey: 'write',
+        description: 'Run several actions of this catalogue in one call: a list of reads, searches, writes and '
+            + 'patches. One call instead of many — the context and the turns of the run are saved. The answer '
+            + 'is the answer of every action, in order.',
+        parameters: {
+            type: 'object',
+            properties: {
+                actions: {
+                    type: 'array',
+                    description: 'The actions, in order. Each one names its tool and its arguments.',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            tool: str('The tool of the action: list_files, read_file, find_line, search_files, '
+                                + 'write_file, replace_text, patch_file, delete_file, make_dir, copy_path.'),
+                            args: { type: 'object', description: 'The arguments of that tool.' },
+                        },
+                        required: ['tool'],
+                        additionalProperties: false,
+                    },
+                },
+            },
+            required: ['actions'],
+            additionalProperties: false,
+        },
+        required: ['actions'],
         roles: [],
     },
     write_file: {

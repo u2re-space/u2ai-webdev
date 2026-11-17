@@ -25,7 +25,7 @@
 import path from 'node:path';
 import { mkdir, stat } from 'node:fs/promises';
 import { toolSpecs as buildSpecs } from './tool-specs.js';
-import { listFiles, readTextFile, searchFiles, writeTextFile, replaceInFile, deleteFile, makeDirectory, copyPath } from './fs-tools.js';
+import { listFiles, readTextFile, findLines, patchFile, searchFiles, writeTextFile, replaceInFile, deleteFile, makeDirectory, copyPath } from './fs-tools.js';
 import { listProjectBackups, restoreProjectBackup } from './project-backup.js';
 import { generateSvg, downloadFont, downloadIcons } from './assets.js';
 import { searchIcons } from './icon-sets.js';
@@ -56,6 +56,26 @@ export { WINDOWS_EXTENSIONS, quoteWindowsArg, findProgram, killTree } from './pr
 
 /** Инструменты, ответы которых стоит помнить: они читают одно и то же. */
 const CACHEABLE = new Set(['read_file']);
+
+/**
+ * Инструменты, которые могут выполняться пачкой.
+ *
+ * Пакет — это один ход вместо многих: чтения, поиски и правки идут вместе. В пакете нет
+ * самого пакета (иначе пакет вызывал бы пакет), нет команд и нет мостов: там только
+ * работа с файлами, которая идёт по порядку.
+ */
+const BATCH_TOOLS = new Set([
+    'list_files',
+    'read_file',
+    'find_line',
+    'search_files',
+    'write_file',
+    'replace_text',
+    'patch_file',
+    'delete_file',
+    'make_dir',
+    'copy_path',
+]);
 
 /**
  * The commands that do not finish on their own: a server, a watcher, a tail.
@@ -368,6 +388,65 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
     }
 
     /**
+     * Remember the moment of a read in the context of the run.
+     *
+     * The fact is the address of what has been read: the lines, the moment of every read and
+     * the moment of the first one. A role that comes after sees which lines it may not read
+     * again, and a file that is read in several pieces keeps the pieces it was read in — the
+     * last read does not wipe the earlier ones.
+     * @param {string} rel the path of the file, relative to the working directory
+     * @param {{ from?: number|null, to?: number|null, totalLines?: number|null }} range
+     * @returns {Promise<void>}
+     */
+    async function noteRead(rel, range = {}) {
+        if (!context?.set) return;
+        const key = `read:${rel}`;
+        const previous = await context.get?.(key);
+        const now = new Date().toISOString();
+        const ranges = Array.isArray(previous?.ranges) ? previous.ranges.slice() : [];
+        const from = Number.isFinite(range.from) ? range.from : null;
+        const to = Number.isFinite(range.to) ? range.to : null;
+        if (from !== null) {
+            const last = ranges[ranges.length - 1];
+            // The ranges that touch each other are one range.
+            if (last && from <= last.to + 1 && last.from <= (to ?? from)) {
+                last.to = Math.max(last.to, to ?? from);
+                last.at = now;
+            } else {
+                ranges.push({ from, to: to ?? from, at: now });
+            }
+        }
+        const lines = ranges.reduce((sum, item) => sum + (item.to - item.from + 1), 0);
+        await context.set(key, {
+            path: rel,
+            from: ranges.length ? Math.min(...ranges.map((item) => item.from)) : from,
+            to: ranges.length ? Math.max(...ranges.map((item) => item.to)) : to,
+            totalLines: range.totalLines ?? previous?.totalLines ?? null,
+            ranges,
+            linesRead: lines,
+            firstAt: previous?.firstAt ?? now,
+            at: now,
+        });
+    }
+
+    /**
+     * Forget the moment of the read of a file: the file changed, and what was read of it is
+     * not what is on the disk any more.
+     * @param {string} rel
+     * @returns {Promise<void>}
+     */
+    async function forgetReadFact(rel) {
+        if (!context?.set) return;
+        await context.set(`read:${rel}`, {
+            path: rel,
+            changed: true,
+            ranges: [],
+            linesRead: 0,
+            at: new Date().toISOString(),
+        });
+    }
+
+    /**
      * The directories the skill packs may live in, beyond the standard ones.
      * @returns {string[]}
      */
@@ -637,9 +716,11 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                     return `Файл ${target} уже прочитан в этом разговоре и с тех пор не менялся. Его содержимое — выше в истории; читать его второй раз не нужно.`;
                 }
                 const rel = await relativeOf(target);
+                const relKey = rel ?? target;
                 const known = rel ? await readFromMap(rel, startLine, endLine) : null;
                 if (known !== null) {
                     if (stamp) reads.set(key, stamp);
+                    await noteRead(relKey, { from: startLine ?? 1, to: endLine ?? null });
                     return known;
                 }
                 const file = await readTextFile({
@@ -649,13 +730,81 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                     endLine,
                 });
                 if (stamp) reads.set(key, stamp);
+                // The moment of the read goes into the context of the run: the roles after
+                // this one know which lines of the file have been read, and they do not
+                // read them again.
+                await noteRead(relKey, {
+                    from: file.from,
+                    to: file.to,
+                    totalLines: file.totalLines,
+                });
                 return file.text;
+            }
+            case 'find_line': {
+                const found = await findLines({
+                    root,
+                    file: String(args.path ?? ''),
+                    text: String(args.text ?? ''),
+                    regex: Boolean(args.regex),
+                    from: Number.isSafeInteger(Number(args.startLine)) ? Number(args.startLine) : null,
+                    to: Number.isSafeInteger(Number(args.endLine)) ? Number(args.endLine) : null,
+                    limit: Number.isSafeInteger(Number(args.limit)) ? Number(args.limit) : 40,
+                });
+                if (!found.hits.length) {
+                    return `В файле ${found.rel} нет строк с этим текстом (в файле ${found.totalLines} строк).`;
+                }
+                const lines = found.hits.map((hit) => `${hit.line}| ${hit.text}`).join('\n');
+                const more = found.matched > found.hits.length
+                    ? `\n… ещё ${found.matched - found.hits.length} совпадений (показаны первые ${found.hits.length})`
+                    : '';
+                return `# ${found.rel} — найдено строк: ${found.matched} (в файле ${found.totalLines} строк)\n${lines}${more}`;
+            }
+            case 'patch_file': {
+                const target = await writePath(args.path);
+                forgetReads(target.rel);
+                const result = await patchFile({
+                    root,
+                    file: target.rel,
+                    edits: Array.isArray(args.edits) ? args.edits : [],
+                });
+                await rememberInMap(target.rel);
+                await forgetReadFact(target.rel);
+                return `Файл ${result.rel} изменён: правок ${result.applied}, строк затронуто ${result.lines}, `
+                    + `размер ${result.bytes} байт.`;
+            }
+            case 'batch': {
+                const actions = Array.isArray(args.actions) ? args.actions : [];
+                if (!actions.length) throw new Error('Пакет пуст: перечислите действия.');
+                if (actions.length > 50) throw new Error('В пакете слишком много действий (максимум 50).');
+                const lines = [];
+                for (const [index, action] of actions.entries()) {
+                    const tool = String(action?.tool ?? '').trim();
+                    const toolArgs = action?.args && typeof action.args === 'object' ? action.args : {};
+                    if (!tool) {
+                        lines.push(`# ${index + 1} — действие без инструмента.`);
+                        continue;
+                    }
+                    if (!BATCH_TOOLS.has(tool)) {
+                        lines.push(`# ${index + 1} — инструмент «${tool}» в пакете не выполняется `
+                            + `(доступны: ${[...BATCH_TOOLS].join(', ')}).`);
+                        continue;
+                    }
+                    try {
+                        const answer = await runTool(tool, toolArgs);
+                        const body = String(answer ?? '').trim();
+                        lines.push(`# ${index + 1} ${tool}${body ? `\n${body}` : ''}`);
+                    } catch (error) {
+                        lines.push(`# ${index + 1} ${tool} — не удалось: ${error?.message ?? error}`);
+                    }
+                }
+                return lines.join('\n\n');
             }
             case 'write_file': {
                 const target = await writePath(args.path);
                 forgetReads(target.rel);
                 const result = await writeTextFile({ root, file: target.rel, content: String(args.content ?? '') });
                 await rememberInMap(target.rel);
+                await forgetReadFact(target.rel);
                 await context?.file?.(target.rel);
                 return `Записан ${result.rel} (${result.bytes} байт${result.created ? ', новый файл' : ''}).`;
             }
@@ -670,6 +819,7 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                     all: Boolean(args.all),
                 });
                 await rememberInMap(target.rel);
+                await forgetReadFact(target.rel);
                 return `Заменено в ${result.rel}: ${result.replacements} (${result.bytes} байт).`;
             }
             case 'delete_file': {
@@ -677,6 +827,7 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                 forgetReads(target.rel);
                 const result = await deleteFile({ root, file: target.rel });
                 await rememberInMap(target.rel);
+                await forgetReadFact(target.rel);
                 return `Удалён ${result.rel}. Снимок: ${result.projectBackup?.id ?? 'нет'}.`;
             }
             case 'make_dir': {
