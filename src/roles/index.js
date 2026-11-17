@@ -31,7 +31,7 @@
  */
 
 import { parseResponse, textPart, imagePart } from '../openai/responses.js';
-import { assetPart, scrubDataUrls } from '../shared/data-urls.js';
+import { assetPart, scrubDataUrls, sniffType } from '../shared/data-urls.js';
 import { readFile } from 'node:fs/promises';
 import { resolveInside } from '../agent/paths.js';
 import { schemaFor, schemaProblems, schemaText } from '../agent/schemas.js';
@@ -400,8 +400,10 @@ export async function pictureParts(root, text) {
         try {
             const { abs } = await resolveInside(root, name, { allowRoot: false });
             const bytes = await readFile(abs);
-            const mime = /\.jpe?g$/i.test(name) ? 'image/jpeg' : 'image/png';
-            parts.push(imagePart(bytes, mime));
+            const image = sniffType(bytes);
+            if (image.kind !== 'image'
+                || !['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(image.mime)) continue;
+            parts.push(imagePart(bytes, image.mime));
         } catch {
             // The path is not a picture of the project: nothing to show.
         }

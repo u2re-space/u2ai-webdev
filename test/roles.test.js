@@ -626,7 +626,9 @@ test('a picture that a tool made goes back into the conversation as a picture', 
     try {
         const { mkdir, writeFile } = await import('node:fs/promises');
         await mkdir(path.join(root, '.ai', 'shots'), { recursive: true });
-        await writeFile(path.join(root, '.ai', 'shots', 'shot-1.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+        await writeFile(path.join(root, '.ai', 'shots', 'shot-1.png'), Buffer.from([
+            0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+        ]));
 
         const requests = [];
         const queue = [
@@ -698,11 +700,24 @@ test('the pictures of the answer of a tool are read from the project', async () 
     try {
         const { mkdir, writeFile } = await import('node:fs/promises');
         await mkdir(path.join(root, 'shots'), { recursive: true });
-        await writeFile(path.join(root, 'shots', 'a.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+        await writeFile(path.join(root, 'shots', 'a.png'), Buffer.from([
+            0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+        ]));
+        // The extension lies: the payload itself decides which image type goes into the request.
+        await writeFile(path.join(root, 'shots', 'mismatch.webp'), Buffer.from([
+            0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+        ]));
+        await writeFile(path.join(root, 'shots', 'actual.webp'), Buffer.from('RIFF0000WEBP'));
         await writeFile(path.join(root, 'notes.txt'), 'not a picture');
 
-        const parts = await pictureParts(root, 'The shot is here: shots/a.png — and notes.txt is not.');
-        assert.equal(parts.length, 1);
+        const parts = await pictureParts(
+            root,
+            'The shots are here: shots/a.png, shots/mismatch.webp, shots/actual.webp — notes.txt is not.',
+        );
+        assert.equal(parts.length, 3);
+        assert.ok(parts.every((part) => part.type === 'input_image'));
+        assert.match(parts[1].image_url, /^data:image\/png;/);
+        assert.match(parts[2].image_url, /^data:image\/webp;/);
 
         // The path outside the project is not a picture of the project.
         assert.deepEqual(await pictureParts(root, '../outside.png'), []);
