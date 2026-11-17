@@ -23,7 +23,7 @@
  */
 
 import path from 'node:path';
-import { mkdir, stat } from 'node:fs/promises';
+import { mkdir, stat, writeFile } from 'node:fs/promises';
 import { toolSpecs as buildSpecs } from './tool-specs.js';
 import { listFiles, readTextFile, findLines, patchFile, searchFiles, writeTextFile, replaceInFile, deleteFile, makeDirectory, copyPath } from './fs-tools.js';
 import { listProjectBackups, restoreProjectBackup } from './project-backup.js';
@@ -34,6 +34,7 @@ import { readSkill } from './skills.js';
 import { guidanceSearchText, guidanceRetrieveText, GUIDANCE_SOURCE } from './guidance.js';
 import { runProgram as runProgramIn } from './programs.js';
 import { compareWithReference } from './image-compare.js';
+import { firstPageId } from './devtools.js';
 import { isInside, resolveInside } from './paths.js';
 import { findChromium, findEgo, resolveEngine, screenshotPage, startStaticServer } from './browser.js';
 import { ensurePage } from '../stages/dev-server.js';
@@ -177,6 +178,80 @@ function counted(count, one, few, many) {
     if (last === 1) return `${n} ${one}`;
     if (last >= 2 && last <= 4) return `${n} ${few}`;
     return `${n} ${many}`;
+}
+
+/**
+ * Call a tool of an MCP server.
+ *
+ * The tools of the browser of the DevTools name the page they work on. The house knows the
+ * page — it asked the server for the list of the pages when it connected — and puts the
+ * number into the call: a role that has to ask for the page first spends a turn on it.
+ * @param {{ connection: object, tool: string, parameters: object }} entry the tool of the server
+ * @param {object} args the arguments of the call
+ * @returns {Promise<unknown>} the answer of the server
+ */
+async function callMcp(entry, args = {}) {
+    const connection = entry.connection ?? {};
+    const required = Array.isArray(entry.parameters?.required) ? entry.parameters.required : [];
+    const wants = required.includes('pageId');
+    const known = Number.isFinite(connection.pageId) ? connection.pageId : null;
+    const payload = (pageId) => (wants && pageId !== null ? { ...args, pageId } : args);
+    // The number of the page is the one the house knows, when the role did not name a page.
+    const first = wants && known !== null && args?.pageId === undefined
+        ? await connection.call(entry.tool, payload(known))
+        : await connection.call(entry.tool, args);
+    const text = (first?.content ?? [])
+        .map((part) => (typeof part?.text === 'string' ? part.text : ''))
+        .join('\n');
+    if (!/no page found|page not found|invalid input.*pageId/i.test(text)) return first;
+    // The page is gone or the number was wrong: the house asks for the list of the pages once
+    // more and repeats the call with the page that is there.
+    const refreshed = await firstPageId(connection);
+    if (refreshed === null) return first;
+    connection.pageId = refreshed;
+    return await connection.call(entry.tool, payload(refreshed));
+}
+
+/**
+ * The answer of a tool of an MCP server.
+ *
+ * The server answers with parts: text and pictures. A picture is written into the working
+ * directory and named in the answer — the role loop looks for the paths of the answer and
+ * puts the pictures back into the conversation, so the role sees what the browser saw.
+ * @param {string} root the working directory
+ * @param {{ name: string, tool: string }} entry the tool of the server
+ * @param {unknown} result the answer of the server
+ * @returns {Promise<string>}
+ * @exports
+ * @ai.hint io
+ */
+export async function mcpAnswer(root, entry, result) {
+    const content = Array.isArray(result?.content) ? result.content : null;
+    if (!content) {
+        return typeof result === 'string' ? result : JSON.stringify(result ?? null);
+    }
+    const lines = [];
+    for (const part of content) {
+        if (part?.type === 'image' && typeof part?.data === 'string') {
+            const mime = String(part.mimeType ?? 'image/png');
+            const extension = mime.includes('jpeg') ? 'jpg' : mime.includes('webp') ? 'webp' : 'png';
+            const name = `mcp-${entry?.tool ?? 'tool'}-${Date.now().toString(36)}.${extension}`;
+            const folder = '.ai/shots';
+            const target = path.join(root, ...folder.split('/'), name);
+            try {
+                await mkdir(path.dirname(target), { recursive: true });
+                await writeFile(target, Buffer.from(part.data, 'base64'));
+                // The path is the one of the project: the role loop looks for the paths of the
+                // answer and puts the picture back into the conversation.
+                lines.push(`The picture is written: ${folder}/${name}`);
+            } catch (error) {
+                lines.push(`The picture could not be written: ${error?.message ?? error}`);
+            }
+            continue;
+        }
+        lines.push(typeof part?.text === 'string' ? part.text : JSON.stringify(part));
+    }
+    return lines.join('\n');
 }
 
 /**
@@ -657,14 +732,8 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
     async function execute(name, args = {}) {
         const mcpTool = mcpTools.find((entry) => entry.name === name);
         if (mcpTool) {
-            const result = await mcpTool.connection.call(mcpTool.tool, args ?? {});
-            const content = Array.isArray(result?.content) ? result.content : null;
-            if (content) {
-                return content
-                    .map((part) => (typeof part?.text === 'string' ? part.text : JSON.stringify(part)))
-                    .join('\n');
-            }
-            return typeof result === 'string' ? result : JSON.stringify(result ?? null);
+            const answer = await callMcp(mcpTool, args ?? {});
+            return await mcpAnswer(root, mcpTool, answer);
         }
         // The answer of a question that was already asked comes from the cache of the run.
         const key = CACHEABLE.has(name) ? await cacheKeyOf(name, args) : null;
@@ -1159,12 +1228,21 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
          * @returns {object[]}
          */
         specsFor(roleName, names = null) {
-            const local = buildSpecs(config?.tools, { role: roleName, names });
-            if (names) {
-                const wanted = new Set(names);
-                return [...local, ...mcpSpecs.filter((spec) => wanted.has(spec.name))];
-            }
-            return [...local, ...mcpSpecs];
+            // The marker `mcp:<server>` gives the role the tools of that server: the names
+            // of the tools of an MCP server are not known before the server is connected, so
+            // a role cannot name them one by one.
+            const list = Array.isArray(names) ? names : null;
+            const markers = list
+                ? list.filter((name) => String(name).startsWith('mcp:')).map((name) => String(name).slice(4).toLowerCase())
+                : [];
+            const plain = list ? list.filter((name) => !String(name).startsWith('mcp:')) : null;
+            const local = buildSpecs(config?.tools, { role: roleName, names: plain });
+            if (!list) return [...local, ...mcpSpecs];
+            const wanted = new Set(plain);
+            const fromServers = new Set(mcpTools
+                .filter((entry) => markers.some((marker) => String(entry.connection?.name ?? '').toLowerCase().includes(marker)))
+                .map((entry) => entry.name));
+            return [...local, ...mcpSpecs.filter((spec) => wanted.has(spec.name) || fromServers.has(spec.name))];
         },
         /**
          * Open these directories for writing; every other path is refused.

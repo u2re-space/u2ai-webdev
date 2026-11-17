@@ -305,20 +305,31 @@ width the page is built for wins — the width decides, because a rescale washes
 out and the numbers alone cannot tell 1x from 2x. Every candidate is measured anyway, and the
 report says what each of them gave.
 
-**The page is shot at the width of the design.** With `browser.compareAtDesignWidth` the page
-is opened at the width of the design (1024 pixels for a picture of 1024 pixels at 1x), so the
-picture of the page and the picture of the reference are the same size and the comparison is a
-comparison of the page and not of the sizes.
+**The page is shot at the size of the design.** With `browser.compareAtDesignWidth` the page
+is opened at the size of the design — 1024×768 CSS pixels for a picture of 1024×768 at 1x —
+so the picture of the page and the picture of the reference are the same size and the
+comparison is a comparison of the page and not of the sizes. The height matters as much as
+the width: a page that centers its content in the window looks different when the window is
+taller. On the Hubfolio project the same page measured 81% at 1024×768 and 73% at 1024×900 —
+the same page, the same reference, only the height of the window was different.
 
 **The numbers.** ImageMagick measures the difference: the root mean square error (RMSE), the
 structural similarity (SSIM), the correlation (NCC) and the peak signal to noise ratio (PSNR).
 The similarity in percent is what the role reads: 100 is the same picture.
 
-**The picture of the difference.** The comparison writes it into `.ai/shots/diff-<reference>.png`
-and it travels with the request to the role: the red places are the places where the page does
-not match the reference — that is where the styles are wrong. On the Hubfolio project the
-comparison showed 73% of similarity and the picture of the difference named the panel of the
-tags that overlaps the text.
+**The picture of the difference.** The comparison writes it into
+`.ai/shots/diff-<reference>-<picture>.png` and it travels with the request to the role: the
+red places are the places where the page does not match the reference — that is where the
+styles are wrong — and the white places already match. The name carries the picture of the
+page, so a later comparison never replaces the picture that the role is looking at now.
+
+**The run shows it.** The console says what was compared and what came out of it:
+
+```
+сверка с референсом landing.png: PPI 1x, ширина дизайна 1024x768 CSS px
+  сходство 81%, RMSE 0.1873, SSIM 0.1389
+  картинка различий: .ai/shots/diff-landing-page-mwk42tj5.png
+```
 
 **The engine of the comparison.** Two backends, the same answers: the **native** ImageMagick
 (`magick` in the PATH, or the install of the machine) and the **wasm** one
@@ -342,6 +353,75 @@ of the difference.
 
 `browser.compare` is `off` (never compare), `auto` (compare when the reference and ImageMagick
 are there) or `always`.
+
+### The browser that answers
+
+The house has two eyes on the page. The first one takes a picture of it — the tool
+`screenshot` — and reads the console. That eye is enough to *look* at a page and not enough
+to *use* one: a menu that does not open, a form that does not submit, a script that throws
+on a click — none of it is visible in a picture.
+
+The second eye is the **Chrome DevTools MCP server** of Google
+([chrome-devtools-mcp](https://github.com/ChromeDevTools/chrome-devtools-mcp)): it drives the
+real Chrome over the DevTools protocol and gives the roles the tree of the page, the clicks,
+the keys, the window, the script, the console, the requests, the picture and the styles that
+won. The house starts it itself:
+
+```json
+{
+  "browser": {
+    "devtools": "auto",
+    "devtoolsPackage": "chrome-devtools-mcp@1.13.0",
+    "devtoolsTools": ["take_snapshot", "click", "get_css_styles"],
+    "devtoolsTimeoutMs": 120000
+  }
+}
+```
+
+`browser.devtools` is `off` (never start it), `auto` (start it when the machine has Chrome
+and the package) or `always`. The server is started **by the house** with the flags the house
+needs: `--headless` (no window), `--isolated` (the profile of the user is never touched), the
+`--viewport` of the design, the Chrome the house has found (`--executablePath`), and no
+statistics (`--no-usage-statistics`, `--no-performance-crux`).
+
+**The program comes first.** The installed `chrome-devtools-mcp` is used as it is; `npx` is
+the way out when nothing is installed — it fetches the package and starts it, which takes a
+minute on the first run. The global install is the fast path:
+
+```bash
+npm i chrome-devtools-mcp@latest -g
+```
+
+**The list of the tools is short on purpose.** The server knows sixty of them, and every tool
+is a schema that travels with every request of every turn. The house exposes eleven:
+`take_snapshot`, `click`, `fill`, `press_key`, `navigate_page`, `resize_page`,
+`evaluate_script`, `list_console_messages`, `list_network_requests`, `take_screenshot` and
+`get_css_styles`. `browser.devtoolsTools` replaces the list; an empty list is the list of the
+house.
+
+**The page is the house's business.** The tools of the server name the page they work on. The
+house asks for the list of the pages once, when it connects, and puts the number into every
+call — a role never spends a turn on it. When the page is gone, the house asks again and
+repeats the call.
+
+**The pictures come back as pictures.** The screenshot of the server is written into
+`.ai/shots/` and named in the answer, and the loop of the role puts it back into the
+conversation: the role sees what the browser saw.
+
+**The roles that get the tools.** `styler`, `coder`, `editor` and `reviewer`. The marker
+`mcp:chrome-devtools` in the list of the tools of a role is what gives it the tools of that
+server — the names of the tools of a server are not known before the server is connected.
+
+What the DevTools give the roles that the picture cannot:
+
+- `get_css_styles` — **which rule won**, in which line of which file, and what the value
+  really is. The cascade stops being a matter of opinion;
+- `take_snapshot` — the tree of the page with the identifier of every element: the base of
+  every click and every filling;
+- `click`, `fill`, `press_key` — the behaviour, not the appearance;
+- `resize_page`, `evaluate_script` — the layout at another width, and the state of the page
+  as the browser sees it;
+- `list_console_messages`, `list_network_requests` — the cause of what the picture shows.
 
 ### The command `sight`
 

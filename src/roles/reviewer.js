@@ -12,6 +12,7 @@
 import { UNTRUSTED } from './untrusted.js';
 import { FAMILY_CLI_NOTE } from './cli-note.js';
 import { referenceNote } from './reference.js';
+import { devToolsMarker, devToolsNote } from './devtools.js';
 
 /** The name of the role. */
 export const name = 'reviewer';
@@ -23,6 +24,7 @@ export const schema = 'review';
 export const tools = [
     'list_files', 'read_file', 'search_files', 'run_command', 'fetch_url', 'ai_cli', 'ai_cli_help',
     'read_skill', 'web_guidance', 'compare_images',
+    devToolsMarker(),
 ];
 
 /** How many turns the role may spend. */
@@ -82,6 +84,10 @@ ${FAMILY_CLI_NOTE}
   the files of the project, and run only the commands that end by themselves (a build, a test).
 - Do not invent a requirement the task does not have. The review is about this task, in this
   project, at this step.
+${devToolsNote({
+    url: context?.config?.browser?.url || null,
+    width: context?.config?.browser?.viewport?.width ?? null,
+})}
 
 ${UNTRUSTED}`;
 }

@@ -390,6 +390,18 @@ export function createRenderer({
             if (type === 'stage.start') this.stageStart(event.stage, event.title);
             else if (type === 'stage.done') this.stageDone(event.stage, event.status);
             else if (type === 'stage.skip') this.stageDone(event.stage, 'skipped');
+            else if (type === 'stage.shot') {
+                this.note(`снимок страницы: ${event.path ?? ''}${event.width ? ` (${event.width}x${event.height})` : ''}`);
+            }
+            else if (type === 'stage.compare') {
+                // The comparison of the page with the reference: the run shows it, so the
+                // person watching sees that the reference was looked at and what it said.
+                this.note(`сверка с референсом ${event.reference ?? ''}: PPI ${event.dpr ?? '?'}x, `
+                    + `ширина дизайна ${event.designWidth ?? '?'}x${event.designHeight ?? '?'} CSS px`);
+                this.note(`  сходство ${event.similarity ?? '?'}%, RMSE ${event.rmse?.toFixed?.(4) ?? '?'}, `
+                    + `SSIM ${event.ssim?.toFixed?.(4) ?? '?'}`);
+                if (event.difference) this.note(`  картинка различий: ${event.difference}`);
+            }
             else if (type === 'role.tool') this.tool(event.name, event.arguments ?? null);
             else if (type === 'role.tool.result') this.toolResult(event);
             else if (type === 'delegate.start') {

@@ -46,6 +46,52 @@ import { openMemory, memoryContext, memoryFile } from './memory.js';
 import { defaultHome } from './config/paths.js';
 import { openContext } from './agent/context.js';
 import { openRunMap } from './agent/run-map.js';
+import { connectMcpServers } from './agent/mcp.js';
+import { connectDevTools, devToolsEnabled } from './agent/devtools.js';
+
+/**
+ * Connect the MCP servers of the run.
+ *
+ * The servers of the config come first, the browser of the DevTools after them. A server
+ * that cannot be started is a warning, not a crash: the run goes on with the tools it has.
+ * @param {{ config?: object, env?: object, root?: string, warnings?: string[] }} request
+ * @returns {Promise<object[]>} the connections
+ * @exports
+ * @ai.hint io
+ */
+export async function connectServers({ config = {}, env = process.env, root = process.cwd(), warnings = [] } = {}) {
+    const connections = [];
+    const configured = Array.isArray(config?.mcp?.servers) ? config.mcp.servers : [];
+    if (configured.length) {
+        for (const connection of await connectMcpServers(configured)) {
+            if (connection.error) {
+                warnings.push(`MCP-сервер ${connection.name}: ${connection.error}`);
+                continue;
+            }
+            connections.push(connection);
+        }
+    }
+    if (devToolsEnabled(config)) {
+        const viewport = config?.browser?.viewport ?? {};
+        try {
+            const connection = await connectDevTools({
+                config,
+                env,
+                root,
+                width: Number.isSafeInteger(viewport.width) ? viewport.width : 1440,
+                height: Number.isSafeInteger(viewport.height) ? viewport.height : 900,
+            });
+            if (connection?.error) {
+                warnings.push(`Chrome DevTools MCP: ${connection.error}`);
+            } else if (connection) {
+                connections.push(connection);
+            }
+        } catch (error) {
+            warnings.push(`Chrome DevTools MCP: ${error?.message ?? error}`);
+        }
+    }
+    return connections;
+}
 
 /**
  * May the run write the files of the answers into the project?
@@ -252,6 +298,15 @@ export async function runPipeline({
         } catch (error) {
             warnings.push(`Память недоступна: ${error?.message ?? error}`);
         }
+    }
+
+    // The MCP servers of the run: the servers of the config and the browser of the DevTools.
+    // The connections live as long as the run does, and the roles reach them through the
+    // context of the run.
+    const mcp = await connectServers({ config, env, root, warnings });
+    if (mcp.length) {
+        runContext.mcp = mcp;
+        ctx.mcp = mcp;
     }
 
     let progress = createProgress({ id: run, task, stages: list });
@@ -469,6 +524,12 @@ export async function runPipeline({
         }
     }
     memory?.close?.();
+
+    // The MCP servers of the run are closed with it: a server of the browser holds a
+    // browser, and the browser holds a profile.
+    for (const connection of ctx.mcp ?? []) {
+        await connection?.close?.().catch(() => {});
+    }
 
     // The digest of the run: what a person reads after it. The context of the run is the
     // witness of what happened, and it dies with the run.

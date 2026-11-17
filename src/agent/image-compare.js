@@ -255,11 +255,15 @@ export async function compareWithReference({
         }
 
         // The picture of the difference goes into the project before the work is cleaned up.
+        // The name carries the picture of the page: every comparison has its own file, so a
+        // later comparison never replaces the picture that the role is looking at now.
         let difference = null;
         if (chosenDiff && diff) {
+            const stem = (file) => String(file ?? '').replace(/\\/g, '/').split('/').pop().replace(/\.[^.]+$/, '');
+            const name = `diff-${stem(reference)}-${stem(result)}.png`;
             const target = outDir
-                ? path.join(root, outDir, `diff-${path.basename(reference)}`)
-                : path.join(root, '.ai', 'shots', `diff-${path.basename(reference)}`);
+                ? path.join(root, outDir, name)
+                : path.join(root, '.ai', 'shots', name);
             await mkdir(path.dirname(target), { recursive: true });
             await copyFile(chosenDiff, target).catch(() => {});
             const written = await stat(target).catch(() => null);

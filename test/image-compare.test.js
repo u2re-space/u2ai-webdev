@@ -220,16 +220,17 @@ test('the words of the comparison tell the role what to fix', () => {
         ok: true,
         reference: { width: 2880, height: 1800 },
         result: { width: 1440, height: 900 },
-        design: { dpr: 2, width: 1440 },
+        design: { dpr: 2, width: 1440, height: 900 },
         metrics: { rmse: 0.25, ssim: 0.8, ncc: 0.7 },
         similarity: 75,
-        difference: { rel: '.ai/shots/diff-landing.png' },
+        difference: { rel: '.ai/shots/diff-landing-page-abc.png' },
     });
     assert.match(note, /2880x1800/);
     assert.match(note, /2x/);
-    assert.match(note, /1440 CSS pixels/);
+    assert.match(note, /1440 CSS pixels wide and 900 CSS pixels high/);
     assert.match(note, /75%/);
-    assert.match(note, /diff-landing\.png/);
+    assert.match(note, /diff-landing-page-abc\.png/);
+    assert.match(note, /white places/);
     assert.equal(comparisonNote(null), '');
     assert.equal(comparisonNote({ ok: false }), '');
 });
@@ -267,7 +268,19 @@ test('the real ImageMagick measures the difference of two pictures', async () =>
         // The picture of the difference is written into the project.
         assert.ok(other.difference?.rel, JSON.stringify(other.difference));
         assert.match(other.difference.rel, /\.ai\/shots\/diff-/);
+        // The name carries the picture of the page: a later comparison never replaces the
+        // picture that the role is looking at now.
+        assert.match(other.difference.rel, /diff-landing-page\.png$/);
     } finally {
         await cleanup();
     }
+});
+
+test('the design is measured in the width and in the height', () => {
+    // A reference of 1024x768 is a page of 1024x768 CSS pixels at 1x: the page is shot at
+    // that size, and the two pictures are compared one to one.
+    const design = designWidth({ reference: { width: 1024, height: 768 }, targetWidth: 1440 });
+    assert.equal(design.dpr, 1);
+    assert.equal(design.width, 1024);
+    assert.equal(design.height, 768);
 });

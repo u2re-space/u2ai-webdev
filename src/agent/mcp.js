@@ -18,6 +18,8 @@
 
 import { spawn } from 'node:child_process';
 
+import { findProgram, quoteWindowsArg } from './programs.js';
+
 /** The protocol version this client speaks. */
 export const PROTOCOL_VERSION = '2025-06-18';
 
@@ -120,14 +122,42 @@ async function connectHttp(server) {
  * @ai.hint io
  */
 async function connectStdio(server) {
-    const child = spawn(server.command, server.args ?? [], {
-        stdio: ['pipe', 'pipe', 'pipe'],
-        env: { ...process.env, ...(server.env ?? {}) },
-        windowsHide: true,
-    });
+    // The program of the server is looked up the way the shell looks it up: on Windows the
+    // shims of npm (`npx.cmd`) are batch files, and a batch file is started through the shell
+    // of the system. Without this the server of the house would never start on Windows.
+    // The environment of the server is added to the environment of the machine, and not
+    // instead of it: the PATH that holds the program has to be there.
+    const environment = { ...process.env, ...(server.env ?? {}) };
+    const found = await findProgram(server.command, environment);
+    if (!found) {
+        throw new Error(`программа «${server.command}» не найдена в PATH`);
+    }
+    const args = (server.args ?? []).map(String);
+    // A shim is a batch file: the path of the program and its arguments are quoted for the
+    // shell of the system.
+    const line = found.shell
+        ? [quoteWindowsArg(found.file), ...args.map(quoteWindowsArg)].join(' ')
+        : null;
+    const child = found.shell
+        ? spawn(process.env.ComSpec || 'cmd.exe', ['/d', '/c', line], {
+            stdio: ['pipe', 'pipe', 'pipe'],
+            env: environment,
+            shell: false,
+            windowsHide: true,
+            windowsVerbatimArguments: true,
+        })
+        : spawn(found.file, args, {
+            stdio: ['pipe', 'pipe', 'pipe'],
+            env: environment,
+            shell: false,
+            windowsHide: true,
+        });
     let nextId = 1;
     const pending = new Map();
     let buffer = '';
+    // The log of the server: it is read, so the pipe never fills up and the server never
+    // blocks on it, and the last lines of it are in the answer when the server is silent.
+    let log = '';
 
     child.stdout.setEncoding('utf8');
     child.stdout.on('data', (chunk) => {
@@ -147,16 +177,22 @@ async function connectStdio(server) {
             else waiter.resolve(message.result ?? null);
         }
     });
+    child.stderr?.setEncoding?.('utf8');
+    child.stderr?.on?.('data', (chunk) => {
+        log = `${log}${chunk}`.slice(-2000);
+    });
 
     function request(method, params = null) {
         const id = nextId++;
         const body = { jsonrpc: '2.0', id, method };
         if (params) body.params = params;
         return new Promise((resolve, reject) => {
+            // A tool of a browser server takes longer than a list of the tools: a screenshot
+            // and a trace are not quick.
             const timer = setTimeout(() => {
                 pending.delete(id);
                 reject(new Error(`MCP ${method}: the server did not answer`));
-            }, 30_000);
+            }, Number(server.timeoutMs) > 0 ? Number(server.timeoutMs) : 60_000);
             pending.set(id, {
                 resolve: (value) => { clearTimeout(timer); resolve(value); },
                 reject: (error) => { clearTimeout(timer); reject(error); },

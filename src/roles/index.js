@@ -305,7 +305,9 @@ export async function buildInstructions({ role, config = {}, context = {}, root 
     if (!definition) throw new Error(`Неизвестная роль: ${role}`);
 
     const blocks = [];
-    const prompt = definition.instructions(context);
+    // The config travels with the context of the role: the roles that work with the page
+    // need to know the address of it and the width of the design.
+    const prompt = definition.instructions({ ...context, config });
     if (prompt) blocks.push(prompt);
 
     // The contract of the answer travels in the prompt as well: a gateway that ignores the
@@ -455,6 +457,8 @@ export async function runRole({
         env,
         context: runContext,
         map: runContext?.map ?? null,
+        // The tools of the MCP servers of the run: the browser of the DevTools among them.
+        mcp: runContext?.mcp ?? [],
         // The log of the sibling CLIs comes live: the run shows what the bridge does while
         // the bridge works.
         notify,

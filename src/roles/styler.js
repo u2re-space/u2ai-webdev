@@ -16,6 +16,7 @@ import { pageScaleRules, pageWidthNote } from './page-frame.js';
 import { webDevelopment } from './web-development.js';
 import { DELEGATE_NAMES, delegationNote } from '../agent/delegation.js';
 import { economyNote, economyTools } from './economy.js';
+import { devToolsMarker, devToolsNote } from './devtools.js';
 
 /** The name of the role. */
 export const name = 'styler';
@@ -29,6 +30,7 @@ export const tools = [
     'run_command', 'download_font', 'call_ai_measure', 'read_skill', 'web_guidance',
     'screenshot', 'delegate_role', 'compare_images',
     ...economyTools(),
+    devToolsMarker(),
 ];
 
 /** How many turns the role may spend. */
@@ -78,6 +80,10 @@ Rules:
 ${INPUTS_IN_CONTEXT}
 ${delegationNote(DELEGATE_NAMES)}
 ${economyNote()}
+${devToolsNote({
+    url: context?.config?.browser?.url || null,
+    width: context?.config?.browser?.viewport?.width ?? null,
+})}
 - The machine compares the page with the reference: the numbers of the difference and the
   picture of the difference come with the request. The red places of that picture are the
   places where the page does not match the reference — those are the places to fix first. The

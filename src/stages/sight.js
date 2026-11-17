@@ -143,12 +143,13 @@ export async function sightStage({
     const design = compareOn
         ? designWidth({ reference: reference.sizes[0], targetWidth: width, dprs })
         : null;
-    // The page is shot at the width of the design: then the picture of the page and the
+    // The page is shot at the size of the design: then the picture of the page and the
     // picture of the reference are the same size, and the comparison is a comparison of the
-    // page and not of the sizes.
-    const shotWidth = design?.width && config?.browser?.compareAtDesignWidth !== false
-        ? design.width
-        : width;
+    // page and not of the sizes. The height of the design comes with it: a reference of
+    // 1024x768 is a page of 1024x768 CSS pixels.
+    const atDesignSize = config?.browser?.compareAtDesignWidth !== false;
+    const shotWidth = design?.width && atDesignSize ? design.width : width;
+    const shotHeight = design?.height && atDesignSize ? design.height : height;
 
     const written = [];
     const replaced = [];
@@ -183,14 +184,22 @@ export async function sightStage({
             let shot = null;
             try {
                 shot = await shootPage({
-                    root, config, env, width: shotWidth, height, timeoutMs, url: live.url,
+                    root, config, env, width: shotWidth, height: shotHeight, timeoutMs, url: live.url,
                 });
             } catch (error) {
                 warnings.push(`Снимок страницы не сделан: ${error?.message ?? error}`);
                 break;
             }
             shots.push(shot.rel);
-            notify({ type: 'stage.shot', stage: 'sight', path: shot.rel, bytes: shot.bytes, engine: shot.engine });
+            notify({
+                type: 'stage.shot',
+                stage: 'sight',
+                path: shot.rel,
+                bytes: shot.bytes,
+                engine: shot.engine,
+                width: shotWidth,
+                height: shotHeight,
+            });
 
             // The comparison: the page and the reference, brought to the same size and
             // measured. The numbers say how far the page is, the picture says where.
@@ -211,6 +220,32 @@ export async function sightStage({
                 } catch (error) {
                     warnings.push(`Сверка с референсом не выполнена: ${error?.message ?? error}`);
                 }
+            }
+            if (comparison?.ok) {
+                // The run shows the comparison: the reference it looked at, the PPI it read
+                // out of it, the numbers and the picture of the difference.
+                notify({
+                    type: 'stage.compare',
+                    stage: 'sight',
+                    reference: comparison.reference?.path ?? reference.names[0],
+                    dpr: comparison.design?.dpr ?? null,
+                    designWidth: comparison.design?.width ?? null,
+                    designHeight: comparison.design?.height ?? null,
+                    similarity: comparison.similarity ?? null,
+                    rmse: comparison.metrics?.rmse ?? null,
+                    ssim: comparison.metrics?.ssim ?? null,
+                    difference: comparison.difference?.rel ?? null,
+                    shot: shot.rel,
+                });
+                // The numbers go into the context right away: the stage may be cut short
+                // later, and the numbers of the comparison are true whatever happens to it.
+                await runContext?.set?.('the comparison', [
+                    `The page was compared with the reference ${comparison.reference?.path ?? ''} at `
+                    + `${comparison.design?.dpr ?? 1}x (the design is ${comparison.design?.width ?? '?'} CSS pixels wide).`,
+                    `The similarity is ${comparison.similarity ?? '?'}%, the difference (RMSE) is `
+                    + `${comparison.metrics?.rmse?.toFixed?.(3) ?? '?'}.`,
+                    comparison.difference?.rel ? `The picture of the difference: ${comparison.difference.rel}` : '',
+                ].filter(Boolean).join('\n'));
             }
 
             // The words of the page: the console of the browser and the log of the bundler.
@@ -276,25 +311,20 @@ export async function sightStage({
             if (pageLog.trim()) {
                 await runContext?.set?.('the log of the page', pageLog.trim().slice(0, 4000));
             }
-            // The numbers of the comparison go into the context as well: the later stages
+            // The numbers of the comparison go into the report as well: the later stages
             // know how far the page is from the reference without seeing the pictures.
             if (comparison?.ok) {
                 comparisons.push({
                     shot: shot.rel,
+                    reference: comparison.reference?.path ?? null,
                     dpr: comparison.design?.dpr ?? null,
                     designWidth: comparison.design?.width ?? null,
+                    designHeight: comparison.design?.height ?? null,
                     similarity: comparison.similarity ?? null,
                     rmse: comparison.metrics?.rmse ?? null,
                     ssim: comparison.metrics?.ssim ?? null,
                     difference: comparison.difference?.rel ?? null,
                 });
-                await runContext?.set?.('the comparison', [
-                    `The page was compared with the reference at ${comparison.design?.dpr ?? 1}x `
-                    + `(the design is ${comparison.design?.width ?? '?'} CSS pixels wide).`,
-                    `The similarity is ${comparison.similarity ?? '?'}%, the difference (RMSE) is `
-                    + `${comparison.metrics?.rmse?.toFixed?.(3) ?? '?'}.`,
-                    comparison.difference?.rel ? `The picture of the difference: ${comparison.difference.rel}` : '',
-                ].filter(Boolean).join('\n'));
             }
             if (!files.length) {
                 // The role has nothing to change: the page matches the reference as far as it sees.

@@ -12,6 +12,7 @@
 import { UNTRUSTED } from './untrusted.js';
 import { FAMILY_CLI_NOTE } from './cli-note.js';
 import { referenceNote } from './reference.js';
+import { devToolsMarker, devToolsNote } from './devtools.js';
 
 /** The name of the role. */
 export const name = 'editor';
@@ -24,6 +25,7 @@ export const tools = [
     'list_files', 'read_file', 'write_file', 'replace_text', 'search_files',
     'generate_svg', 'call_ai_image', 'ai_cli', 'ai_cli_help', 'run_command', 'read_skill',
     'web_guidance', 'screenshot', 'compare_images',
+    devToolsMarker(),
 ];
 
 /** How many turns the role may spend. */
@@ -79,6 +81,10 @@ ${FAMILY_CLI_NOTE}
 - A picture that was prepared from a crop of the reference is not redrawn: the prepared file
   is the asset. The vector graphics are for what the reference does not hold.
 - Do not add a feature that the task and the plan do not ask for.
+${devToolsNote({
+    url: context?.config?.browser?.url || null,
+    width: context?.config?.browser?.viewport?.width ?? null,
+})}
 
 ${UNTRUSTED}`;
 }

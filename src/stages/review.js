@@ -521,6 +521,21 @@ export async function reviewStage({
         shot: shots.names[shots.names.length - 1] ?? null,
         warnings,
     });
+    if (comparison?.ok) {
+        // The run shows the comparison of the review too.
+        notify({
+            type: 'stage.compare',
+            stage: 'review',
+            reference: comparison.reference?.path ?? null,
+            dpr: comparison.design?.dpr ?? null,
+            designWidth: comparison.design?.width ?? null,
+            designHeight: comparison.design?.height ?? null,
+            similarity: comparison.similarity ?? null,
+            rmse: comparison.metrics?.rmse ?? null,
+            ssim: comparison.metrics?.ssim ?? null,
+            difference: comparison.difference?.rel ?? null,
+        });
+    }
     const comparisonParts = comparison?.difference?.rel
         ? [await picturePart(root, comparison.difference.rel)].filter(Boolean)
         : [];

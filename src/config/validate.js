@@ -388,6 +388,16 @@ export function validateConfig(config) {
     fail('browser.compareDprs: только положительные числа');
   }
   if (typeof c.browser.compareAtDesignWidth !== 'boolean') fail('browser.compareAtDesignWidth: true | false');
+  if (!['off', 'auto', 'always', 'on'].includes(c.browser.devtools)) fail('browser.devtools: off | auto | always');
+  if (c.browser.devtoolsPackage != null && (typeof c.browser.devtoolsPackage !== 'string' || !c.browser.devtoolsPackage.trim())) {
+    fail('browser.devtoolsPackage: непустая строка или null');
+  }
+  if (c.browser.devtoolsCommand != null && (typeof c.browser.devtoolsCommand !== 'string' || !c.browser.devtoolsCommand.trim())) {
+    fail('browser.devtoolsCommand: непустая строка или null');
+  }
+  if (c.browser.devtoolsArgs != null && !Array.isArray(c.browser.devtoolsArgs)) fail('browser.devtoolsArgs: массив строк или null');
+  if (c.browser.devtoolsTools != null && !Array.isArray(c.browser.devtoolsTools)) fail('browser.devtoolsTools: массив строк или null');
+  if (!Number.isSafeInteger(c.browser.devtoolsTimeoutMs) || c.browser.devtoolsTimeoutMs < 1000) fail('browser.devtoolsTimeoutMs: целое от 1000');
 
   validateStack(c.stack, fail);
   validateAgent(c.agent, fail);

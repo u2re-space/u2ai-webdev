@@ -15,6 +15,7 @@ import { referenceNote } from './reference.js';
 import { webDevelopment } from './web-development.js';
 import { DELEGATE_NAMES, delegationNote } from '../agent/delegation.js';
 import { economyNote, economyTools } from './economy.js';
+import { devToolsMarker, devToolsNote } from './devtools.js';
 
 /** The name of the role. */
 export const name = 'coder';
@@ -28,6 +29,7 @@ export const tools = [
     'copy_path', 'search_files', 'run_command', 'read_skill', 'web_guidance',
     'delegate_role',
     ...economyTools(),
+    devToolsMarker(),
 ];
 
 /** How many turns the role may spend. */
@@ -72,6 +74,10 @@ Rules:
 ${INPUTS_IN_CONTEXT}
 ${delegationNote(DELEGATE_NAMES)}
 ${economyNote()}
+${devToolsNote({
+    url: context?.config?.browser?.url || null,
+    width: context?.config?.browser?.viewport?.width ?? null,
+})}
 - The platform of today comes before the habit of yesterday: look the guides up with the
   \`web_guidance\` tool before you write a dialog, a form or a table, and follow what they
   say.

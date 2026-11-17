@@ -204,7 +204,11 @@ export function comparisonNote(report = null) {
     const result = report.result ?? {};
     lines.push(`The reference is ${reference.width}x${reference.height} pixels, the picture of the page is ${result.width}x${result.height} pixels.`);
     if (report.design?.dpr) {
-        lines.push(`The PPI of the reference: ${report.design.dpr}x — the design is ${report.design.width} CSS pixels wide. The pictures were brought to that size before the comparison.`);
+        lines.push(`The PPI of the reference: ${report.design.dpr}x — the design is ${report.design.width} CSS pixels wide`
+            + `${report.design.height ? ` and ${report.design.height} CSS pixels high` : ''}. `
+            + 'The picture of the page was taken at that size, so the two pictures are of the same size '
+            + 'and the comparison is a comparison of the page and not of the sizes. Take your own picture '
+            + 'at that size too when you want to look at the page yourself.');
     }
     const metrics = report.metrics ?? {};
     if (Number.isFinite(metrics.rmse)) {
@@ -220,7 +224,7 @@ export function comparisonNote(report = null) {
         lines.push(`The similarity of the page with the reference: ${report.similarity}%.`);
     }
     if (report.difference?.rel) {
-        lines.push(`The picture of the difference is attached to this request: ${report.difference.rel}. The red places are the places where the page differs from the reference — that is where the styles are wrong.`);
+        lines.push(`The picture of the difference is attached to this request: ${report.difference.rel}. The red places are the places where the page differs from the reference — that is where the styles are wrong. The white places are the places that already match: do not touch them.`);
     }
     return lines.join('\n');
 }

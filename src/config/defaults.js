@@ -292,7 +292,9 @@ export const defaults = {
     coding: { enabled: true, maxTurns: 24, timeoutMs: null },
     styling: { enabled: true, maxTurns: 16, timeoutMs: null },
     build: { enabled: true, maxTurns: 1, timeoutMs: null },
-    sight: { enabled: true, maxTurns: 16, timeoutMs: null },
+    // The stage of the sight looks at the page and asks the styler to fix it, and it does
+    // that twice: it needs more time than the stages that write the files.
+    sight: { enabled: true, maxTurns: 16, timeoutMs: 30 * 60_000 },
     vector: { enabled: true, maxTurns: 8, timeoutMs: null },
     iconify: { enabled: true, maxTurns: 8, timeoutMs: null },
     review: { enabled: true, maxTurns: 12, repair: true, repairRounds: 2, checkStyles: true, timeoutMs: null },
@@ -368,6 +370,29 @@ export const defaults = {
      * the reference are the same size and are compared without a rescale.
      */
     compareAtDesignWidth: true,
+    /**
+     * The browser that answers: the Chrome DevTools MCP server of the house.
+     *
+     * `off` never starts it, `auto` starts it when the machine has Chrome and npm, `always`
+     * starts it regardless. The server drives the real Chrome: the roles can take the
+     * snapshot of the page, click, type, resize the window and run a script.
+     */
+    devtools: 'off',
+    /** The package of the server: the version is pinned, so the run is the same every day. */
+    devtoolsPackage: 'chrome-devtools-mcp@1.13.0',
+    /** The command that starts the server. */
+    devtoolsCommand: 'npx',
+    /** The extra arguments of the server. */
+    devtoolsArgs: [],
+    /**
+     * The tools of the server that the roles get.
+     *
+     * The list is short on purpose: every tool is a schema that travels with every request of
+     * every turn. Empty means the list of the house.
+     */
+    devtoolsTools: [],
+    /** How long one call of the server may take, in milliseconds. */
+    devtoolsTimeoutMs: 120_000,
   },
 
   /** Where the artifacts of a run are written, relative to cwd. */
