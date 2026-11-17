@@ -420,7 +420,9 @@ test('the review repairs what it found and judges the result again', async () =>
     assert.match(await readFile(path.join(root, 'src', 'main.js'), 'utf8'), /import '\.\/styles\.scss'/);
     // The role that owns the file was the one that was asked.
     assert.match(asked.instructions, /You are the coder/);
-    assert.match(asked.instructions, /read the file, make the change, write the/i);
+    // The role is told to change the broken lines with a patch, not to rewrite the file.
+    assert.match(asked.instructions, /find the place of the defect with/i);
+    assert.match(asked.instructions, /patch_file/i);
     // The verdict is the verdict of the second pass.
     assert.equal(result.verdict, 'pass');
     assert.equal(result.ok, true);

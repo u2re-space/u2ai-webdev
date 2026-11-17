@@ -381,6 +381,13 @@ export function validateConfig(config) {
   if (c.browser.url && !/^https?:\/\//i.test(c.browser.url.trim())) fail('browser.url: адрес с http:// или https://');
   if (!['off', 'auto', 'always'].includes(c.browser.devServer)) fail('browser.devServer: off | auto | always');
   if (!Number.isSafeInteger(c.browser.devTimeoutMs) || c.browser.devTimeoutMs < 1000) fail('browser.devTimeoutMs: целое от 1000');
+  if (!['off', 'auto', 'always'].includes(c.browser.compare)) fail('browser.compare: off | auto | always');
+  if (!Array.isArray(c.browser.compareDprs) || !c.browser.compareDprs.length) {
+    fail('browser.compareDprs: непустой массив чисел');
+  } else if (c.browser.compareDprs.some((item) => !Number.isFinite(Number(item)) || Number(item) <= 0)) {
+    fail('browser.compareDprs: только положительные числа');
+  }
+  if (typeof c.browser.compareAtDesignWidth !== 'boolean') fail('browser.compareAtDesignWidth: true | false');
 
   validateStack(c.stack, fail);
   validateAgent(c.agent, fail);

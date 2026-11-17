@@ -204,6 +204,8 @@ export const defaults = {
     guidance: true,
     /** Open the page of the project in a browser and take a screenshot of it. */
     browser: true,
+    /** Compare two pictures of the project and measure the difference between them. */
+    compare: true,
     /** Hand the work from one role to another, in a separate session. */
     delegate: true,
     /** Call the external `ai-decompose` CLI. */
@@ -346,6 +348,26 @@ export const defaults = {
     stylingVision: 'auto',
     /** How many times the stage of the styles may look at the page and ask for a fix. */
     stylingVisionRounds: 2,
+    /**
+     * The comparison of the page with the reference of the design.
+     *
+     * `off` never compares, `auto` compares when the reference and ImageMagick are there,
+     * `always` compares even without the reference.
+     */
+    compare: 'auto',
+    /**
+     * The PPI the house tries for the reference of the design.
+     *
+     * A picture of the design is a picture of a page, and a page is measured in CSS pixels
+     * while the picture is measured in pixels of the picture: 1x, 1.5x, 2x and 3x are the
+     * usual captures, and the house tries them one after another.
+     */
+    compareDprs: [1, 1.5, 2, 3],
+    /**
+     * Shoot the page at the width of the design, so the picture of the page and the picture of
+     * the reference are the same size and are compared without a rescale.
+     */
+    compareAtDesignWidth: true,
   },
 
   /** Where the artifacts of a run are written, relative to cwd. */

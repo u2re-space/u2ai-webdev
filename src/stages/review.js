@@ -14,11 +14,13 @@
  *          agent/markup-styles, stages/project-files
  * @usedBy stages/index, pipeline
  * @exports REVIEW_FILE, reviewVerdict, worstVerdict, readScreenshots, writeReview, readReview,
- *          issueOwner, repairText, repairIssues, markupSnapshot, stylePairIssues, reviewStage
+ *          issueOwner, repairText, repairIssues, markupSnapshot, stylePairIssues, reviewStage,
+ *          compareReview
  * @ai.tags stages, review
  * @ai.hint io
  * @ai.hint legacy-0.2
  * @changed 2026-11-13 Ported from the monolith: ревью по критериям шага и по картинкам.
+ * @changed 2026-11-17 Сверка страницы с референсом: числа и картинка различий в ревью.
  */
 
 import path from 'node:path';
@@ -32,7 +34,43 @@ import { readReferences } from '../inputs/references.js';
 import { architectureText } from './architect.js';
 import { projectFiles } from './project-files.js';
 import { applyFiles, filesByTool, LOOKS_AT_DESIGN } from './step.js';
+import { comparisonNote, comparePictures, picturePart } from './vision.js';
 import { runId, runFile, writeJsonFile, readJsonFile } from './workspace.js';
+
+/**
+ * Compare the page with the reference of the design, if both of them are there.
+ *
+ * A stage that cannot compare says so and goes on: the review of the code is worth more
+ * than nothing, and the comparison is a help, not a condition.
+ * @param {{ root: string, config?: object, env?: object, reference?: string|null,
+ *   shot?: string|null, warnings?: string[] }} request
+ * @returns {Promise<object|null>}
+ * @exports
+ * @ai.hint io
+ */
+export async function compareReview({ root, config = {}, env = process.env, reference = null, shot = null, warnings = [] } = {}) {
+    const mode = String(config?.browser?.compare ?? 'auto');
+    if (mode === 'off' || !reference || !shot) return null;
+    try {
+        const viewport = config?.browser?.viewport ?? {};
+        const report = await comparePictures({
+            root,
+            reference,
+            result: shot,
+            config,
+            env,
+            targetWidth: Number.isSafeInteger(viewport.width) ? viewport.width : null,
+        });
+        if (!report.ok) {
+            warnings.push(`Сверка с референсом не выполнена: ${report.reason ?? 'причина неизвестна'}`);
+            return null;
+        }
+        return report;
+    } catch (error) {
+        warnings.push(`Сверка с референсом не выполнена: ${error?.message ?? error}`);
+        return null;
+    }
+}
 
 /** The name of the file of the review inside the directory of the run. */
 export const REVIEW_FILE = 'review.json';
@@ -472,6 +510,22 @@ export async function reviewStage({
     const pageLog = String(logs ?? '').trim();
     const reviews = [];
 
+    // The comparison of the page with the reference: the numbers say how far the page is,
+    // the picture of the difference says where. The last screenshot is the page as it is
+    // now, so it is the one that is compared.
+    const comparison = await compareReview({
+        root,
+        config,
+        env,
+        reference: reference.names[0] ?? null,
+        shot: shots.names[shots.names.length - 1] ?? null,
+        warnings,
+    });
+    const comparisonParts = comparison?.difference?.rel
+        ? [await picturePart(root, comparison.difference.rel)].filter(Boolean)
+        : [];
+    const comparisonWords = comparisonNote(comparison);
+
     /**
      * The review of one step of the plan.
      * @param {object} step
@@ -496,6 +550,7 @@ export async function reviewStage({
                 pageLog,
             ].join('\n'));
         }
+        if (comparisonWords) blocks.push(comparisonWords);
 
         const result = await runRole({
             client,
@@ -516,7 +571,7 @@ export async function reviewStage({
             env,
             maxTurns: config?.stages?.review?.maxTurns ?? null,
             notify,
-            parts: [...reference.parts, ...shots.parts],
+            parts: [...reference.parts, ...shots.parts, ...comparisonParts],
             runContext,
             stage: 'review',
         });
@@ -611,7 +666,7 @@ export async function reviewStage({
                 again: round > 0,
                 runContext,
                 // The role that repairs the styles sees the page and the reference.
-                parts: [...shots.parts, ...reference.parts],
+                parts: [...shots.parts, ...reference.parts, ...comparisonParts],
             });
             warnings.push(...repair.warnings);
             repairs.push(repair);

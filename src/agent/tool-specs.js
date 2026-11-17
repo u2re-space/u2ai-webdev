@@ -397,6 +397,29 @@ export const TOOL_SPECS = Object.freeze({
         required: [],
         roles: [],
     },
+    compare_images: {
+        configKey: 'compare',
+        description: 'Compare two pictures of the project: the picture of the page and the reference of the '
+            + 'design. The pictures are brought to the same size first — the possible PPI of the reference are '
+            + 'tried one after another (1x, 1.5x, 2x, 3x), so a picture of 2880 pixels is read as a page of 1440 '
+            + 'pixels at 2x. The answer names the PPI, the numbers of the difference and the file of the picture '
+            + 'of the difference: the red places of it are the places where the page does not match the reference.',
+        parameters: {
+            type: 'object',
+            properties: {
+                reference: str('The reference of the design, relative to the working directory (for example '
+                    + '`landing.png`).'),
+                result: str('The picture of the page, relative to the working directory (for example '
+                    + '`.ai/shots/page-abc.png`).'),
+                width: int('The width the page was built for, in CSS pixels. It decides which PPI of the '
+                    + 'reference is the right one. Default: the width of the browser of the config.'),
+            },
+            required: ['reference', 'result'],
+            additionalProperties: false,
+        },
+        required: ['reference', 'result'],
+        roles: [],
+    },
     delegate_role: {
         configKey: 'delegate',
         description: 'Hand one task to another role: the markup, the styler, the coder, the editor or the '

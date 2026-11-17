@@ -72,6 +72,15 @@ export async function sightCommand(ctx) {
         for (const warning of result.warnings ?? []) renderer?.warning?.(warning);
         const shots = Array.isArray(result.shots) ? result.shots : [];
         for (const shot of shots) renderer?.note?.(`Снимок страницы: ${shot}`);
+        // The comparison with the reference: the PPI of the reference, the numbers and the
+        // picture of the difference.
+        if (result.design) {
+            renderer?.note?.(`Референс: ${result.design.dpr}x — ширина дизайна ${result.design.width} CSS px.`);
+        }
+        for (const comparison of Array.isArray(result.comparisons) ? result.comparisons : []) {
+            renderer?.note?.(`Сверка ${comparison.shot}: сходство ${comparison.similarity ?? '?'}%, `
+                + `RMSE ${comparison.rmse?.toFixed?.(4) ?? '?'}${comparison.difference ? `, картинка различий: ${comparison.difference}` : ''}`);
+        }
         if (!shots.length) {
             renderer?.note?.('Снимок страницы не сделан: стили не тронуты.');
         } else if (Array.isArray(result.written) && result.written.length) {

@@ -15,12 +15,14 @@
  *   (no browser, no entry point, a broken build) is reported and the run goes on — the styles
  *   are still written, they are simply not checked by the eye.
  *
- * @depends node:path, node:fs/promises, agent/browser, inputs/references, stages/workspace
+ * @depends node:path, node:fs/promises, agent/browser, inputs/references, stages/workspace,
+ *          agent/image-compare
  * @usedBy stages/styling
- * @exports visionEnabled, shootPage, visionPrompt, comparePictures
+ * @exports visionEnabled, shootPage, visionPrompt, comparisonNote, comparePictures, designWidth
  * @ai.tags stages, vision, screenshot
  * @ai.hint io
  * @changed 2026-11-16 Зрение стадии стилей: снимок страницы и сравнение с референсом.
+ * @changed 2026-11-17 Сверка с референсом при одном размере: перебор PPI и картинка различий.
  */
 
 import path from 'node:path';
@@ -34,6 +36,7 @@ import {
     startStaticServer,
 } from '../agent/browser.js';
 import { resolveInside } from '../agent/paths.js';
+import { compareWithReference, pickScale } from '../agent/image-compare.js';
 import { imagePart } from '../openai/responses.js';
 /**
  * Whether the stage of the styles may look at the page.
@@ -149,12 +152,13 @@ export async function shootPage({
  * The words of the page come along: the console of the browser and the log of the bundler say
  * what is broken inside the page, and the picture says how it looks. A role that has both
  * fixes the cause, not the symptom.
- * @param {{ reference: string[], result: string, round: number, rounds: number, log?: string }} options
+ * @param {{ reference: string[], result: string, round: number, rounds: number, log?: string,
+ *   comparison?: object|null }} options
  * @returns {string}
  * @exports
  * @ai.hint pure
  */
-export function visionPrompt({ reference = [], result = '', round = 1, rounds = 1, log = '' } = {}) {
+export function visionPrompt({ reference = [], result = '', round = 1, rounds = 1, log = '', comparison = null } = {}) {
     const lines = [
         'The page has been opened in a browser and shot. The picture of the result is attached to',
         'this request, and the picture of the reference of the design is attached with it.',
@@ -176,9 +180,99 @@ export function visionPrompt({ reference = [], result = '', round = 1, rounds = 
         'differs from it: the proportions, the size of the type, the spaces, the colours. The',
         'later stages read those notes, so they know what the page is and what it is not —',
         'they do not see the picture.',
+        comparisonNote(comparison),
         log ? `\n## What the page says about itself\n${log}\nThe lines above are the words of the page and of the bundler. Use them: they name the cause of what the picture shows.` : '',
     ].filter(Boolean);
     return lines.join('\n');
+}
+
+/**
+ * The words of the comparison: what the machine measured between the page and the reference.
+ *
+ * The eye of the role sees two pictures; the numbers say how far the page is from the
+ * reference and the picture of the difference says where. Both are cheaper than a long
+ * argument about the picture.
+ * @param {object|null} report the report of the comparison
+ * @returns {string}
+ * @exports
+ * @ai.hint pure
+ */
+export function comparisonNote(report = null) {
+    if (!report?.ok) return '';
+    const lines = ['## What the machine measured'];
+    const reference = report.reference ?? {};
+    const result = report.result ?? {};
+    lines.push(`The reference is ${reference.width}x${reference.height} pixels, the picture of the page is ${result.width}x${result.height} pixels.`);
+    if (report.design?.dpr) {
+        lines.push(`The PPI of the reference: ${report.design.dpr}x — the design is ${report.design.width} CSS pixels wide. The pictures were brought to that size before the comparison.`);
+    }
+    const metrics = report.metrics ?? {};
+    if (Number.isFinite(metrics.rmse)) {
+        lines.push(`The difference (RMSE): ${metrics.rmse.toFixed(3)} — the pages differ by ${Math.round(metrics.rmse * 100)}%.`);
+    }
+    if (Number.isFinite(metrics.ssim)) {
+        lines.push(`The structural similarity (SSIM): ${metrics.ssim.toFixed(3)}.`);
+    }
+    if (Number.isFinite(metrics.ncc)) {
+        lines.push(`The correlation (NCC): ${metrics.ncc.toFixed(3)}.`);
+    }
+    if (Number.isFinite(report.similarity)) {
+        lines.push(`The similarity of the page with the reference: ${report.similarity}%.`);
+    }
+    if (report.difference?.rel) {
+        lines.push(`The picture of the difference is attached to this request: ${report.difference.rel}. The red places are the places where the page differs from the reference — that is where the styles are wrong.`);
+    }
+    return lines.join('\n');
+}
+
+/**
+ * Compare the picture of the page with the reference of the design.
+ *
+ * The pictures of different sizes are brought to the same size first: the PPI of the
+ * reference is tried one after another (1x, 1.5x, 2x, 3x), and the report says which one the
+ * page matches and how much the page differs in the end.
+ * @param {{ root: string, reference: string, result: string, config?: object, env?: object,
+ *   targetWidth?: number|null, backend?: object|null }} request
+ * @returns {Promise<object>} the report of the comparison
+ * @exports
+ * @ai.hint io
+ */
+export async function comparePictures({ root, reference, result, config = {}, env = process.env, targetWidth = null, backend = null } = {}) {
+    const dprs = Array.isArray(config?.browser?.compareDprs) ? config.browser.compareDprs : undefined;
+    return await compareWithReference({
+        root,
+        reference,
+        result,
+        targetWidth,
+        dprs,
+        backend,
+        env,
+    });
+}
+
+/**
+ * The width of the design: what the width of the reference means in CSS pixels.
+ *
+ * A picture of the design is a picture of a page, and a page is measured in CSS pixels while
+ * the picture is measured in pixels of the picture: a picture of 2880 pixels is a page of
+ * 1440 pixels at 2x. The house tries the possible PPI and keeps the one whose width of the
+ * design is the width the page is built for.
+ * @param {{ reference?: { width?: number, height?: number }|null, targetWidth?: number|null,
+ *   dprs?: number[] }} request
+ * @returns {{ dpr: number, width: number, height: number, reason: string }|null}
+ * @exports
+ * @ai.hint pure
+ */
+export function designWidth({ reference = null, targetWidth = null, dprs = undefined } = {}) {
+    const width = Number(reference?.width);
+    const height = Number(reference?.height);
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null;
+    return pickScale({
+        referenceWidth: width,
+        referenceHeight: height,
+        targetWidth,
+        dprs,
+    });
 }
 
 /**

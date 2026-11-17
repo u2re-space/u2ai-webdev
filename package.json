@@ -46,5 +46,8 @@
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/node": "^2.1.1"
+  },
+  "optionalDependencies": {
+    "@imagemagick/magick-wasm": "^0.0.46"
   }
 }

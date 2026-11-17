@@ -27,7 +27,7 @@ export const schema = 'style';
 export const tools = [
     'list_files', 'read_file', 'write_file', 'replace_text', 'search_files',
     'run_command', 'download_font', 'call_ai_measure', 'read_skill', 'web_guidance',
-    'screenshot', 'delegate_role',
+    'screenshot', 'delegate_role', 'compare_images',
     ...economyTools(),
 ];
 
@@ -78,6 +78,13 @@ Rules:
 ${INPUTS_IN_CONTEXT}
 ${delegationNote(DELEGATE_NAMES)}
 ${economyNote()}
+- The machine compares the page with the reference: the numbers of the difference and the
+  picture of the difference come with the request. The red places of that picture are the
+  places where the page does not match the reference — those are the places to fix first. The
+  picture of the page and the picture of the reference are brought to the same size before
+  the comparison, so the difference is a difference of the page and not of the sizes. To
+  measure again, call the tool \`compare_images\` with the reference and the picture of the
+  page.
 - Look the guides up with the \`web_guidance\` tool before you write the rules of a layout,
   an animation or a scroll: the platform of today already holds the answer.
 - The title of the step is not the kind of work: a step whose title says "describe" or

@@ -22,7 +22,7 @@ export const schema = 'review';
 /** The tools the role may call. */
 export const tools = [
     'list_files', 'read_file', 'search_files', 'run_command', 'fetch_url', 'ai_cli', 'ai_cli_help',
-    'read_skill', 'web_guidance',
+    'read_skill', 'web_guidance', 'compare_images',
 ];
 
 /** How many turns the role may spend. */

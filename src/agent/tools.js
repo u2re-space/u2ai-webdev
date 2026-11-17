@@ -33,6 +33,7 @@ import { runBridge } from './bridges.js';
 import { readSkill } from './skills.js';
 import { guidanceSearchText, guidanceRetrieveText, GUIDANCE_SOURCE } from './guidance.js';
 import { runProgram as runProgramIn } from './programs.js';
+import { compareWithReference } from './image-compare.js';
 import { isInside, resolveInside } from './paths.js';
 import { findChromium, findEgo, resolveEngine, screenshotPage, startStaticServer } from './browser.js';
 import { ensurePage } from '../stages/dev-server.js';
@@ -1026,6 +1027,43 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                     cwd: root,
                 });
                 return `Загружен шрифт ${result.family}: ${result.rel} (${result.bytes} байт).`;
+            }
+            case 'compare_images': {
+                const reference = String(args.reference ?? '').trim();
+                const result = String(args.result ?? '').trim();
+                if (!reference || !result) {
+                    throw new Error('Сравнением нужны обе картинки: reference и result.');
+                }
+                const viewport = config?.browser?.viewport ?? {};
+                const targetWidth = Number.isSafeInteger(Number(args.width))
+                    ? Number(args.width)
+                    : (Number.isSafeInteger(viewport.width) ? viewport.width : null);
+                const report = await compareWithReference({
+                    root,
+                    reference,
+                    result,
+                    targetWidth,
+                    dprs: Array.isArray(config?.browser?.compareDprs) ? config.browser.compareDprs : undefined,
+                    env,
+                });
+                if (!report.ok) {
+                    return `Сверка не выполнена: ${report.reason ?? 'причина неизвестна'}.`
+                        + (report.warnings?.length ? ` ${report.warnings.join(' ')}` : '');
+                }
+                const lines = [
+                    `Референс ${report.reference.width}x${report.reference.height}px, снимок ${report.result.width}x${report.result.height}px.`,
+                    `PPI референса: ${report.design.dpr}x — ширина дизайна ${report.design.width} CSS px.`,
+                    `Сходство: ${report.similarity ?? '?'}%. RMSE: ${report.metrics?.rmse?.toFixed?.(4) ?? '?'}, `
+                    + `SSIM: ${report.metrics?.ssim?.toFixed?.(4) ?? '?'}, NCC: ${report.metrics?.ncc?.toFixed?.(4) ?? '?'}.`,
+                ];
+                for (const candidate of report.candidates ?? []) {
+                    lines.push(`  ${candidate.dpr}x (${candidate.width}px): сходство ${candidate.similarity ?? '?'}%, `
+                        + `RMSE ${candidate.metrics?.rmse?.toFixed?.(4) ?? '?'}.`);
+                }
+                if (report.difference?.rel) {
+                    lines.push(`Картинка различий: ${report.difference.rel} (красное — расхождения).`);
+                }
+                return lines.join('\n');
             }
             case 'download_icons': {
                 const output = args.path ? (await writePath(args.path)).rel : '';

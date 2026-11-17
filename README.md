@@ -266,7 +266,10 @@ them, so they know what the page is and what it is not, without seeing the pictu
     "devServer": "auto",
     "devTimeoutMs": 60000,
     "stylingVision": "auto",
-    "stylingVisionRounds": 2
+    "stylingVisionRounds": 2,
+    "compare": "auto",
+    "compareDprs": [1, 1.5, 2, 3],
+    "compareAtDesignWidth": true
   }
 }
 ```
@@ -286,6 +289,59 @@ not only when the stage asks it to.
 The reviewer sees the same pictures and the same words: the screenshots of the stage `sight`
 travel with the review, next to the reference of the design, so the verdict is about the page
 and not only about the code.
+
+### The comparison with the reference
+
+Two pictures of different sizes cannot be compared: the difference between them is the
+difference of the sizes, not the difference of the page. The house therefore measures the
+difference at one size — and the size of the reference is a question of the PPI, because a
+picture of the design is a picture of a page, and a page is measured in CSS pixels while the
+picture is measured in pixels of the picture.
+
+**The PPI is tried.** The possible captures are `1x`, `1.5x`, `2x` and `3x`
+(`browser.compareDprs`): a picture of 2880 pixels is a page of 1440 pixels at 2x, and a picture
+of 1024 pixels is a page of 1024 pixels at 1x. The candidate whose width of the design is the
+width the page is built for wins — the width decides, because a rescale washes the differences
+out and the numbers alone cannot tell 1x from 2x. Every candidate is measured anyway, and the
+report says what each of them gave.
+
+**The page is shot at the width of the design.** With `browser.compareAtDesignWidth` the page
+is opened at the width of the design (1024 pixels for a picture of 1024 pixels at 1x), so the
+picture of the page and the picture of the reference are the same size and the comparison is a
+comparison of the page and not of the sizes.
+
+**The numbers.** ImageMagick measures the difference: the root mean square error (RMSE), the
+structural similarity (SSIM), the correlation (NCC) and the peak signal to noise ratio (PSNR).
+The similarity in percent is what the role reads: 100 is the same picture.
+
+**The picture of the difference.** The comparison writes it into `.ai/shots/diff-<reference>.png`
+and it travels with the request to the role: the red places are the places where the page does
+not match the reference — that is where the styles are wrong. On the Hubfolio project the
+comparison showed 73% of similarity and the picture of the difference named the panel of the
+tags that overlaps the text.
+
+**The engine of the comparison.** Two backends, the same answers: the **native** ImageMagick
+(`magick` in the PATH, or the install of the machine) and the **wasm** one
+(`@imagemagick/magick-wasm`, an optional dependency of the package). The native one is used
+when it is there; the wasm one is the fallback for the machines that have nothing installed.
+The numbers of the two backends agree to the fourth decimal.
+
+**The tool.** The roles that look at the design may call `compare_images` with the reference
+and the picture of the page: the answer names the PPI, the numbers and the file of the picture
+of the difference.
+
+```json
+{
+  "browser": {
+    "compare": "auto",
+    "compareDprs": [1, 1.5, 2, 3],
+    "compareAtDesignWidth": true
+  }
+}
+```
+
+`browser.compare` is `off` (never compare), `auto` (compare when the reference and ImageMagick
+are there) or `always`.
 
 ### The command `sight`
 
