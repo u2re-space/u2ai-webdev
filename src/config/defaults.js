@@ -70,6 +70,7 @@ export const DOCUMENTATION_SOURCES = Object.freeze({
   cssContain: 'https://drafts.csswg.org/css-contain/',
   cssImages: 'https://drafts.csswg.org/css-images-5/',
   cssFonts: 'https://drafts.csswg.org/css-fonts/',
+  cssText: 'https://drafts.csswg.org/css-text-4/',
   cssMasking: 'https://drafts.csswg.org/css-masking/',
   cssNesting: 'https://drafts.csswg.org/css-nesting/',
   cssSelectors: 'https://drafts.csswg.org/selectors/',
@@ -654,7 +655,7 @@ export const defaults = {
         'cssTricks', 'chromeStatus', 'cssLogical', 'cssProperty', 'cssLayer',
         'cssConditional', 'cssAnchor', 'cssUnits', 'cssAnimation', 'cssShapes',
         'cssMotion', 'cssTransform', 'cssCascade', 'cssContain', 'cssImages',
-        'cssMasking', 'cssFonts', 'eslint', 'stylelint', 'prettier',
+        'cssMasking', 'cssFonts', 'eslint', 'stylelint', 'prettier', 'cssText',
         'phosphorIcons', 'lucideIcons', 'googleFonts', 'cssGrid', 'cssFlex'
       ],
       director: [
@@ -663,7 +664,7 @@ export const defaults = {
         'cssTricks', 'chromeStatus', 'cssLogical', 'cssProperty', 'cssLayer',
         'cssConditional', 'cssAnchor', 'cssUnits', 'cssAnimation', 'cssShapes',
         'cssMotion', 'cssTransform', 'cssCascade', 'cssContain', 'cssImages',
-        'cssMasking', 'cssFonts', 'eslint', 'stylelint', 'prettier',
+        'cssMasking', 'cssFonts', 'eslint', 'stylelint', 'prettier', 'cssText',
         'phosphorIcons', 'lucideIcons', 'googleFonts', 'cssGrid', 'cssFlex'
       ],
       coder: [
@@ -674,7 +675,7 @@ export const defaults = {
         'cssConditional', 'cssAnchor', 'cssAnimation', 'cssShapes', 'cssMotion',
         'cssTransform', 'cssCascade', 'cssContain', 'cssImages', 'cssMasking',
         'cssFonts', 'eslint', 'stylelint', 'prettier', 'phosphorIcons',
-        'lucideIcons', 'googleFonts', 'cssGrid', 'cssFlex'
+        'lucideIcons', 'googleFonts', 'cssGrid', 'cssFlex', 'cssText'
       ],
       markup: [
         'htmlSemantics', 'a11y', 'svg',
@@ -686,7 +687,7 @@ export const defaults = {
         'mdnCss', 'sass', 'canIUse', 'cssLogical', 'cssProperty', 'cssLayer', 'cssColors',
         'cssConditional', 'cssAnchor', 'cssAnimation', 'cssMotion', 'cssTransform',
         'cssCascade', 'cssContain', 'cssImages', 'cssMasking', 'stylelint',
-        'prettier', 'googleFonts', 'cssGrid', 'cssFlex'
+        'prettier', 'googleFonts', 'cssGrid', 'cssFlex', 'cssText'
       ],
       iconifier: ['phosphorIcons', 'lucideIcons', 'googleFonts'],
       editor: ['svg', 'mdnCss', 'phosphorIcons', 'lucideIcons'],

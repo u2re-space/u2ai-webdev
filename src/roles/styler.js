@@ -97,6 +97,7 @@ ${devToolsNote({
 - Make \`@property\` for every new custom property token (at start of CSS, before declare custom property tokens, before \`:root\` rules).
 - Use more actively CSS math \`calc(<expression>)\`, \`calc-size(<keyword>, <expression>)\` (expression with \`size\` keyword), \`round\`, \`abs\`, \`sign\`, \`mod\` (and etc., incl. trigonometry), and other modern math functions/expressions.
 - Use more actively CSS interaction, such \`user-select\`, \`pointer-events\`, \`touch-action\`, etc.
+- Use CSS \`white-space\` and \`text-wrap\` properties where is it suitable.
 - For scrollable content, use additionally CSS scroll snap features.
 - The layout is grid for the page and for the areas, flex for the rows. 
   A row of cards is \`repeat(auto-fit, minmax(240px, 1fr))\`, not a fixed width with a margin.
