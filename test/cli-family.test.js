@@ -146,10 +146,16 @@ test('the two tools are switched off by one key of the config', () => {
 });
 
 test('the roles that work with the project may call the family', () => {
-    for (const role of ['planner', 'architect', 'editor', 'reviewer', 'auditor', 'installer']) {
+    for (const role of ['editor', 'auditor', 'installer']) {
         assert.ok(ROLES[role].tools.includes('ai_cli'), `${role} may call ai_cli`);
         assert.ok(ROLES[role].tools.includes('ai_cli_help'), `${role} may call ai_cli_help`);
     }
+    for (const role of ['planner', 'architect', 'reviewer']) {
+        assert.ok(!ROLES[role].tools.includes('ai_cli'), `${role} must not call ai_cli`);
+        assert.ok(!ROLES[role].tools.includes('ai_cli_help'), `${role} must not call ai_cli_help`);
+    }
+    assert.ok(!ROLES.reviewer.tools.includes('ai_cli'));
+    assert.ok(!ROLES.reviewer.tools.includes('ai_cli_help'));
     // A role that writes the markup of a page has no reason to call the family.
     assert.ok(!ROLES.markup.tools.includes('ai_cli'));
 });

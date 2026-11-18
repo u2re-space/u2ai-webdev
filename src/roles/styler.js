@@ -27,7 +27,7 @@ export const schema = 'style';
 /** The tools the role may call. */
 export const tools = [
     'list_files', 'read_file', 'write_file', 'replace_text', 'search_files',
-    'run_command', 'download_font', 'call_ai_measure', 'read_skill', 'web_guidance',
+    'run_command', 'download_font', 'read_skill', 'web_guidance',
     'screenshot', 'delegate_role', 'compare_images',
     ...economyTools(),
     devToolsMarker(),
@@ -54,7 +54,7 @@ export function instructions(context = {}) {
         ? `The style language of the project: ${context.style}.`
         : 'The style language of the project: scss.';
     const design = context.design
-        ? 'The design direction, the palette and the measurements are in the task context. The styles have to match them: the colours, the type scale, the spacing and the sizes of the blocks.'
+        ? 'The design direction, palette and any existing measurements are in the task context. Follow DESIGN.md as the style source of truth; measurements are optional. When absent, infer colours, type scale, spacing and block proportions from the attached reference image.'
         : '';
     const reference = referenceNote(context);
     const width = pageWidthNote(context);
@@ -83,10 +83,10 @@ ${devToolsNote({
     url: context?.config?.browser?.url || null,
     width: context?.config?.browser?.viewport?.width ?? null,
 })}
-- The machine compares the page with the reference: the numbers of the difference and the picture of the difference come with the request. 
+ - The machine compares the page with the reference: the numbers of the difference and the picture of the difference come with the request.
   The red places of that picture are the places where the page does not match the reference — those are the places to fix first. 
   The picture of the page and the picture of the reference are brought to the same size before the comparison, so the difference is a difference of the page and not of the sizes. 
-  To measure again, call the tool \`compare_images\` with the reference and the picture of the page.
+  To compare again, call the tool \`compare_images\` with the reference and the picture of the page.
 - Look the guides up with the \`web_guidance\` tool before you write the rules of a layout, an animation or a scroll: the platform of today already holds the answer.
 - The title of the step is not the kind of work: 
   a step whose title says "describe" or "specify" still means writing the styles of the files the step names. 

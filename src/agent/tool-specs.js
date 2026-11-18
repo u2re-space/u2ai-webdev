@@ -52,7 +52,7 @@ export const TOOL_SPECS = Object.freeze({
     },
     read_file: {
         configKey: 'read',
-        description: 'Read a text file of the working directory. A line range may be given to read a part of a big file — the answer names the lines it has read, so the next read does not repeat them.',
+        description: 'Read a text file of the working directory, or attach an image file to the request so it can be viewed. A line range may be given to read a part of a big text file — the answer names the lines it has read, so the next read does not repeat them.',
         parameters: {
             type: 'object',
             properties: {

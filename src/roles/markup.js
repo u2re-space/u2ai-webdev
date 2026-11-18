@@ -51,7 +51,7 @@ export function instructions(context = {}) {
         ? `The markup language of the project: ${context.markup}.`
         : 'The markup language of the project: html.';
     const design = context.design
-        ? 'The design direction, the measurements and the assets are in the task context. The markup has to match them: the regions, the order of the blocks and the names of the parts.'
+        ? 'The design direction and any prepared assets are in the task context. The attached reference image is a visual source of truth; measurements are optional. Match its regions, proportions, hierarchy and names of the parts.'
         : '';
     const reference = referenceNote(context);
     const width = pageWidthNote(context);

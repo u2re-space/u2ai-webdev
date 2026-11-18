@@ -42,7 +42,7 @@ export function instructions(context = {}) {
         ? `The stack of the project: ${context.stack.frontendFramework ?? 'vanilla'}, ${context.stack.markupLanguage ?? 'html'}, ${context.stack.styleLanguage ?? 'scss'}, ${context.stack.scriptLanguage ?? 'javascript'}.`
         : '';
     const design = context.design
-        ? 'The design of the task is in the task context: the measurements, the palette and the tokens of it. The result is measured against them.'
+        ? 'The design of the task is in the task context: DESIGN.md, any existing measurements, the palette and the tokens. Measurements are optional; compare the result visually with the reference when available.'
         : '';
     return `You are the auditor of a web project. You look at the whole project, not at one
 step, and you report what is wrong with it.

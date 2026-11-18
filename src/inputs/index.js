@@ -252,25 +252,37 @@ export function inputContext(collected = {}) {
     const design = collected.design;
     if (design?.present) {
         const lines = ['# Design direction (DESIGN.md)'];
-        if (design.tokens.length) {
+        lines.push('Use the complete source below as the style source of truth; extracted notes follow.');
+        if (design.raw?.trim()) lines.push(design.raw.trim());
+        const tokens = design.tokens ?? [];
+        const typography = design.typography ?? [];
+        const colors = design.colors ?? [];
+        const spacing = design.spacing ?? [];
+        const components = design.components ?? [];
+        const layout = design.layout ?? [];
+        if (tokens.length) {
             lines.push('Tokens:');
-            for (const token of design.tokens) lines.push(`- ${token.name}: ${token.value}`);
+            for (const token of tokens) lines.push(`- ${token.name}: ${token.value}`);
         }
-        if (design.typography.length) {
+        if (typography.length) {
             lines.push('Typography:');
-            for (const item of design.typography) lines.push(`- ${item.name}: ${item.value}`);
+            for (const item of typography) lines.push(`- ${item.name}: ${item.value}`);
         }
-        if (design.spacing.length) {
+        if (colors.length) {
+            lines.push('Colors:');
+            for (const item of colors) lines.push(`- ${item.name || item.token}: ${item.value}`);
+        }
+        if (spacing.length) {
             lines.push('Spacing:');
-            for (const item of design.spacing) lines.push(`- ${item.name}: ${item.value}`);
+            for (const item of spacing) lines.push(`- ${item.name}: ${item.value}`);
         }
-        if (design.components.length) {
+        if (components.length) {
             lines.push('Components:');
-            for (const item of design.components) lines.push(`- ${item}`);
+            for (const item of components) lines.push(`- ${item}`);
         }
-        if (design.layout.length) {
+        if (layout.length) {
             lines.push('Layout:');
-            for (const item of design.layout) lines.push(`- ${item}`);
+            for (const item of layout) lines.push(`- ${item}`);
         }
         blocks.push(lines.join('\n'));
     }

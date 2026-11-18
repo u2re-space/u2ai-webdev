@@ -51,7 +51,7 @@ export function instructions(context = {}) {
         ? `The stack: ${context.stack.frontendFramework ?? 'vanilla'}, ${context.stack.markupLanguage ?? 'html'}, ${context.stack.styleLanguage ?? 'scss'}, ${context.stack.scriptLanguage ?? 'javascript'}.`
         : '';
     const design = context.design
-        ? `The design direction, the palette and the measurements are in the task context. The code has to match them.`
+        ? `The design direction, palette and any existing measurements are in the task context. Measurements are optional; use DESIGN.md and the attached reference image directly.`
         : '';
     const reference = referenceNote(context);
     const repair = Array.isArray(context.issues) && context.issues.length

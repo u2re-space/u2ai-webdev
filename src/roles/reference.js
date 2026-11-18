@@ -3,8 +3,8 @@
  * @module roles/reference
  * @purpose The line that tells a role that the screenshot of the reference is attached.
  *
- *   The measurements say how wide a block is; the picture says how the page looks. A role
- *   that sees the reference writes the markup and the styles closer to the design.
+ *   The measurements may say how wide a block is; the picture says how the page looks. A role
+ *   can work from the screenshot directly when no measurement sheet exists.
  *
  * @usedBy roles/markup, roles/styler, roles/coder, roles/iconifier, roles/editor,
  *         roles/reviewer
@@ -41,6 +41,7 @@ export function referenceNote(context = {}) {
     return [
         `The screenshot of the reference is attached to the request: ${list.join(', ')}.`,
         'Look at it before you write: the regions, the proportions, the colours and the',
-        'spacing of the result come from that picture, not only from the measurements.',
+        'spacing of the result come from that picture. Measurements are optional: infer what is',
+        'needed from the visual reference and DESIGN.md.',
     ].join(' ');
 }

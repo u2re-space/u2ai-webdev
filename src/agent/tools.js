@@ -23,7 +23,7 @@
  */
 
 import path from 'node:path';
-import { mkdir, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { toolSpecs as buildSpecs } from './tool-specs.js';
 import { listFiles, readTextFile, findLines, patchFile, searchFiles, writeTextFile, replaceInFile, deleteFile, makeDirectory, copyPath } from './fs-tools.js';
 import { listProjectBackups, restoreProjectBackup } from './project-backup.js';
@@ -41,6 +41,7 @@ import { ensurePage } from '../stages/dev-server.js';
 import { shootPage } from '../stages/vision.js';
 import { mapFiles } from './run-map.js';
 import { findMeasurement } from '../inputs/measured.js';
+import { sniffType } from '../shared/data-urls.js';
 import {
     FAMILY_CLIS,
     FAMILY_ROOT,
@@ -787,6 +788,17 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                 }
                 const rel = await relativeOf(target);
                 const relKey = rel ?? target;
+                if (rel) {
+                    const { abs } = await resolveInside(root, target, { allowRoot: false });
+                    const bytes = await readFile(abs);
+                    const image = sniffType(bytes);
+                    if (image.kind === 'image'
+                        && ['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(image.mime)) {
+                        if (stamp) reads.set(key, stamp);
+                        await noteRead(relKey);
+                        return `Изображение ${rel} приложено к запросу.`;
+                    }
+                }
                 const known = rel ? await readFromMap(rel, startLine, endLine) : null;
                 if (known !== null) {
                     if (stamp) reads.set(key, stamp);

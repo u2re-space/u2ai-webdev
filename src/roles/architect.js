@@ -11,7 +11,6 @@
 
 import { UNTRUSTED } from './untrusted.js';
 import { INPUTS_IN_CONTEXT } from './inputs.js';
-import { FAMILY_CLI_NOTE } from './cli-note.js';
 import { referenceNote } from './reference.js';
 import { PAGE_WIDTH_TOKEN, pageWidthNote } from './page-frame.js';
 
@@ -23,7 +22,7 @@ export const schema = 'architecture';
 
 /** The tools the role may call. */
 export const tools = [
-    'list_files', 'read_file', 'search_files', 'call_ai_measure', 'ai_cli', 'ai_cli_help',
+    'list_files', 'read_file', 'search_files',
     'read_skill', 'web_guidance',
 ];
 
@@ -47,7 +46,7 @@ export function instructions(context = {}) {
         ? `The stack of the project: ${context.stack.frontendFramework ?? 'vanilla'}, ${context.stack.markupLanguage ?? 'html'}, ${context.stack.styleLanguage ?? 'scss'}, ${context.stack.scriptLanguage ?? 'javascript'}.`
         : '';
     const design = context.design
-        ? `The design direction and the measurements are in the task context. They decide the tokens, the spacing and the grid.`
+        ? `The design direction is in the task context. It decides the tokens, the spacing and the grid; use the attached reference image directly when measurements are absent.`
         : '';
     const reference = referenceNote(context);
     const width = pageWidthNote(context);
@@ -63,7 +62,6 @@ ${width}
 
 Rules:
 ${INPUTS_IN_CONTEXT}
-${FAMILY_CLI_NOTE}
 - The platform of today is the platform you design for: look the guides up with the
   \`web_guidance\` tool before you design a control, a form or a layout, and let the
   structure follow them.
@@ -75,18 +73,14 @@ ${FAMILY_CLI_NOTE}
   radii, the shadows, the durations. The names are short and say what they are (\`--color-text\`,
   not \`--c-t\`).
 - The width of the design is a token too: \`${PAGE_WIDTH_TOKEN}\` says how wide the page really is
-  in CSS pixels. The width of the reference picture is not that width — the same design comes
-  at 1152 pixels and at 2304 pixels — so the width comes from the text: the body text of a page
-  is 16..18 CSS pixels, the measurements give its size in the pixels of the picture, and the
-  width of the picture divided by that number gives the width of the design.
+  in CSS pixels. Treat the reference image's pixel dimensions as a useful estimate, not as a
+  measured CSS width; infer a practical canvas width from the visible typography and layout.
 - The page has a canvas: the element with the class \`page\` inside the \`body\`. The styles give it
   the width of the design and scale it into the window; the markup writes the element.
 - The stack of the project is given. Do not invent a framework, a bundler or a library that the
   plan does not ask for.
-- If the measurements of the reference are missing or thin, measure the reference yourself with
-  the \`call_ai_measure\` tool: \`["measure", "landing.png"]\` for the sizes and the positions,
-  \`["design", "landing.png"]\` for the look. The tokens and the grid then follow the picture.
-  The tool answers with the sheet that is already on the disk instead of measuring again.
+- A reference image and \`DESIGN.md\` are sufficient inputs. Inspect the image directly and infer
+  its hierarchy, proportions, palette and spacing; do not request or run a measurer.
 - Keep the structure as small as the task allows. A module that holds one function and is used
   once is a function.
 

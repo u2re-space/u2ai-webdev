@@ -86,8 +86,8 @@ export const STAGES = Object.freeze([
     {
         name: 'pictures',
         title: 'Prepare the pictures',
-        // The pictures come after the plan: the plan is what measures the reference, and the
-        // crops of a reference that was not measured yet do not exist.
+        // Existing crops may be prepared here, but the plan and the run do not require a
+        // measurement sheet: roles can work directly from DESIGN.md and the attached reference.
         dependsOn: ['plan'],
         run: picturesStage,
         args: (ctx) => ({ apply: ctx.apply !== false }),
@@ -95,8 +95,7 @@ export const STAGES = Object.freeze([
             ctx.pictures = result?.pictures ?? [];
             if (!ctx.inputs) return;
             const next = { ...ctx.inputs, pictures: ctx.pictures };
-            // The measurer may have run after the collection: the sheet of the measurements is
-            // refreshed, so the stages after this one work with the numbers that are there.
+            // If a sheet is already present, keep the refreshed input for the later stages.
             if (result?.measurements) next.measurements = result.measurements;
             if (result?.sheetFile) {
                 next.files = { ...next.files, measurements: result.sheetFile };

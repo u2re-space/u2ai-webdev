@@ -49,7 +49,7 @@ export function instructions(context = {}) {
         ? `The findings of the reviewer:\n${context.review}`
         : '';
     const design = context.design
-        ? 'The design direction and the measurements are in the task context. The result has to look like them.'
+        ? 'The design direction and any existing measurements are in the task context. Measurements are optional; use DESIGN.md and the attached reference image directly.'
         : '';
     const reference = referenceNote(context);
     return `You are the editor of a web project. You take the result of the other roles and you

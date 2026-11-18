@@ -833,7 +833,7 @@ export async function runStepStage({
                 LOOKS_AT_DESIGN.has(role)
                     ? `The screenshot of the reference is attached to this request: ${referenceList(reference)}.`
                     : `The screenshot of the reference of the design: ${referenceList(reference)}. It is not attached`
-                        + ' to this request: work from the measurements, the palette and the tokens.',
+                        + ' to this request: work from DESIGN.md and any existing measurements, palette and tokens.',
                 'Look at it before you write: the regions, the proportions, the colours and the',
                 'spacing of the result come from that picture.',
             ].join('\n'));

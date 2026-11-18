@@ -10,9 +10,7 @@
  */
 
 import { UNTRUSTED } from './untrusted.js';
-import { FAMILY_CLI_NOTE } from './cli-note.js';
 import { referenceNote } from './reference.js';
-import { devToolsMarker, devToolsNote } from './devtools.js';
 
 /** The name of the role. */
 export const name = 'reviewer';
@@ -22,13 +20,11 @@ export const schema = 'review';
 
 /** The tools the role may call. */
 export const tools = [
-    'list_files', 'read_file', 'search_files', 'run_command', 'fetch_url', 'ai_cli', 'ai_cli_help',
-    'read_skill', 'web_guidance', 'compare_images',
-    devToolsMarker(),
+    'read_file', 'find_line',
 ];
 
 /** How many turns the role may spend. */
-export const maxTurns = 12;
+export const maxTurns = 4;
 
 /**
  * The instructions of the role.
@@ -67,9 +63,13 @@ ${shots}
 ${reference}
 
 Rules:
-${FAMILY_CLI_NOTE}
-- The guides of the platform are the yardstick: look one up with the \`web_guidance\` tool
-  when you judge a control, a form or a motion, and name the rule it breaks.
+- Judge against the task, the criteria, the screenshot, and the project files already supplied.
+  Do not browse the web or query documentation during review.
+- The report of the build, the screenshot and the comparison are already in context. The paths
+  of the step files are supplied. Read a relevant file at most once; use \`find_line\` to locate
+  a detail in a large file, then read only that range. Do not inspect files outside this step
+  unless a criterion names them.
+- Do not rebuild or re-run project commands during review: the build stage has already run.
 - Judge the criteria first, one by one. A criterion that is not met is an issue with a path and
   a request, not a feeling.
 - Then judge the quality: the semantics of the markup, the accessibility (the keyboard, the
@@ -80,14 +80,10 @@ ${FAMILY_CLI_NOTE}
   serious is left; \`partial\` when most of the work is done and the rest is named;
   \`fail\` when the step is not done.
 - Do not fix the result yourself: the review reports, the other roles repair.
-- Do not start a server, a watcher or any other program that does not finish on its own: judge
-  the files of the project, and run only the commands that end by themselves (a build, a test).
+- Do not start a server, a watcher or any other program. The review stage has already attached
+  its screenshots and does not provide a live page.
 - Do not invent a requirement the task does not have. The review is about this task, in this
   project, at this step.
-${devToolsNote({
-    url: context?.config?.browser?.url || null,
-    width: context?.config?.browser?.viewport?.width ?? null,
-})}
 
 ${UNTRUSTED}`;
 }

@@ -17,6 +17,7 @@ import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 
 import { normalizePlan, orderSteps, planText, planStage, writePlan, readPlan } from '../src/stages/plan.js';
 import { collectStage, collectText, componentCards, readInputs } from '../src/stages/collect.js';
+import { collectInputs } from '../src/inputs/index.js';
 import { normalizeArchitecture, architectureText, architectStage } from '../src/stages/architect.js';
 import { detectPackageManager, applySetup, setupReadiness, setupStage, installDependencies, ensureStyleCompiler } from '../src/stages/setup.js';
 import { runId, runDirectory, sanitizeId } from '../src/stages/workspace.js';
@@ -219,6 +220,37 @@ test('the stage of the plan asks the planner and writes the plan', async () => {
     assert.equal(saved.summary, 'A landing page.');
 });
 
+test('the planner gets the reference image attached without a measurement sheet', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-plan-reference-'));
+    await writeFile(path.join(root, 'landing.png'), Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jYuoAAAAASUVORK5CYII=',
+        'base64',
+    ));
+    const client = fakeClient([schemaAnswer('plan', {
+        summary: 'A landing page.',
+        steps: [{ id: 'a', title: 'Markup', role: 'markup', dependsOn: [], files: ['index.html'], criteria: ['opens'] }],
+        risks: [],
+        questions: [],
+    })]);
+    const inputs = await collectInputs({
+        root,
+        config: { inputs: { designMd: [], measurements: [], palette: [], tokens: [] } },
+        task: 'Make a landing from landing.png.',
+    });
+    const result = await planStage({
+        client,
+        config: { output: { work: './.tmp' } },
+        root,
+        task: 'Make a landing from landing.png.',
+        inputs,
+        runId: 'run-ref',
+    });
+    assert.equal(result.ok, true);
+    assert.match(JSON.stringify(client.requests[0].input), /input_image/);
+    assert.match(JSON.stringify(client.requests[0].input), /landing\.png/);
+    assert.equal(inputs.measurements.present, false);
+});
+
 test('the stage of the plan says that a step of a dead role leaves the plan', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-plan-role-'));
     const client = fakeClient([schemaAnswer('plan', {
@@ -344,9 +376,10 @@ test('the stage of the plan asks again in the tool channel when the plan has no 
     // into the tool channel: the answer is the call of the schema.
     assert.equal(client.requests[0].schemaChannel, null);
     assert.equal(client.requests[1].schemaChannel, 'tool');
-    // The correction names the tools: the planner has to look before it decides.
+    // The correction forbids requiring a measurer while asking the planner to look first.
     const correction = JSON.stringify(client.requests[1].input);
-    assert.match(correction, /call_ai_measure/);
+    assert.match(correction, /do not call or require a measurer/);
+    assert.doesNotMatch(correction, /call_ai_measure/);
     assert.match(correction, /`plan`/);
 });
 

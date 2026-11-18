@@ -188,6 +188,67 @@ test('the stage of the review judges every step and takes the worst verdict', as
     assert.equal(saved.issues[0].path, 'src/main.js');
 });
 
+test('a resumed review reuses completed judgments whose inputs have not changed', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-review-resume-'));
+    await mkdir(path.join(root, 'src'), { recursive: true });
+    await writeFile(path.join(root, 'index.html'), '<h1>Landing</h1>', 'utf8');
+    await writeFile(path.join(root, 'src', 'main.js'), 'console.log("landing");', 'utf8');
+    const config = { output: { work: './.tmp' }, stages: { review: { repair: false } } };
+    const first = await reviewStage({
+        client: fakeClient([
+            schemaAnswer('review', {
+                verdict: 'pass', scores: { fidelity: 90, completeness: 100, accessibility: 90, quality: 90 },
+                issues: [], summary: 'Markup is good.', recommendations: [],
+            }),
+            schemaAnswer('review', {
+                verdict: 'pass', scores: { fidelity: 90, completeness: 100, accessibility: 90, quality: 90 },
+                issues: [], summary: 'Code is good.', recommendations: [],
+            }),
+        ]),
+        config,
+        root,
+        task: 'Make a landing.',
+        plan: PLAN,
+        runId: 'run-resume',
+    });
+    assert.equal(first.reviews.length, 2);
+
+    let reused = 0;
+    const resumed = await reviewStage({
+        client: fakeClient([]),
+        config,
+        root,
+        task: 'Make a landing.',
+        plan: PLAN,
+        runId: 'run-resume',
+        notify(event) {
+            if (event.type === 'review.cached') reused += 1;
+        },
+    });
+
+    assert.equal(resumed.verdict, 'pass');
+    assert.equal(reused, 2);
+
+    await writeFile(path.join(root, 'index.html'), '<h1>Updated landing</h1>', 'utf8');
+    reused = 0;
+    const changed = await reviewStage({
+        client: fakeClient([schemaAnswer('review', {
+            verdict: 'partial', scores: { fidelity: 70, completeness: 80, accessibility: 90, quality: 80 },
+            issues: [], summary: 'Markup changed.', recommendations: [],
+        })]),
+        config,
+        root,
+        task: 'Make a landing.',
+        plan: PLAN,
+        runId: 'run-resume',
+        notify(event) {
+            if (event.type === 'review.cached') reused += 1;
+        },
+    });
+    assert.equal(changed.reviews[0].summary, 'Markup changed.');
+    assert.equal(reused, 1);
+});
+
 test('the owner of a file of an issue is the step that wrote it', () => {
     const owner = issueOwner(PLAN, { path: 'src/main.js', message: 'x', requestedChange: 'y' });
     assert.equal(owner.step.id, 'code-1');

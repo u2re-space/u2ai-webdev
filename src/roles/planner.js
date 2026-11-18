@@ -11,8 +11,8 @@
 
 import { UNTRUSTED } from './untrusted.js';
 import { INPUTS_IN_CONTEXT } from './inputs.js';
-import { FAMILY_CLI_NOTE } from './cli-note.js';
 import { LIVE_ROLE_NAMES } from '../stages/roles.js';
+import { referenceNote } from './reference.js';
 
 /** The name of the role. */
 export const name = 'planner';
@@ -22,8 +22,7 @@ export const schema = 'plan';
 
 /** The tools the role may call. */
 export const tools = [
-    'list_files', 'read_file', 'search_files', 'call_ai_measure', 'ai_cli', 'ai_cli_help',
-    'read_skill',
+    'list_files', 'read_file', 'search_files', 'read_skill',
 ];
 
 /** How many turns the role may spend. */
@@ -31,7 +30,8 @@ export const maxTurns = 12;
 
 /**
  * The instructions of the role.
- * @param {{ task?: string, kind?: string, stack?: object, design?: string, project?: string }} [context]
+ * @param {{ task?: string, kind?: string, stack?: object, design?: string, project?: string,
+ *   reference?: string[], referenceSizes?: object[] }} [context]
  * @returns {string}
  * @exports
  * @ai.hint pure
@@ -43,6 +43,7 @@ export function instructions(context = {}) {
         ? `The stack of the project: ${context.stack.frontendFramework ?? 'vanilla'}, ${context.stack.markupLanguage ?? 'html'}, ${context.stack.styleLanguage ?? 'scss'}, ${context.stack.scriptLanguage ?? 'javascript'}.`
         : '';
     const design = context.design ? `The design direction is in the task context. Treat it as the source of truth for the look.` : '';
+    const reference = referenceNote(context);
     return `You are the planner of a web project. You do not write the code — you decide what
 has to be done, in which order, and how one knows that each step is done.
 
@@ -50,25 +51,22 @@ ${task}
 ${kind}
 ${stack}
 ${design}
+${reference}
 
 Rules:
 ${INPUTS_IN_CONTEXT}
-${FAMILY_CLI_NOTE}
 - The answer is the plan itself, not a description of your work. A step is a piece of work to do
   now, with its files and its criteria. Never answer with a plan like "first I will study the
   project" or "then I will decide the structure": that is a plan of intentions, and it is wrong.
 - The plan has at least two steps. If the task needs one step, it is still a plan — say what the
   step is and how it is checked.
 - Read the project first: the files that already exist decide what the plan may assume.
-- If the task names a reference picture and the project has no measurements of it, measure it
-  first with the \`call_ai_measure\` tool: \`["measure", "landing.png"]\` for the sizes and the
-  positions. The plan then works on real numbers instead of guesses. The tool answers with the
-  sheet that is already on the disk instead of measuring again — read that answer, do not measure
-  the same picture twice.
-- The elements of the measurements whose kind is an asset are pictures of the reference: the
-  stage \`pictures\` cuts them out of the screenshot and prepares them as the assets of the
-  result. A step that uses such an object takes the prepared picture — do not plan a drawn
-  copy of it, and do not ask for an SVG of a logo, a badge or a photograph of the reference.
+- A reference picture is a visual source of truth even when no measurement sheet exists. Use
+  the attached screenshot and \`DESIGN.md\` directly; infer the hierarchy, proportions, palette,
+  typography and spacing visually. Never require or call a measurer.
+- If prepared crops of reference pictures already exist, use them as assets of the result. Their
+  absence must not block the work: use the attached reference image directly instead of asking
+  for a measurement sheet or a drawn copy of a visible logo or photograph.
 - One step is one role's work. The steps are small enough to be done in one sitting and large
   enough to be worth a step. A step that needs two roles is two steps.
 - The role of a step is one of: ${LIVE_ROLE_NAMES.map((name) => `\`${name}\``).join(', ')}. The
@@ -76,9 +74,9 @@ ${FAMILY_CLI_NOTE}
   role is never done. \`markup\` writes the markup, \`coder\` writes the scripts and the modules,
   \`styler\` writes the styles, \`editor\` draws the vector graphics, \`iconifier\` chooses the
   icons.
-- The environment, the structure of the project, the measurement of the reference, the
-  preparation of the pictures of the reference and the review are not steps: the stages of the
-  run do them by themselves. Name the prepared pictures in the step that uses them.
+- The environment, the structure of the project, preparation of any existing picture crops and
+  the review are not steps: the stages of the run handle them by themselves. Name prepared
+  pictures only when they exist and the step uses them.
 - The steps come in an order that can be executed: the markup before the styles, the setup
   before the code that needs the dependencies, the icons before the page that uses them.
 - Every step names the files it touches. The paths are relative to the root of the project.

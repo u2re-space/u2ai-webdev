@@ -22,6 +22,7 @@
 
 import { runRole, roleReason } from '../roles/index.js';
 import { inputContext } from '../inputs/index.js';
+import { readReferences } from '../inputs/references.js';
 import { runId, runFile, writeJsonFile, readJsonFile } from './workspace.js';
 import { planRole } from './roles.js';
 
@@ -37,14 +38,14 @@ export const PLAN_FILE = 'plan.json';
  * be the work itself.
  *
  * The correction names the tools on purpose: the answer of the planner is the plan of the
- * work, and the work of the planner is to look at the project and at the picture of the
- * reference before it decides what the steps are.
+ * work, and the work of the planner is to look at the project and the collected design inputs
+ * before it decides what the steps are. Measurements are optional; no measurer is required.
  */
 export const PLAN_CORRECTION = [
     'The previous answer was not a plan: its list of steps was empty.',
-    'Work first, answer second: if the task names a reference picture, measure it with the',
-    'tool `call_ai_measure` (`["measure", "landing.png"]` for the sizes and the positions) and',
-    'read the files of the project with `list_files` and `read_file`.',
+    'Work first, answer second: read the files of the project with `list_files` and `read_file`.',
+    'Use DESIGN.md and any attached reference picture directly. A measurement sheet is optional;',
+    'do not call or require a measurer.',
     'Then submit the plan with the tool `plan`: at least two concrete steps, each with an id,',
     'a title, the role that does it, the files it touches and the criteria that can be checked',
     'without a human.',
@@ -281,6 +282,7 @@ export async function planStage({
     const run = id ?? runId();
     const context = inputs ? inputContext(inputs) : '';
     const prompt = [String(task ?? '').trim(), context].filter(Boolean).join('\n\n');
+    const reference = await readReferences(root, inputs?.references ?? []);
     const stack = config?.stack ?? {};
 
     const request = {
@@ -288,12 +290,15 @@ export async function planStage({
         config,
         role: 'planner',
         input: prompt,
+        parts: reference.parts,
         context: {
             task: String(task ?? ''),
             kind: config?.agent?.kind ?? null,
             stack,
             design: Boolean(context),
             project: root,
+            reference: reference.names,
+            referenceSizes: reference.sizes,
         },
         root,
         env,

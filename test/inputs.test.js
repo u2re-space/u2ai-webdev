@@ -220,6 +220,8 @@ test('the inputs of a run are collected and put into one context', async () => {
     assert.match(text, /Make the page/);
     assert.match(text, /--color-bg/);
     assert.match(text, /--space-2/);
+    assert.match(text, /Use the complete source below as the style source of truth/);
+    assert.match(text, /# Design tokens/);
     assert.match(text, /Measurements/);
     assert.ok(text.includes('"Based in\\nBoston,\\nMA."'), 'recognized text or its line breaks were lost');
 });

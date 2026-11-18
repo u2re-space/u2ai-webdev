@@ -19,6 +19,7 @@ import { runStepStage } from '../src/stages/step.js';
 import { WEB_DEVELOPMENT, webDevelopment } from '../src/roles/web-development.js';
 import { LIVE_ROLE_NAMES } from '../src/stages/roles.js';
 import { toolSpecs } from '../src/agent/tool-specs.js';
+import { createToolset } from '../src/agent/tools.js';
 import { createClient } from '../src/openai/client.js';
 import { defaults } from '../src/config.js';
 
@@ -269,12 +270,14 @@ test('the roles that read the project are told that the inputs are already in th
     }
 });
 
-test('the roles that may measure the reference have the tool of the measurer', () => {
+test('planning and implementation roles work from DESIGN.md and references without a measurer', () => {
     for (const name of ['planner', 'architect', 'styler']) {
-        assert.ok(ROLES[name].tools.includes('call_ai_measure'), `the role ${name} cannot call the measurer`);
+        const text = ROLES[name].instructions({ design: 'DESIGN.md', reference: ['landing.png'] });
+        assert.ok(!ROLES[name].tools.includes('call_ai_measure'), `the role ${name} may call the measurer`);
+        assert.match(text, /measurements are optional|without measurements|do not request or run a measurer/i);
     }
-    const specs = toolSpecs(defaults.tools, { role: 'planner' });
-    assert.ok(specs.some((spec) => spec.name === 'call_ai_measure'));
+    const specs = toolSpecs(defaults.tools, { role: 'planner', names: ROLES.planner.tools });
+    assert.ok(!specs.some((spec) => spec.name === 'call_ai_measure'));
 });
 
 test('the roles that write the assets take the prepared pictures as they are', () => {
@@ -288,7 +291,9 @@ test('the roles that write the assets take the prepared pictures as they are', (
 
 test('the planner does not plan a drawn copy of a picture of the reference', () => {
     const text = ROLES.planner.instructions({});
-    assert.match(text, /stage `pictures` cuts them out/);
+    assert.match(text, /If prepared crops of reference pictures already exist/);
+    assert.match(text, /absence must not block the work/);
+    assert.match(text, /Never require or call a measurer/);
     // The direction of the design is not measured: the command is gone from the bridge.
     assert.doesNotMatch(text, /\["design"/);
 });
@@ -310,6 +315,100 @@ test('the roles that check their work have the tool of the command', () => {
         assert.ok(ROLES[name].tools.includes('run_command'), `the role ${name} cannot run a command`);
         const specs = toolSpecs(defaults.tools, { role: name });
         assert.ok(specs.some((spec) => spec.name === 'run_command'), `the role ${name} has no command to run`);
+    }
+});
+
+test('the reviewer gets only read tools and no live-browser tools', () => {
+    assert.equal(ROLES.reviewer.maxTurns, 4);
+    assert.ok(ROLES.reviewer.tools.includes('find_line'));
+    assert.ok(ROLES.reviewer.tools.includes('read_file'));
+    assert.deepEqual(ROLES.reviewer.tools, ['read_file', 'find_line']);
+    const specs = toolSpecs(defaults.tools, { role: 'reviewer', names: ROLES.reviewer.tools });
+    assert.deepEqual(specs.map((spec) => spec.name), ROLES.reviewer.tools);
+    const toolset = createToolset({
+        root: process.cwd(),
+        config: structuredClone(defaults),
+        role: 'reviewer',
+        mcp: [{ name: 'browser', tools: [{ name: 'navigate', inputSchema: { type: 'object' } }] }],
+    });
+    assert.deepEqual(
+        toolset.specsFor('reviewer', ROLES.reviewer.tools).map((spec) => spec.name),
+        ROLES.reviewer.tools,
+    );
+    assert.ok(!ROLES.reviewer.tools.some((name) => name.startsWith('mcp:')));
+    assert.doesNotMatch(ROLES.reviewer.instructions({}), /browser tool|navigate to/i);
+});
+
+test('reviewer config cannot restore tools outside the read-only allowlist', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-review-tools-'));
+    const home = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-review-home-'));
+    const client = await mockApi([schemaAnswer('review', {
+        verdict: 'pass',
+        scores: { fidelity: 100, completeness: 100, accessibility: 100, quality: 100 },
+        issues: [],
+        summary: 'The step is good.',
+        recommendations: [],
+    })]);
+    try {
+        const config = structuredClone(defaults);
+        config.backends = [{ baseURL: client.url, apiKey: 'test-key' }];
+        config.roles.reviewer.tools = ['run_command', 'mcp:browser'];
+        const apiClient = await createClient({ config, env: { HOME: home, USERPROFILE: home } });
+        await runRole({
+            client: apiClient,
+            config,
+            role: 'reviewer',
+            input: 'Review the step.',
+            context: { step: { id: 'review-1', title: 'Review', files: [] } },
+            root,
+            env: { HOME: home, USERPROFILE: home },
+            requireFiles: false,
+        });
+        const offered = client.requests[0].tools.map((tool) => tool.name);
+        assert.ok(!offered.includes('run_command'));
+        assert.ok(!offered.some((name) => name.startsWith('mcp_')));
+    } finally {
+        await client.close();
+    }
+});
+
+test('read_file sends an image to the role as a visual input', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-review-image-'));
+    const home = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-review-image-home-'));
+    await writeFile(path.join(root, 'reference.png'), Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jYuoAAAAASUVORK5CYII=',
+        'base64',
+    ));
+    const api = await mockApi([
+        toolAnswer('read_file', { path: 'reference.png' }),
+        schemaAnswer('review', {
+            verdict: 'pass',
+            scores: { fidelity: 100, completeness: 100, accessibility: 100, quality: 100 },
+            issues: [],
+            summary: 'The reference was viewed.',
+            recommendations: [],
+        }),
+    ]);
+    try {
+        const config = structuredClone(defaults);
+        config.backends = [{ baseURL: api.url, apiKey: 'test-key' }];
+        const client = await createClient({ config, env: { HOME: home, USERPROFILE: home } });
+        const result = await runRole({
+            client,
+            config,
+            role: 'reviewer',
+            input: 'Inspect the image.',
+            context: { step: { id: 'image-1', title: 'Reference', files: ['reference.png'] } },
+            root,
+            env: { HOME: home, USERPROFILE: home },
+            requireFiles: false,
+        });
+
+        assert.equal(result.data.summary, 'The reference was viewed.');
+        assert.match(JSON.stringify(api.requests[1]), /input_image/);
+        assert.match(JSON.stringify(api.requests[1]), /The picture the tool has made/);
+    } finally {
+        await api.close();
     }
 });
 

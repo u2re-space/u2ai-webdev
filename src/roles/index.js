@@ -174,6 +174,7 @@ export function partialCorrection(missing = [], errors = []) {
 
 /** The tools that write into the project. */
 const WRITE_TOOLS = Object.freeze(['write_file', 'replace_text', 'copy_path', 'generate_svg']);
+const REVIEW_TOOLS = new Set(['read_file', 'find_line']);
 
 /**
  * Whether the answer of a write tool says that the file is on the disk.
@@ -375,7 +376,7 @@ export function toolCallDetail(args) {
 }
 
 /**
- * The pictures that the answer of a tool names.
+ * The pictures that a tool names or that `read_file` attached to its answer.
  *
  * A tool that makes a picture — the screenshot of the page, a crop of the measurer — answers
  * with the path of the file. The path in the text is not a picture: the role has to see what
@@ -468,10 +469,12 @@ export async function runRole({
     });
     // A delegated role never hands work over again: the hand-over is one level deep.
     const specs = tools.specsFor(key, definition.tools)
+        .filter((spec) => key !== 'reviewer' || REVIEW_TOOLS.has(spec.name))
         .filter((spec) => depth === 0 || spec.name !== 'delegate_role');
     const schema = roleSchema(key);
     const schemaName = definition.schema ?? 'response';
-    const limit = Number.isInteger(maxTurns) && maxTurns > 0 ? maxTurns : definition.maxTurns;
+    const requestedTurns = Number.isInteger(maxTurns) && maxTurns > 0 ? maxTurns : definition.maxTurns;
+    const limit = key === 'reviewer' ? Math.min(requestedTurns, 4) : requestedTurns;
 
     // The hand-over of the work to another role: a separate session of that role.
     const delegate = createDelegator({
@@ -677,7 +680,7 @@ export async function runRole({
             }
             // A picture that the tool has made goes back into the conversation as a picture:
             // the role has to see what it has just shot, and a path in the text is not a
-            // picture. `read_file` refuses a binary file — that refusal was the sign.
+            // picture. A read_file answer also names an image after attaching it.
             const pictures = await pictureParts(root, String(output ?? ''));
             if (pictures.length) {
                 items.push({

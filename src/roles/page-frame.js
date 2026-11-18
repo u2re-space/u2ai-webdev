@@ -9,7 +9,8 @@
  *   sees it, and a picture of 2304 pixels may be a page of 1152 pixels blown up twice.
  *
  *   The page therefore carries its own width. The token `--real-page-width` says how wide the
- *   design is in CSS pixels, the canvas inside the body is laid out in that width, and the
+ *   design is in CSS pixels, inferred from the visual reference when measurements are absent;
+ *   the canvas inside the body is laid out in that width, and the
  *   scale `--zoom` fits the canvas into the window: `100cqi` is the inline size of the body
  *   (the body is the container of the page), so the canvas takes the whole width of the
  *   window and the proportions of the design are kept. The picture decides the width once,
@@ -183,11 +184,9 @@ export function pageScaleRules() {
   inline size of the body — the nearest container of the canvas — so the canvas takes the
   whole width of the window, and the proportions of the design are kept.
 - \`${PAGE_WIDTH_TOKEN}\` is the width the design really has, in CSS pixels, and it is a token
-  of the theme layer. The width of the reference picture is not that width: the same design
-  comes at 1152 pixels and at 2304 pixels. The width comes from the text — the body text of a
-  page is 16..18 CSS pixels, the measurements of the reference give its size in the pixels of
-  the picture, and the width of the picture divided by that number gives the width of the
-  design.
+   of the theme layer. The width of the reference picture may not equal the CSS width: infer a
+   practical design width from visible type and proportions, using the image dimensions as a hint
+   rather than requiring a measurement sheet.
 - The narrow screen is not scaled: under the breakpoint of the narrow layout — the mobile one,
   not the width of the design — the canvas becomes fluid (\`inline-size: 100%; zoom: 1; --zoom: 1;\`) and
   the layout of the narrow screen takes over.`;
@@ -196,9 +195,8 @@ export function pageScaleRules() {
 /**
  * The note about the width of the design, for the roles that look at the reference.
  *
- * The sizes of the reference are the numbers the model cannot see: the API has resized the
- * picture before it reached the model. An empty string when the sizes are not known — a role
- * without a picture is not told about a picture it cannot see.
+ * The pixel dimensions of the reference can guide the role, but are not guaranteed to match
+ * CSS pixels: a role may infer the design width from its typography and layout when no sheet exists.
  * @param {{ referenceSizes?: Array<{ path: string, width: number|null, height: number|null }> }} [context]
  * @returns {string}
  * @exports
@@ -210,9 +208,7 @@ export function pageWidthNote(context = {}) {
     if (!sizes.length) return '';
     return `The width of the design is not the width of the picture: a picture of 2000 pixels may
 be an upscale of a page of 1440 pixels, and the same design comes at 1152 pixels and at 2304
-pixels. The width of the design goes into the token \`${PAGE_WIDTH_TOKEN}\` — take it from the
-text: the body text of a page is 16..18 CSS pixels, the measurements of the reference give its
-size in the pixels of the picture, and the width of the picture divided by that number gives the
-width of the design (a picture of 2304 pixels with a text of 32 pixels shows a page of about
-1150 pixels).`;
+   pixels. The width of the design goes into the token \`${PAGE_WIDTH_TOKEN}\` — infer a practical
+   width from visible typography and layout, and treat the reference pixel dimensions as a hint,
+   not as a required measurement.`;
 }

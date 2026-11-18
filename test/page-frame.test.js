@@ -85,8 +85,8 @@ test('the architect decides the width of the design', () => {
     const text = flat(ROLES.architect.instructions({}));
 
     assert.ok(text.includes(`\`${PAGE_WIDTH_TOKEN}\` says how wide the page really is`), 'no token');
-    assert.match(text, /the same design comes at 1152 pixels and at 2304 pixels/);
-    assert.match(text, /the body text of a page is 16\.\.18 CSS pixels/);
+    assert.match(text, /reference image's pixel dimensions as a useful estimate/);
+    assert.match(text, /infer a practical canvas width/);
 });
 
 test('the roles that do not write the frontend get no canvas', () => {
@@ -109,13 +109,13 @@ test('the note about the width is silent without a reference', () => {
     assert.equal(pageWidthNote({ referenceSizes: [{ path: 'a.png', width: null, height: null }] }), '');
 });
 
-test('the note about the width warns about the upscale', () => {
+test('the note about the width treats image pixels as a hint, not a required measurement', () => {
     const text = flat(pageWidthNote({ referenceSizes: [{ path: 'landing.jpg', width: 2000, height: 1500 }] }));
 
     assert.match(text, /The width of the design is not the width of the picture/);
     assert.ok(text.includes(`\`${PAGE_WIDTH_TOKEN}\``), 'no token');
-    assert.match(text, /the body text of a page is 16\.\.18 CSS pixels/);
-    assert.match(text, /a picture of 2304 pixels with a text of 32 pixels shows a page of about/);
+    assert.match(text, /infer a practical width from visible typography and layout/);
+    assert.match(text, /not as a required measurement/);
 });
 
 test('the note about the reference names the size of the picture', () => {

@@ -47,6 +47,17 @@ test('the toolset writes, reads and replaces a file', async () => {
     assert.equal(body, '<h1>hello</h1>');
 });
 
+test('read_file attaches an image as a visual input instead of rejecting it as binary', async () => {
+    const { root, tools } = await workspace();
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jYuoAAAAASUVORK5CYII=', 'base64');
+    await writeFile(path.join(root, 'src', 'reference.png'), png);
+
+    const result = await tools.execute('read_file', { path: 'src/reference.png' });
+
+    assert.match(result, /Изображение src\/reference\.png приложено к запросу/);
+    assert.doesNotMatch(result, /Бинарный файл/);
+});
+
 test('the search greps the content, the names and the glob', async () => {
     const { root, tools } = await workspace();
     await tools.execute('write_file', { path: 'src/index.html', content: '<h1>hi</h1>\n' });

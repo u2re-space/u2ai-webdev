@@ -24,8 +24,9 @@
  */
 
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { runRole, roleReason } from '../roles/index.js';
+import { runRole, roleReason, resolveRole } from '../roles/index.js';
 import { imagePart } from '../openai/responses.js';
 import { resolveInside } from '../agent/paths.js';
 import { checkFiles } from '../agent/syntax.js';
@@ -137,6 +138,57 @@ export async function readScreenshots(root, files = []) {
         }
     }
     return { parts, names, warnings };
+}
+
+/**
+ * A fingerprint of the inputs that decide one review. A saved answer is reusable only while
+ * the step files, pictures, task and review model are unchanged.
+ * @param {{ root: string, task: string, step: object, brief: string, pageLog: string,
+ *   comparisonWords: string, screenshots: string[], references: string[], config: object }} request
+ * @returns {Promise<string>}
+ * @ai.hint io
+ */
+async function reviewInputHash({
+    root,
+    task,
+    step,
+    brief,
+    pageLog,
+    comparisonWords,
+    hasDesignContext,
+    screenshots,
+    references,
+    config,
+}) {
+    const hash = createHash('sha256');
+    hash.update(JSON.stringify({
+        task,
+        step,
+        brief,
+        pageLog,
+        comparisonWords,
+        hasDesignContext,
+        model: resolveRole('reviewer', config)?.model ?? null,
+        effort: resolveRole('reviewer', config)?.effort ?? null,
+        reviewerInstructions: config?.roles?.reviewer?.instructions ?? config?.roles?.default?.instructions ?? null,
+        reviewerTools: config?.roles?.reviewer?.tools ?? null,
+        maxTurns: Math.min(config?.stages?.review?.maxTurns ?? 4, 4),
+        checkStyles: config?.stages?.review?.checkStyles !== false,
+        repair: config?.stages?.review?.repair !== false,
+        repairRounds: config?.stages?.review?.repairRounds ?? 2,
+        reviewPromptVersion: 2,
+    }));
+    for (const rel of [...(step.files ?? []), ...screenshots, ...references]) {
+        const name = String(rel ?? '');
+        hash.update(`\0${name}\0`);
+        try {
+            const { abs } = await resolveInside(root, name);
+            hash.update(await readFile(abs));
+        } catch {
+            hash.update('<missing>');
+        }
+    }
+    return hash.digest('hex');
 }
 
 /**
@@ -502,12 +554,15 @@ export async function reviewStage({
         };
     }
 
-    const shots = await readScreenshots(root, screenshots);
+    const previous = await readReview(root, config, run);
+    const savedShots = Array.isArray(previous?.screenshots) ? previous.screenshots : [];
+    const savedLogs = String(previous?.pageLog ?? '');
+    const shots = await readScreenshots(root, screenshots.length ? screenshots : savedShots);
     const reference = await readReferences(root, inputs?.references ?? []);
     const warnings = [...shots.warnings, ...reference.warnings];
     // The words of the page: the console of the browser and the log of the bundler. The
     // reviewer judges the page as it is, and the page says what is wrong with it.
-    const pageLog = String(logs ?? '').trim();
+    const pageLog = String(logs ?? '').trim() || savedLogs;
     const reviews = [];
 
     // The comparison of the page with the reference: the numbers say how far the page is,
@@ -540,6 +595,40 @@ export async function reviewStage({
         ? [await picturePart(root, comparison.difference.rel)].filter(Boolean)
         : [];
     const comparisonWords = comparisonNote(comparison);
+    const previousReviews = new Map((Array.isArray(previous?.reviews) ? previous.reviews : [])
+        .filter((item) => item?.ok && item?.step?.id && item?.inputHash)
+        .map((item) => [item.step.id, item]));
+    const inputHashes = new Map();
+    for (const step of steps) {
+        inputHashes.set(step.id, await reviewInputHash({
+            root,
+            task: String(task ?? ''),
+            step,
+            brief,
+            pageLog,
+            comparisonWords,
+            hasDesignContext: Boolean(inputs),
+            screenshots: shots.names,
+            references: reference.names,
+            config,
+        }));
+    }
+    if (previous?.complete === true && steps.every((step) => (
+        previousReviews.get(step.id)?.inputHash === inputHashes.get(step.id)
+    )) && steps.every((step) => previousReviews.get(step.id)?.ok)) {
+        for (const step of steps) notify({ type: 'review.cached', stage: 'review', step: step.id });
+        return {
+            stage: 'review',
+            ok: previous.verdict !== 'fail',
+            verdict: reviewVerdict(previous.verdict),
+            reviews: previous.reviews,
+            issues: previous.issues ?? [],
+            repair: previous.repair ?? null,
+            file: reviewPath(root, config, run),
+            warnings: previous.warnings ?? [],
+            runId: run,
+        };
+    }
 
     /**
      * The review of one step of the plan.
@@ -584,7 +673,7 @@ export async function reviewStage({
             },
             root,
             env,
-            maxTurns: config?.stages?.review?.maxTurns ?? null,
+            maxTurns: Math.min(config?.stages?.review?.maxTurns ?? 4, 4),
             notify,
             parts: [...reference.parts, ...shots.parts, ...comparisonParts],
             runContext,
@@ -600,6 +689,7 @@ export async function reviewStage({
             issues: Array.isArray(data.issues) ? data.issues : [],
             summary: String(data.summary ?? result.text ?? '').trim(),
             recommendations: Array.isArray(data.recommendations) ? data.recommendations : [],
+            ...(result.data ? { inputHash: inputHashes.get(step.id) } : {}),
         };
         if (!result.data) warnings.push(`Шаг ${step.id}: ревьюер не вернул ответ.`);
         // The answer that does not fit the schema is kept, but it is reported.
@@ -609,20 +699,48 @@ export async function reviewStage({
         return review;
     };
 
-    for (const step of steps) reviews.push(await reviewOne(step));
+    const saveProgress = async () => {
+        await writeReview(root, config, run, {
+            verdict: worstVerdict(reviews.map((item) => item.verdict)),
+            reviews,
+            issues: reviews.flatMap((item) => item.issues),
+            screenshots: shots.names,
+            pageLog,
+            repair: null,
+            summary: `Шагов проверено: ${reviews.length} из ${steps.length}.`,
+        });
+    };
+    for (const step of steps) {
+        const inputHash = inputHashes.get(step.id);
+        const cached = previousReviews.get(step.id);
+        if (cached?.inputHash === inputHash) {
+            reviews.push(cached);
+            notify({ type: 'review.cached', stage: 'review', step: step.id });
+        } else {
+            const review = await reviewOne(step);
+            review.inputHash = inputHash;
+            reviews.push(review);
+        }
+        // If the stage is interrupted later, a completed step is not billed again on resume.
+        await saveProgress();
+    }
 
     // The findings of the first pass go to the disk before the repair starts: a repair that
     // runs out of time must not take the findings with it.
     // The findings of the harness itself: the markup and the styles that do not match.
     const pairing = [];
-    const snapshot = (repair) => {
+    const snapshot = (repair, complete = false) => {
         const issues = [...reviews.flatMap((review) => review.issues), ...pairing];
         const verdict = worstVerdict(reviews.map((review) => review.verdict));
         return {
             verdict,
             reviews,
             issues,
+            screenshots: shots.names,
+            pageLog,
             repair: repair ?? null,
+            complete,
+            warnings,
             summary: `Шагов проверено: ${reviews.length}. Вердикт: ${verdict}.`,
         };
     };
@@ -700,6 +818,20 @@ export async function reviewStage({
                 const step = steps.find((item) => item.id === old.step.id);
                 if (!step) continue;
                 reviews[index] = await reviewOne(step);
+                if (reviews[index].ok) {
+                    reviews[index].inputHash = await reviewInputHash({
+                        root,
+                        task: String(task ?? ''),
+                        step,
+                        brief,
+                        pageLog,
+                        comparisonWords,
+                        hasDesignContext: Boolean(inputs),
+                        screenshots: shots.names,
+                        references: reference.names,
+                        config,
+                    });
+                }
             }
             // The findings of the pass go to the disk as well: the next pass starts from
             // what the last one saw.
@@ -714,7 +846,7 @@ export async function reviewStage({
             errors: repairs.flatMap((item) => item.errors),
         }
         : null;
-    const review = snapshot(repair);
+    const review = snapshot(repair, reviews.length === steps.length && reviews.every((item) => item.ok));
     const file = await writeReview(root, config, run, review);
 
     return {

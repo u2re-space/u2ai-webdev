@@ -46,6 +46,7 @@ test('the defaults hold every stage of the pipeline, including learn', () => {
         assert.ok(defaults.stages[stage].maxTurns > 0);
     }
     assert.ok(defaults.stages.learn, 'the stage learn must be in the defaults');
+    assert.equal(defaults.stages.review.maxTurns, 4);
 });
 
 test('the defaults of the policy of the run are whole', () => {

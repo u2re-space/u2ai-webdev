@@ -308,7 +308,7 @@ export const defaults = {
     sight: { enabled: true, maxTurns: 16, timeoutMs: 30 * 60_000 },
     vector: { enabled: true, maxTurns: 8, timeoutMs: null },
     iconify: { enabled: true, maxTurns: 8, timeoutMs: null },
-    review: { enabled: true, maxTurns: 12, repair: true, repairRounds: 2, checkStyles: true, timeoutMs: null },
+    review: { enabled: true, maxTurns: 4, repair: true, repairRounds: 2, checkStyles: true, timeoutMs: null },
     audit: { enabled: true, maxTurns: 8, timeoutMs: null },
     learn: { enabled: true, maxTurns: 8, timeoutMs: null },
   },
