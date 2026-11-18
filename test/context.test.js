@@ -237,6 +237,24 @@ test('инструменты перечисляют, читают и ищут ч
     }
 });
 
+test('list_files sees files added after the run map was built', async () => {
+    const { root, config, cleanup } = await workspace();
+    try {
+        const context = await openContext({ root, config, runId: 'run-10-live-list' });
+        const map = await openRunMap({ root, config, runId: 'run-10-live-list' });
+        const toolset = createToolset({ root, config, context, map });
+        await mkdir(path.join(root, 'assets', 'import'), { recursive: true });
+        await writeFile(path.join(root, 'assets', 'import', 'award-badge.png'), Buffer.from([1, 2, 3]));
+
+        const listed = await toolset.execute('list_files', { path: 'assets/import', depth: 2 });
+
+        assert.match(listed, /assets\/import\/award-badge\.png/);
+        assert.doesNotMatch(listed, /\(пусто\)/);
+    } finally {
+        await cleanup();
+    }
+});
+
 test('файл, который прогон записал, сразу попадает в карту', async () => {
     const { root, config, cleanup } = await workspace();
     try {

@@ -39,7 +39,6 @@ import { isInside, resolveInside } from './paths.js';
 import { findChromium, findEgo, resolveEngine, screenshotPage, startStaticServer } from './browser.js';
 import { ensurePage } from '../stages/dev-server.js';
 import { shootPage } from '../stages/vision.js';
-import { mapFiles } from './run-map.js';
 import { findMeasurement } from '../inputs/measured.js';
 import { sniffType } from '../shared/data-urls.js';
 import {
@@ -767,14 +766,6 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
     async function runTool(name, args = {}) {
         switch (name) {
             case 'list_files': {
-                if (map?.enabled) {
-                    const located = await resolveInside(root, String(args.path ?? '.'), { allowRoot: true });
-                    const files = mapFiles(map.data, {
-                        dir: located.rel,
-                        depth: Math.max(1, Number(args.depth) || 2),
-                    }).slice(0, 400);
-                    return files.length ? files.join('\n') : '(пусто)';
-                }
                 const listing = await listFiles({
                     root,
                     dir: String(args.path ?? '.'),
