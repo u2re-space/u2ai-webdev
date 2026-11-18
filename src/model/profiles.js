@@ -35,18 +35,20 @@ import { ENUMS } from '../config/constants.js';
  *     ceiling is `medium`, because the levels above it cost the same seconds. The model is the
  *     fallback of the house: the run answers with it when the primary model refuses.
  */
+const GPT_MAX_OUTPUT = 128 * 1000;
+const GPT_WINDOW = 256 * 1024;
 export const MODEL_PROFILES = Object.freeze({
     'minimax/minimax-m3.1-flash': { window: 1024 * 1024 * 4, maxOutput: 512 * 1024, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'], schemaChannel: 'format' },
     'google/gemini-4-hydrogen': { window: 1024 * 1024 * 4, maxOutput: 64 * 1024, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'], schemaChannel: 'auto' },
     'moonshotai/kimi-k3.1-pro': { window: 1024 * 1024 * 4, maxOutput: 944_000, ceiling: 'high', efforts: ['none', 'low', 'medium', 'high'], schemaChannel: 'auto' },
-    'openai/gpt-6.2-sol': { window: 256 * 1024 * 4, maxOutput: 128 * 1000, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'], schemaChannel: 'format' },
-    'openai/gpt-6.1-sol': { window: 256 * 1024 * 4, maxOutput: 128 * 1000, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'], schemaChannel: 'format' },
-    'openai/gpt-6.1-terra': { window: 256 * 1024 * 4, maxOutput: 128 * 1000, ceiling: 'high', efforts: ['low', 'medium', 'high'], schemaChannel: 'format' },
-    'openai/gpt-6-luna': { window: 256 * 1024 * 4, maxOutput: 128 * 1000, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'], schemaChannel: 'format' },
-    'gpt-6.2-sol': { window: 256 * 1024 * 4, maxOutput: 128 * 1000, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'], schemaChannel: 'format' },
-    'gpt-6.1-sol': { window: 256 * 1024 * 4, maxOutput: 128 * 1000, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'], schemaChannel: 'format' },
-    'gpt-6.1-terra': { window: 256 * 1024 * 4, maxOutput: 128 * 1000, ceiling: 'high', efforts: ['low', 'medium', 'high'], schemaChannel: 'format' },
-    'gpt-6-luna': { window: 256 * 1024 * 4, maxOutput: 128 * 1000, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'], schemaChannel: 'format' },
+    'openai/gpt-6.2-sol': { window: GPT_WINDOW * 4, maxOutput: GPT_MAX_OUTPUT, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'], schemaChannel: 'format' },
+    'openai/gpt-6.1-sol': { window: GPT_WINDOW * 4, maxOutput: GPT_MAX_OUTPUT, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'], schemaChannel: 'format' },
+    'openai/gpt-6.1-terra': { window: GPT_WINDOW * 4, maxOutput: GPT_MAX_OUTPUT, ceiling: 'high', efforts: ['low', 'medium', 'high'], schemaChannel: 'format' },
+    'openai/gpt-6-luna': { window: GPT_WINDOW * 4, maxOutput: GPT_MAX_OUTPUT, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'], schemaChannel: 'format' },
+    'gpt-6.2-sol': { window: GPT_WINDOW * 4, maxOutput: GPT_MAX_OUTPUT, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'], schemaChannel: 'format' },
+    'gpt-6.1-sol': { window: GPT_WINDOW * 4, maxOutput: GPT_MAX_OUTPUT, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'], schemaChannel: 'format' },
+    'gpt-6.1-terra': { window: GPT_WINDOW * 4, maxOutput: GPT_MAX_OUTPUT, ceiling: 'high', efforts: ['low', 'medium', 'high'], schemaChannel: 'format' },
+    'gpt-6-luna': { window: GPT_WINDOW * 4, maxOutput: GPT_MAX_OUTPUT, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'], schemaChannel: 'format' },
     'openai/gpt-image-2.6-sunburst': { window: 0, maxOutput: 0, ceiling: null, efforts: [] },
     'gpt-image-2.6-sunburst': { window: 0, maxOutput: 0, ceiling: null, efforts: [] },
 });
