@@ -195,6 +195,13 @@ export function readOnlyOperation({ schema = null, tools = [], outputMode = null
     return Array.isArray(tools) && tools.every((tool) => READ_ONLY_TOOLS.has(String(tool?.name ?? '')));
 }
 
+const WRITE_READY_TOOL = Object.freeze({
+    type: 'function',
+    name: 'write_ready',
+    description: 'Signal that inspection is complete and you are ready to write or use an action-capable tool. Call this before any such tool; the next turn gets the full output budget and the remaining tools.',
+    parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+});
+
 /**
  * Whether the answer of a write tool says that the file is on the disk.
  *
@@ -471,7 +478,7 @@ export async function runRole({
     const definition = resolveRole(key, config);
     if (!definition) throw new Error(`Неизвестная роль: ${role}`);
 
-    const instructions = await buildInstructions({ role: key, config, context, root, env, runContext });
+    let instructions = await buildInstructions({ role: key, config, context, root, env, runContext });
     // The toolset of a role reads through the map of the run and remembers its answers in
     // the context of the run.
     const tools = toolset ?? createToolset({
@@ -492,14 +499,12 @@ export async function runRole({
         .filter((spec) => key !== 'reviewer' || REVIEW_TOOLS.has(spec.name))
         .filter((spec) => depth === 0 || spec.name !== 'delegate_role');
     const schema = roleSchema(key);
-    const readOnly = readOnlyOperation({ schema, tools: specs, outputMode: definition.outputMode });
-    const maxOutputTokens = maxOutputFor(
-        definition.model,
-        config,
-        definition.maxOutputTokens,
-        { readOnly },
-    );
-    const verbosity = config?.verbosity ?? (readOnly ? 'low' : null);
+    const readSpecs = specs.filter((spec) => READ_ONLY_TOOLS.has(String(spec?.name ?? '')));
+    const hasActionTools = Boolean(requireFiles) && key !== 'reviewer' && readSpecs.length < specs.length;
+    const preWriteSpecs = [...readSpecs, ...(hasActionTools ? [WRITE_READY_TOOL] : [])];
+    if (hasActionTools) {
+        instructions += '\n\nBefore writing files or using any action-capable tool, call `write_ready` on its own first. Until then, only the read tools are available. After `write_ready`, continue with the requested action; the next turn has the full output budget.';
+    }
     const schemaName = definition.schema ?? 'response';
     const requestedTurns = Number.isInteger(maxTurns) && maxTurns > 0 ? maxTurns : definition.maxTurns;
     const limit = key === 'reviewer' ? Math.min(requestedTurns, 4) : requestedTurns;
@@ -530,6 +535,7 @@ export async function runRole({
     let correctedWork = false;
     let workCorrections = 0;
     let fallback = null;
+    let needsFullSummary = false;
     // The channel of the schema: where the answer of the role travels. A model that is
     // pinned to a JSON answer never calls a tool: it describes the work instead of doing it.
     // The mode comes from the profile of the model, the role moves the schema into the
@@ -537,7 +543,9 @@ export async function runRole({
     // the channel itself when the answer of the role depends on the tools.
     let schemaChannel = forcedChannel ?? null;
     let withSchema = true;
+    let writeReady = false;
     // The files the step names: the role has to write them.
+    const wantsFiles = Boolean(requireFiles);
     const wantedFiles = Array.isArray(context?.step?.files)
         ? context.step.files.map((item) => String(item ?? '').trim()).filter(Boolean)
         : [];
@@ -549,23 +557,36 @@ export async function runRole({
      * @ai.hint io
      */
     const ask = async ({
-        tools: toolList = specs,
+        tools: toolList = writeReady ? specs : preWriteSpecs,
         schema: schemaOverride = undefined,
         schemaChannel: channelOverride = undefined,
+        fullOutput = false,
     } = {}) => {
+        const exploring = hasActionTools && !writeReady && toolList.length > 0
+            && !toolList.every((spec) => spec.name === schemaName);
+        const useSchema = schemaOverride === undefined
+            ? (withSchema && !exploring ? schema : null)
+            : schemaOverride;
+        const reduced = !fullOutput && (exploring || readOnlyOperation({
+            schema: useSchema,
+            tools: toolList.filter((spec) => spec.name !== WRITE_READY_TOOL.name),
+            outputMode: fullOutput || (schema && !toolList.length)
+                ? null
+                : definition.outputMode,
+        }));
         const raw = await client.responses.create({
             model: definition.model,
             instructions,
             input: items,
             tools: toolList,
-            schema: schemaOverride === undefined ? (withSchema ? schema : null) : schemaOverride,
+            schema: useSchema,
             schemaChannel: channelOverride === undefined ? schemaChannel : channelOverride,
             schemaName,
             effort: definition.effort,
             summary: definition.summary,
             temperature: definition.temperature,
-            maxOutputTokens,
-            verbosity,
+            maxOutputTokens: maxOutputFor(definition.model, config, definition.maxOutputTokens, { readOnly: reduced }),
+            verbosity: config?.verbosity ?? (reduced ? 'low' : null),
             signal,
         });
 
@@ -573,7 +594,8 @@ export async function runRole({
         const toolCalls = parsed.toolCalls ?? [];
         // The call of the schema is the answer, not a tool to run.
         const answerCall = schema ? toolCalls.find((call) => call.name === schemaName) : null;
-        const work = toolCalls.filter((call) => call.name !== schemaName);
+        const prematureSchemaAnswer = Boolean(answerCall && !useSchema);
+        const work = toolCalls.filter((call) => !schema || call.name !== schemaName);
         if (answerCall) {
             if (answerCall.parseError) {
                 // The answer of the schema came as broken JSON: there is no data to read.
@@ -589,7 +611,7 @@ export async function runRole({
             const problems = schemaProblems(parsed.data, schema);
             if (problems.length) parsed.schemaProblems = problems;
         }
-        return { parsed, work };
+        return { parsed, work, schemaUsed: Boolean(useSchema), prematureSchemaAnswer };
     };
 
     // The writes that really wrote a file.
@@ -597,10 +619,66 @@ export async function runRole({
 
     while (turns < limit) {
         turns += 1;
-        const { parsed, work } = await ask();
+        const { parsed, work, schemaUsed, prematureSchemaAnswer } = await ask();
 
         if (!work.length) {
             answer = parsed;
+            if (prematureSchemaAnswer && hasActionTools) {
+                fallback = parsed;
+                const files = Array.isArray(answer?.data?.files) ? answer.data.files : [];
+                const rest = ['dependencies', 'scripts'].reduce((sum, key) => (
+                    sum + (Array.isArray(answer?.data?.[key]) ? answer.data[key].length : 0)
+                ), 0);
+                const withoutWork = wantsFiles && writes.length === 0
+                    && files.filter((file) => !isEmptyFile(file)).length + rest === 0;
+                if (withoutWork && turns < limit && workCorrections < 2) {
+                    const list = wantedFiles.length ? ` The step names: ${wantedFiles.join(', ')}.` : '';
+                    workCorrections += 1;
+                    items.push({ role: 'user', content: [textPart(workCorrections === 1
+                        ? `${WORK_CORRECTION}${list}`
+                        : `${WORK_ORDER}${list}`)] });
+                    schemaChannel = 'tool';
+                    withSchema = false;
+                    continue;
+                }
+                needsFullSummary = true;
+                break;
+            }
+            if (prematureSchemaAnswer) {
+                answer = { ...parsed, data: null, schemaProblems: [] };
+            }
+            if (hasActionTools && wantsFiles && workCorrections > 0 && !writeReady && turns < limit && !answer.data
+                && !items.some((item) => item.type === 'function_call_output' && item.output === 'Write-ready. The next turn has the full output budget and the remaining tools.')) {
+                const list = wantedFiles.length ? ` The step names: ${wantedFiles.join(', ')}.` : '';
+                items.push({ role: 'user', content: [textPart(`${WORK_CORRECTION}${list}`)] });
+                schemaChannel = 'tool';
+                continue;
+            }
+            // The exploration turn intentionally has no answer schema. Finish with the schema
+            // on a tool-free request, whose output budget is full.
+            if (schema && !schemaUsed && hasActionTools && !answer.data) {
+                if (wantsFiles && writes.length === 0 && turns < limit && workCorrections < 2) {
+                    const list = wantedFiles.length ? ` The step names: ${wantedFiles.join(', ')}.` : '';
+                    workCorrections += 1;
+                    if (workCorrections === 1) {
+                        correctedWork = true;
+                        items.push({ role: 'user', content: [textPart(`${WORK_CORRECTION}${list}`)] });
+                    } else {
+                        items.push({ role: 'user', content: [textPart(`${WORK_ORDER}${list}`)] });
+                    }
+                    schemaChannel = 'tool';
+                    continue;
+                }
+                if (!answer.data && !answer.refusal && !answer.error) {
+                    items.push({ role: 'user', content: [textPart(SCHEMA_CORRECTION)] });
+                }
+                needsFullSummary = true;
+                break;
+            }
+            if (!schema && hasActionTools && !writeReady && !parsed.refusal && !parsed.error) {
+                needsFullSummary = true;
+                break;
+            }
             const withoutData = Boolean(schema) && !answer.data;
             const problems = Array.isArray(answer?.schemaProblems) ? answer.schemaProblems : [];
             // The answer without data is asked once more: the model gets the schema of the
@@ -624,7 +702,7 @@ export async function runRole({
                 sum + (Array.isArray(answer?.data?.[key]) ? answer.data[key].length : 0)
             ), 0);
             const useful = files.filter((file) => !isEmptyFile(file)).length + rest;
-            const withoutWork = requireFiles && !wrote && useful === 0;
+            const withoutWork = wantsFiles && !wrote && useful === 0;
             if (withoutWork && turns < limit && workCorrections < 2) {
                 // The first correction asks, the second one orders and names the tools.
                 const list = wantedFiles.length ? ` The step names: ${wantedFiles.join(', ')}.` : '';
@@ -648,21 +726,23 @@ export async function runRole({
             break;
         }
 
+        const readyAtTurnStart = writeReady;
         for (const call of work) {
-            calls.push(call);
-            notify({
-                type: 'role.tool',
-                role: key,
-                name: call.name,
-                arguments: toolCallDetail(call.arguments),
-                turn: turns,
-            });
             let output;
-            if (call.parseError) {
-                // The arguments of the call are broken: the tool is not run, and the model
-                // is told what to fix. The answer starts with the words of a failed tool,
-                // so the run does not count it as work that was done.
+            if (call.name === WRITE_READY_TOOL.name && hasActionTools && !readyAtTurnStart
+                && work.length === 1 && !call.parseError) {
+                writeReady = true;
+                output = 'Write-ready. The next turn has the full output budget and the remaining tools.';
+                notify({ type: 'role.write_ready', role: key, turn: turns });
+            } else if (call.parseError) {
+                // Invalid arguments are reported as such even if the tool was not yet enabled.
                 output = `The tool failed: the arguments of the call are not a JSON object (${call.parseError}). Call the tool again with valid JSON.`;
+            } else if (hasActionTools && !readyAtTurnStart && !READ_ONLY_TOOLS.has(call.name)) {
+                output = 'The tool was not run: call write_ready first. The next turn will have the full output budget.';
+            } else if (call.name === WRITE_READY_TOOL.name && readyAtTurnStart) {
+                output = 'Write-ready was already signaled; continue with the requested action.';
+            } else if (call.name === WRITE_READY_TOOL.name) {
+                output = 'write_ready must be called alone, before any action-capable tool.';
             } else if (call.name === 'delegate_role') {
                 // The hand-over of the work: a separate session of the other role.
                 try {
@@ -677,12 +757,22 @@ export async function runRole({
                     output = `The tool failed: ${error?.message ?? String(error)}`;
                 }
             }
+            if (call.name !== WRITE_READY_TOOL.name) {
+                calls.push(call);
+                notify({
+                    type: 'role.tool',
+                    role: key,
+                    name: call.name,
+                    arguments: toolCallDetail(call.arguments),
+                    turn: turns,
+                });
+            }
             if (WRITE_TOOLS.includes(call.name) && wroteSomething(output)) writes.push(call);
             const callId = call.callId ?? call.id ?? `${call.name}-${calls.length}`;
             // The answer of the tool goes into the log only when it is short: the content
             // of a file is not a line of the log.
             const short = String(output ?? '').trim();
-            if (short && short.length <= 140) {
+            if (call.name !== WRITE_READY_TOOL.name && short && short.length <= 140) {
                 notify({ type: 'role.tool.result', role: key, name: call.name, output: short });
             }
             items.push({
@@ -735,7 +825,7 @@ export async function runRole({
 
     // The last turn belongs to the answer: the role is asked to give it without any tool, so a
     // long run of tool calls still ends with the data of the schema.
-    if (schema && !answer?.data && !answer?.refusal && !answer?.error) {
+    if (schema && !needsFullSummary && !answer?.data && !answer?.refusal && !answer?.error) {
         items.push({ role: 'user', content: [textPart(FINAL_ANSWER)] });
         let final = null;
         try {
@@ -749,6 +839,29 @@ export async function runRole({
             stopped = 'completed';
         } else if (final?.text && !answer?.text) {
             answer = { ...answer, text: final.text };
+        }
+    }
+
+    if (needsFullSummary || (!schema && hasActionTools && !writeReady && Boolean(answer?.text))) {
+        const needsSchemaPrompt = Boolean(schema)
+            && !items.some((item) => item.role === 'user' && item.content?.some?.((part) => part.text === SCHEMA_CORRECTION));
+        if (!schema && needsFullSummary) {
+            items.push({ role: 'user', content: [textPart('Inspection is complete. Give the requested concise final answer now.')] });
+        } else if (needsSchemaPrompt) {
+            items.push({ role: 'user', content: [textPart(SCHEMA_CORRECTION)] });
+        }
+        try {
+            const previousAnswer = answer;
+            const { parsed: fullAnswer } = await ask({
+                tools: [],
+                fullOutput: true,
+                ...(schema ? { schema, schemaChannel: 'format' } : {}),
+            });
+            answer = fullAnswer.data || fullAnswer.text || fullAnswer.refusal || fullAnswer.error
+                ? fullAnswer
+                : previousAnswer;
+        } catch {
+            // Keep the answer of the read-only turn if the full-budget summary call fails.
         }
     }
 

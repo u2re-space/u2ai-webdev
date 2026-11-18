@@ -435,6 +435,7 @@ test('a role that answers with the schema and writes nothing is told to work, an
         textAnswer(JSON.stringify({
             summary: '', files: [], landmarks: [], accessibility: [], notes: '',
         })),
+        toolAnswer('write_ready', {}),
         toolAnswer('write_file', { path: 'index.html', content: '<h1>Привет</h1>' }),
         schemaAnswer('markup', {
             summary: 'The page is written.',
@@ -472,14 +473,19 @@ test('a role that answers with the schema and writes nothing is told to work, an
         assert.equal(answer.stopped, 'completed');
         assert.ok(answer.toolCalls.some((call) => call.name === 'write_file'));
         assert.equal(await readFile(path.join(root, 'index.html'), 'utf8'), '<h1>Привет</h1>');
-        // The first request pins the answer to the schema, the second one does not: a model
-        // that is pinned to a JSON answer never calls a tool.
-        assert.ok(api.requests[0].text?.format, 'the first request pins the JSON format');
+        // The inspection turns leave the schema out; write_ready raises the limit before the file is touched.
+        assert.equal(api.requests[0].text?.format, undefined);
+        assert.ok(api.requests[0].tools.some((tool) => tool.name === 'write_ready'));
         assert.equal(api.requests[1].text?.format, undefined, 'the second request has no JSON format');
+        assert.equal(api.requests[1].max_output_tokens, 131_072);
+        assert.equal(api.requests[2].max_output_tokens, 524_288);
+        assert.equal(api.requests[3].max_output_tokens, 524_288);
         // The correction names the file of the step.
         const second = api.requests[1].input.map((item) => JSON.stringify(item)).join('\n');
         assert.match(second, /not done the work yet/);
         assert.match(second, /index\.html/);
+        const third = api.requests[2].input.map((item) => JSON.stringify(item)).join('\n');
+        assert.match(third, /write_ready/);
     } finally {
         api.close();
     }
@@ -491,6 +497,7 @@ test('a model whose profile leaves the format free answers with its tools', asyn
     const env = { HOME: home, USERPROFILE: home };
 
     const api = await mockApi([
+        toolAnswer('write_ready', {}),
         toolAnswer('write_file', { path: 'index.html', content: '<h1>Привет</h1>' }),
         schemaAnswer('markup', {
             summary: 'The page is written.',
@@ -524,10 +531,10 @@ test('a model whose profile leaves the format free answers with its tools', asyn
 
         assert.equal(answer.stopped, 'completed');
         assert.equal(answer.toolCalls.length, 1);
-        // The request with tools does not pin the answer to the schema: the tools stay
-        // reachable for the model, and the schema travels as a tool of its own.
+        // The inspection request exposes only read tools and the private ready signal.
         assert.equal(api.requests[0].text?.format, undefined);
-        assert.ok(api.requests[0].tools.some((tool) => tool.name === 'markup'));
+        assert.ok(api.requests[0].tools.some((tool) => tool.name === 'write_ready'));
+        assert.equal(api.requests[0].tools.some((tool) => tool.name === 'markup'), false);
     } finally {
         api.close();
     }
@@ -596,6 +603,43 @@ test('only read operations without a report or summary get the low-output policy
     assert.equal(readOnlyOperation({ tools: [] }), true);
     assert.equal(readOnlyOperation({ tools: readTools, outputMode: 'summary' }), false);
     assert.equal(resolveRole('learner').outputMode, 'summary');
+});
+
+test('write_ready is private to the role loop and is not executed as a project tool', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-write-ready-'));
+    const home = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-home-'));
+    const env = { HOME: home, USERPROFILE: home };
+    const api = await mockApi([
+        toolAnswer('write_file', { path: 'private.txt', content: 'not yet' }),
+        schemaAnswer('code', codeData()),
+    ]);
+    const executed = [];
+    const toolset = {
+        specsFor: () => [
+            { type: 'function', name: 'read_file', parameters: {} },
+            { type: 'function', name: 'write_file', parameters: {} },
+        ],
+        async execute(name, args) {
+            executed.push({ name, args });
+            return 'Written private.txt';
+        },
+    };
+
+    try {
+        const config = structuredClone(defaults);
+        config.model = 'google/gemini-4-hydrogen';
+        config.backends = [{ baseURL: api.url, apiKey: 'test-key' }];
+        const client = await createClient({ config, env });
+        const answer = await runRole({ client, config, role: 'coder', input: 'Write it.', root, env, toolset, requireFiles: true });
+
+        assert.equal(executed.length, 0, 'write is rejected before ready');
+        assert.ok(!answer.toolCalls.some((call) => call.name === 'write_ready'));
+        assert.equal(api.requests[0].max_output_tokens, 16_384);
+        assert.equal(api.requests[0].tools.some((tool) => tool.name === 'write_file'), false);
+        assert.equal(api.requests[0].tools.some((tool) => tool.name === 'write_ready'), true);
+    } finally {
+        api.close();
+    }
 });
 
 test('a role that writes a summary keeps the full output budget', async () => {
@@ -690,6 +734,7 @@ test('the loop of a role runs the tools and returns the answer', async () => {
     const env = { HOME: home, USERPROFILE: home };
 
     const api = await mockApi([
+        toolAnswer('write_ready', {}),
         toolAnswer('write_file', { path: 'index.html', content: '<h1>Привет</h1>' }),
         textAnswer(JSON.stringify({
             summary: 'The page is written.',
@@ -716,11 +761,12 @@ test('the loop of a role runs the tools and returns the answer', async () => {
             root,
             env,
             notify: (event) => events.push(event),
+            requireFiles: true,
         });
 
         assert.equal(answer.role, 'coder');
         assert.equal(answer.stopped, 'completed');
-        assert.equal(answer.turns, 2);
+        assert.equal(answer.turns, 3);
         assert.equal(answer.toolCalls.length, 1);
         assert.equal(answer.toolCalls[0].name, 'write_file');
         assert.equal(answer.data.summary, 'The page is written.');
@@ -729,14 +775,17 @@ test('the loop of a role runs the tools and returns the answer', async () => {
         const call = events.find((event) => event.type === 'role.tool' && event.name === 'write_file');
         assert.equal(call.arguments.path, 'index.html');
         assert.ok(call.arguments.content.length <= 200);
-        assert.equal(api.requests[0].max_output_tokens, 65_536, 'a write-and-report role keeps the full model cap');
-        assert.equal(api.requests[0].text?.verbosity, undefined, 'verbosity is not lowered for a write role');
+        assert.equal(api.requests[0].max_output_tokens, 16_384, 'the inspection/ready turn uses a quarter cap');
+        assert.equal(api.requests[0].text?.verbosity, 'low');
+        assert.equal(api.requests[1].max_output_tokens, 65_536, 'the write turn restores the full cap');
+        assert.equal(api.requests[1].text?.verbosity, undefined);
+        assert.ok(events.some((event) => event.type === 'role.write_ready'));
 
         const body = await readFile(path.join(root, 'index.html'), 'utf8');
         assert.equal(body, '<h1>Привет</h1>');
 
         // The second request carries the call and its answer.
-        const second = api.requests[1];
+        const second = api.requests[2];
         const kinds = second.input.map((item) => item.type ?? item.role);
         assert.ok(kinds.includes('function_call'));
         assert.ok(kinds.includes('function_call_output'));
@@ -766,6 +815,7 @@ test('the loop stops when the turns run out', async () => {
             root,
             env,
             maxTurns: 2,
+            requireFiles: true,
         });
 
         assert.equal(answer.stopped, 'maxTurns');
@@ -822,6 +872,16 @@ test('a picture that a tool made goes back into the conversation as a picture', 
             responses: {
                 async create(body) {
                     requests.push(body);
+                    if (body?.tools?.some((tool) => tool?.name === 'write_ready')) {
+                        return {
+                            output: [{
+                                type: 'function_call',
+                                call_id: 'write-ready',
+                                name: 'write_ready',
+                                arguments: '{}',
+                            }],
+                        };
+                    }
                     return queue[Math.min(requests.length - 1, queue.length - 1)];
                 },
             },
@@ -911,7 +971,7 @@ test('a role that answers with a text instead of the schema is asked once more',
         assert.equal(answer.stopped, 'completed');
         assert.equal(answer.turns, 2);
         assert.equal(answer.data.summary, 'The page is written.');
-        // The second request carries the correction of the role.
+        assert.equal(api.requests[1].max_output_tokens, 65_536);
         const second = api.requests[1].input.map((item) => JSON.stringify(item)).join('\n');
         assert.match(second, /carried no data of the schema/);
     } finally {
@@ -924,7 +984,7 @@ test('a role whose turns ran out still gives the schema of the answer', async ()
     const home = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-home-'));
     const env = { HOME: home, USERPROFILE: home };
 
-    // The first two requests ask for a tool, the third one is the final answer of the role.
+    // The first two requests inspect; the final schema answer follows the exhausted tool loop.
     const api = await mockApi([
         toolAnswer('list_files', { path: '.' }),
         toolAnswer('list_files', { path: '.' }),
@@ -953,10 +1013,11 @@ test('a role whose turns ran out still gives the schema of the answer', async ()
         assert.equal(answer.data.summary, 'The page is written.');
         assert.equal(answer.toolCalls.length, 2);
 
-        // The final call asks for the answer alone: the only tool left is the schema.
+        // The final call asks for the answer alone with the full output budget.
         const last = api.requests[2];
         assert.equal(last.tools.length, 1);
         assert.equal(last.tools[0].name, 'code');
+        assert.equal(last.max_output_tokens, 65_536);
         const conversation = last.input.map((item) => JSON.stringify(item)).join('\n');
         assert.match(conversation, /The turns of the role are over/);
     } finally {
@@ -969,9 +1030,11 @@ test('a role that only describes its work is told to do it', async () => {
     const home = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-home-'));
     const env = { HOME: home, USERPROFILE: home };
 
-    // The first answer is a description of the work, the second one is the work.
+    // The first answer is a description of the work; then the role signals readiness and writes.
     const api = await mockApi([
         schemaAnswer('code', { ...codeData(), files: [] }),
+        toolAnswer('write_ready', {}),
+        toolAnswer('write_file', { path: 'index.html', content: '<h1>Done</h1>' }),
         schemaAnswer('code', codeData()),
     ]);
 
@@ -994,7 +1057,7 @@ test('a role that only describes its work is told to do it', async () => {
         });
 
         assert.equal(answer.stopped, 'completed');
-        assert.equal(answer.turns, 2);
+        assert.equal(answer.turns, 4);
         assert.equal(answer.data.files.length, 1);
         // The second request carries the correction of the work.
         const second = api.requests[1].input.map((item) => JSON.stringify(item)).join('\n');
@@ -1132,6 +1195,7 @@ test('a tool that fails does not break the loop', async () => {    const root = 
     const env = { HOME: home, USERPROFILE: home };
 
     const api = await mockApi([
+        toolAnswer('write_ready', {}),
         toolAnswer('write_file', { path: '../escape.txt', content: 'x' }),
         textAnswer('Done.'),
     ]);
@@ -1153,7 +1217,7 @@ test('a tool that fails does not break the loop', async () => {    const root = 
 
         assert.equal(answer.stopped, 'completed');
         assert.match(answer.text, /Done/);
-        const output = api.requests[1].input.find((item) => item.type === 'function_call_output');
+        const output = api.requests[2].input.filter((item) => item.type === 'function_call_output').at(-1);
         assert.match(output.output, /failed/i);
     } finally {
         api.close();

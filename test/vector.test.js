@@ -34,6 +34,16 @@ function fakeClient(answers = []) {
              * @returns {Promise<object>}
              */
             async create(body) {
+                if (body?.tools?.some((tool) => tool?.name === 'write_ready')) {
+                    return {
+                        output: [{
+                            type: 'function_call',
+                            call_id: 'write-ready',
+                            name: 'write_ready',
+                            arguments: '{}',
+                        }],
+                    };
+                }
                 const answer = answers[index++];
                 if (typeof answer === 'function') return await answer(body);
                 return answer ?? { output: [], output_text: '' };
