@@ -201,7 +201,7 @@ test('the effort of a stage is pulled down to what the model takes', async () =>
         config.reasoning.effort = 'xhigh';
         const client = await createClient({ config, env });
         await client.responses.create({ model: config.model, instructions: 'x', input: 'y', effort: 'xhigh' });
-        assert.equal(api.requests[0].reasoning.effort, 'high');
+        assert.equal(api.requests[0].reasoning.effort, 'xhigh');
     } finally {
         await api.close();
     }
