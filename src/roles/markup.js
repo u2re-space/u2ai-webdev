@@ -12,7 +12,7 @@
 import { UNTRUSTED } from './untrusted.js';
 import { INPUTS_IN_CONTEXT } from './inputs.js';
 import { referenceNote } from './reference.js';
-import { pageFrameRules, pageWidthNote } from './page-frame.js';
+import { PAGE_FRAME_CONTRACT, pageFrameRules, pageWidthNote } from './page-frame.js';
 import { webDevelopment } from './web-development.js';
 import { DELEGATE_NAMES, delegationNote } from '../agent/delegation.js';
 import { economyNote, economyTools } from './economy.js';
@@ -42,6 +42,7 @@ export const maxTurns = 16;
  * @ai.hint pure
  */
 export function instructions(context = {}) {
+    const vectorOnly = Boolean(context.vectorOnly);
     const task = context.task ? `The task of the run:\n${context.task}` : '';
     const step = context.step
         ? `The step to do:\n- title: ${context.step.title}\n- files: ${(context.step.files ?? []).join(', ') || 'not named'}\n- criteria: ${(context.step.criteria ?? []).join('; ') || 'not named'}`
@@ -50,11 +51,11 @@ export function instructions(context = {}) {
     const markup = context.markup
         ? `The markup language of the project: ${context.markup}.`
         : 'The markup language of the project: html.';
-    const design = context.design
+    const design = context.design && !vectorOnly
         ? 'The design direction and any prepared assets are in the task context. The attached reference image is a visual source of truth; measurements are optional. Match its regions, proportions, hierarchy and names of the parts.'
         : '';
-    const reference = referenceNote(context);
-    const width = pageWidthNote(context);
+    const reference = vectorOnly ? '' : referenceNote(context);
+    const width = vectorOnly ? '' : pageWidthNote(context);
     const repair = Array.isArray(context.issues) && context.issues.length
         ? `The review of the step found what has to be fixed, and the request names the file, the
 defect and the change that is asked for. Fix it now: find the place of the defect with
@@ -77,6 +78,7 @@ ${repair}
 
 Rules:
 ${INPUTS_IN_CONTEXT}
+${vectorOnly ? '' : PAGE_FRAME_CONTRACT}
 ${delegationNote(DELEGATE_NAMES)}
 ${economyNote()}
 - The platform of today comes before the habit of yesterday: look the guides up with the
@@ -112,7 +114,7 @@ ${economyNote()}
 - The markup is valid: the tags are closed, the attributes are quoted, the boolean attributes
   have no value.
 
-${pageFrameRules()}
+${vectorOnly ? '' : pageFrameRules()}
 
 ${webDevelopment('markup')}
 

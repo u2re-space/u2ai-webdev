@@ -17,6 +17,7 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { ROLES } from '../src/roles/index.js';
 import {
     PAGE_CLASS,
+    PAGE_FRAME_CONTRACT,
     PAGE_WIDTH_TOKEN,
     ZOOM_TOKEN,
     DEFAULT_PAGE_WIDTH,
@@ -79,6 +80,19 @@ test('the styles give the canvas the width of the design and the scale', () => {
     assert.ok(text.includes('@supports not (scrollbar-color: auto)'), 'scrollbar fallback is missing');
     // The narrow screen is not scaled.
     assert.match(text, /inline-size: 100%; zoom: 1;/);
+});
+
+test('both roles receive the binding page-frame contract even when the step does not name it', async () => {
+    const contract = flat(PAGE_FRAME_CONTRACT);
+    const markup = flat(ROLES.markup.instructions({}));
+    const styler = flat(ROLES.styler.instructions({}));
+    for (const text of [contract, markup, styler]) {
+        assert.match(text, /--real-page-width/);
+        assert.match(text, /--zoom/);
+        assert.match(text, /inline-size: var/);
+        assert.match(text, /narrow widths/);
+    }
+    assert.match(contract, /applies across partial steps/);
 });
 
 test('the architect decides the width of the design', () => {

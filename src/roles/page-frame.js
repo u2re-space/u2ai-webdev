@@ -18,8 +18,8 @@
  *
  * @depends none
  * @usedBy roles/markup, roles/styler, roles/architect
- * @exports PAGE_CLASS, PAGE_WIDTH_TOKEN, ZOOM_TOKEN, DEFAULT_PAGE_WIDTH, pageFrameRules,
- *          pageScaleRules, pageWidthNote
+ * @exports PAGE_CLASS, PAGE_WIDTH_TOKEN, ZOOM_TOKEN, DEFAULT_PAGE_WIDTH, PAGE_FRAME_CONTRACT,
+ *          pageFrameContractFor, pageFrameRules, pageScaleRules, pageWidthNote
  * @ai.tags roles, css, layout, container
  * @ai.hint pure
  */
@@ -161,8 +161,29 @@ export function pageFrameRules() {
  * @exports
  * @ai.hint pure
  */
+
+/** Binding cross-role invariant for the page canvas and its zoom scale. */
+export const PAGE_FRAME_CONTRACT = [
+    '## Binding page-frame contract',
+    `- Markup keeps one page canvas (class ${PAGE_CLASS}) inside body containing the page regions; markup never adds inline layout styles.`,
+    `- CSS registers ${PAGE_WIDTH_TOKEN} as <length>, ${ZOOM_TOKEN} as <number>, and --body-scrollbar-size as <length> with @property.`,
+    '- Body is a size container and vertical scroller: container-type:size; min-block-size:100dvh; overflow-y:auto. Do not clip page content.',
+    `- Canvas is container-type: inline-size, inline-size: var(${PAGE_WIDTH_TOKEN}, ${DEFAULT_PAGE_WIDTH}), and zoom: var(${ZOOM_TOKEN}, 1).`,
+    `- Theme computes ${ZOOM_TOKEN}:calc((100cqi - var(--body-scrollbar-size, 0.5rem)) / var(${PAGE_WIDTH_TOKEN}, ${DEFAULT_PAGE_WIDTH})).`,
+    '- At narrow widths, reflow content and reset the canvas to inline-size:100%; --zoom:1; zoom:1. Never scale the whole mobile page.',
+    '- This contract applies across partial steps and survives long guidance/tool history. Explicit task geometry wins; report an intentional override.',
+].join('\n');
+
+/** The roles jointly responsible for keeping the page frame and CSS in agreement. */
+export function pageFrameContractFor(role) {
+    return ['markup', 'styler'].includes(String(role ?? '').trim().toLowerCase())
+        ? PAGE_FRAME_CONTRACT
+        : '';
+}
+
 export function pageScaleRules() {
     return `## The canvas of the page and the scale
+${PAGE_FRAME_CONTRACT}
 - The body is the container of the page: \`container-type: size;\` on the \`body\`. A body with
   the size containment has no height of its own — it is given one:
   \`min-block-size: 100dvh;\`.

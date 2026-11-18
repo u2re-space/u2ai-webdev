@@ -43,6 +43,7 @@ import { createDelegator } from '../agent/delegation.js';
 import { effortFor } from '../agent/pace.js';
 import { getModelProfile, maxOutputFor, snapEffort } from '../model/profiles.js';
 import { houseModel } from '../model/trust.js';
+import { pageFrameContractFor } from './page-frame.js';
 
 import * as untrusted from './untrusted.js';
 import * as planner from './planner.js';
@@ -185,6 +186,7 @@ const DELEGATED_TOOLS = new Set([
 const VECTOR_TOOLS = new Set([
     'list_files', 'read_file', 'write_file', 'replace_text', 'search_files', 'read_skill',
 ]);
+const PAGE_FRAME_ROLES = new Set(['markup', 'styler']);
 const READ_ONLY_TOOLS = new Set([
     'list_files', 'read_file', 'find_line', 'search_files', 'list_backups',
     'read_skill', 'web_guidance', 'fetch_url', 'search_icons',
@@ -490,6 +492,10 @@ export async function runRole({
     if (!definition) throw new Error(`Неизвестная роль: ${role}`);
 
     let instructions = await buildInstructions({ role: key, config, context, root, env, runContext });
+    const frameContract = pageFrameContractFor(key);
+    if (frameContract) {
+        instructions += `\n\n${frameContract}\nThis binding page-frame contract survives partial steps and long research/tool history.`;
+    }
     // Keep the deliverable and its acceptance criteria in the high-priority instructions on
     // every model turn. Long guide/tool transcripts must not obscure what this step owns.
     if (context?.step && Array.isArray(context.step.files)) {
@@ -502,6 +508,10 @@ export async function runRole({
             `- You own and must write: ${files.join(', ') || '(no file paths named)'}.`,
             criteria.length ? `- Acceptance criteria: ${criteria.join('; ')}.` : '',
             '- These paths and criteria outrank optional research, previews and general recommendations.',
+            ...(PAGE_FRAME_ROLES.has(key) ? [
+                '- Preserve the page-frame contract: the page canvas, --real-page-width, --zoom, container sizing, and narrow-screen reflow must stay coordinated between markup and styles.',
+                '- Do not omit or replace the canvas/zoom contract because a partial step lists only one side of it.',
+            ] : []),
             ...(key === 'styler' ? [
                 '- Every explicit task requirement outranks the generic styling recommendations in the role prompt.',
                 '- Preserve requested dimensions, breakpoints, content treatment and overflow behavior; do not replace specified geometry with a generic pattern.',

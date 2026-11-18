@@ -335,6 +335,28 @@ test('the roles that check their work have the tool of the command', () => {
     assert.match(ROLES.styler.instructions({}), /styler has no shell-command tool/);
 });
 
+test('the binding page-frame contract is present in high-priority instructions for both roles', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-page-frame-priority-'));
+    for (const role of ['markup', 'styler']) {
+        const client = { responses: { async create(body) {
+            assert.match(body.instructions, /Binding page-frame contract/);
+            assert.match(body.instructions, /--real-page-width/);
+            assert.match(body.instructions, /--zoom/);
+            return schemaAnswer(role === 'markup' ? 'markup' : 'style', role === 'markup'
+                ? { summary: '', files: [], landmarks: [], accessibility: [], notes: '' }
+                : { summary: '', tokens: [], files: [], notes: '' });
+        } } };
+        await runRole({
+            client,
+            config: structuredClone(defaults),
+            role,
+            input: 'Do the step.',
+            context: { step: { id: `${role}-1`, title: 'Partial step', files: ['partial.file'], criteria: [] } },
+            root,
+        });
+    }
+});
+
 test('styler carries criteria after research and drops research tools at the cap', async () => {
     const requests = [];
     const answers = [

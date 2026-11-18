@@ -12,7 +12,7 @@
 import { UNTRUSTED } from './untrusted.js';
 import { INPUTS_IN_CONTEXT } from './inputs.js';
 import { referenceNote } from './reference.js';
-import { pageScaleRules, pageWidthNote } from './page-frame.js';
+import { PAGE_FRAME_CONTRACT, pageScaleRules, pageWidthNote } from './page-frame.js';
 import { webDevelopment } from './web-development.js';
 import { DELEGATE_NAMES, delegationNote } from '../agent/delegation.js';
 import { economyNote, economyTools } from './economy.js';
@@ -39,7 +39,7 @@ export const maxTurns = 16;
 /**
  * The instructions of the role.
  * @param {{ task?: string, step?: object, brief?: string, style?: string, design?: string,
- *   measurements?: string, palette?: string, referenceSizes?: object[] }} [context]
+ *   measurements?: string, palette?: string, referenceSizes?: object[], vectorOnly?: boolean }} [context]
  * @returns {string}
  * @exports
  * @ai.hint pure
@@ -58,6 +58,8 @@ export function instructions(context = {}) {
         : '';
     const reference = referenceNote(context);
     const width = pageWidthNote(context);
+    const pageFrame = context.vectorOnly ? '' : PAGE_FRAME_CONTRACT;
+    const pageScale = context.vectorOnly ? '' : pageScaleRules();
     const repair = Array.isArray(context.issues) && context.issues.length
         ? `The review of the step found what has to be fixed, and the request names the file, the defect and the change that is asked for. Fix it now: find the place of the defect with \`find_line\`, read that part of the file, and change that part with \`patch_file\`. 
         The answer is the repaired file on the disk, never a description of the change.`
@@ -77,6 +79,7 @@ ${repair}
 ## Rules:
 
 ${INPUTS_IN_CONTEXT}
+${pageFrame}
 ${delegationNote(DELEGATE_NAMES)}
 ${economyNote()}
 ${devToolsNote({
@@ -136,7 +139,7 @@ ${devToolsNote({
 - The styles answer to the class names of the markup. Do not invent a second naming.
 - The build stage checks the styles with the project's compiler after this step. The styler has no shell-command tool: write the stylesheet files of the step and let the build stage report compilation errors.
 
-${pageScaleRules()}
+${pageScale}
 
 ${webDevelopment('styler')}
 
