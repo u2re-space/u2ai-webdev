@@ -97,6 +97,13 @@ ${devToolsNote({
 - Make \`@property\` for every new custom property token (at start of CSS, before declare custom property tokens, before \`:root\` rules).
 - Use more actively CSS math \`calc(<expression>)\`, \`calc-size(<keyword>, <expression>)\` (expression with \`size\` keyword), \`round\`, \`abs\`, \`sign\`, \`mod\` (and etc., incl. trigonometry), and other modern math functions/expressions.
 - Use more actively CSS interaction, such \`user-select\`, \`pointer-events\`, \`touch-action\`, etc.
+- Use CSS/SCSS (selector) nesting (more actively).
+  - <https://drafts.csswg.org/css-nesting-1/>
+  - <https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Nesting>
+  - <https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Nesting/Nesting_and_specificity>
+  - <https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Nesting/Using>
+  - <https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Selectors/Nesting_selector>
+  - <https://sass-lang.com/documentation/style-rules/>
 - Use CSS \`white-space\` and \`text-wrap\` properties where is it suitable.
 - The body scrolls: set \`scrollbar-width: thin;\` and
   \`scrollbar-color: contrast-color(var(--background-color)) var(--background-color);\` on it.
