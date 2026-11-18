@@ -425,8 +425,9 @@ export const TOOL_SPECS = Object.freeze({
         description: 'Hand one task to another role: the markup, the styler, the coder, the editor or the '
             + 'iconifier. The role that receives the work starts a separate session — a clean conversation, '
             + 'its own tools and its own budget of turns — and does not see this one. Use it when the work '
-            + 'is not yours: the structure is wrong, the rules are wrong, the behaviour is wrong. The answer '
-            + 'is the report of that role and the files it wrote.',
+            + 'is a bounded piece that is not yours. Hand work over at most once per role run; do not pass '
+            + 'the whole step around. Name every expected output path in `files`. A hand-over counts '
+            + 'as complete only when output files are verified on disk.',
         parameters: {
             type: 'object',
             properties: {
@@ -434,11 +435,16 @@ export const TOOL_SPECS = Object.freeze({
                 task: str('What that role has to do, in full: the file, what is wrong and what the result '
                     + 'has to be. The role does not see this conversation.'),
                 reason: str('One sentence: why the work goes to that role.'),
+                files: {
+                    type: 'array',
+                    description: 'Expected output file paths, relative to the project root. Include every file the delegated task must write.',
+                    items: str('Path of an expected output file.'),
+                },
             },
-            required: ['role', 'task'],
+            required: ['role', 'task', 'files'],
             additionalProperties: false,
         },
-        required: ['role', 'task'],
+        required: ['role', 'task', 'files'],
         roles: [],
     },
     generate_svg: {

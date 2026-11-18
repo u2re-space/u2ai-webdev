@@ -26,7 +26,12 @@
  * @type {Readonly<Record<string, string>>}
  */
 export const HOUSE_MODELS = Object.freeze({
-    markup: 'moonshotai/kimi-k3.1-pro',
+    director: 'openai/gpt-6.1-terra',
+    planner: 'openai/gpt-6.1-terra',
+    markup: 'openai/gpt-6.1-terra',
+    editor: 'openai/gpt-6.1-terra',
+    iconfier: 'openai/gpt-6.1-terra',
+    coder: 'openai/gpt-6.1-terra'
 });
 
 /**

@@ -110,6 +110,18 @@ test('the toolset refuses to write outside the working directory', async () => {
     );
 });
 
+test('delegated toolsets can write only the expected files', async () => {
+    const { root, config } = await workspace();
+    const tools = createToolset({ root, config, writeFiles: ['main.js'] });
+
+    assert.match(await tools.execute('write_file', { path: 'main.js', content: 'export {};\n' }), /Записан main\.js/);
+    await assert.rejects(
+        () => tools.execute('write_file', { path: 'styles.scss', content: 'body {}\n' }),
+        /вне списка файлов делегированной задачи/,
+    );
+    assert.deepEqual(tools.writePaths(), ['main.js']);
+});
+
 test('a snapshot restores the file of the step before', async () => {
     const { root, tools } = await workspace();
     await tools.execute('write_file', { path: 'src/index.html', content: 'first' });

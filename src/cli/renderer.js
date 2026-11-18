@@ -413,9 +413,19 @@ export function createRenderer({
             }
             else if (type === 'delegate.done') {
                 if (json) {
-                    emit('delegate.done', { from: event.from ?? null, to: event.to ?? null, turns: event.turns ?? 0 });
+                    emit('delegate.done', {
+                        from: event.from ?? null,
+                        to: event.to ?? null,
+                        turns: event.turns ?? 0,
+                        ok: event.ok === true,
+                        files: Array.isArray(event.files) ? event.files : [],
+                    });
                 } else {
-                    this.note(`работа роли ${event.to ?? '?'} закончена: ${event.turns ?? 0} ходов`);
+                    const files = Array.isArray(event.files) && event.files.length
+                        ? `; файлы на диске: ${event.files.join(', ')}`
+                        : '';
+                    this.note(`результат роли ${event.to ?? '?'} ${event.ok === true ? 'проверен' : 'не подтверждён'}: `
+                        + `${event.turns ?? 0} ходов${files}`);
                 }
             }
             else if (type === 'picture.attempt') {

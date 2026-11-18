@@ -17,7 +17,7 @@
  *   A delegated role never gets the delegation tool itself: the hand-over is one level deep,
  *   and a chain of sessions is a chain nobody reads.
  *
- * @depends agent/fs-tools
+ * @depends node:fs/promises, agent/fs-tools, agent/paths
  * @usedBy roles/index, agent/tool-specs
  * @exports DELEGATES, DELEGATE_NAMES, delegateToolNames, createDelegator, delegationNote
  * @ai.tags roles, delegation, sessions
@@ -25,6 +25,8 @@
  * @changed 2026-11-16 Делегирование между ролями: отдельная сессия для другой роли.
  */
 
+import { stat } from 'node:fs/promises';
+import { resolveInside } from './paths.js';
 import { writeTextFile } from './fs-tools.js';
 
 /**
@@ -106,16 +108,18 @@ export function delegationNote(names = []) {
         described,
         'Name the role, the task and the reason. The role that receives the work starts a',
         'separate session: it does not see this conversation, so the task has to say everything',
-        'it needs — the file, what is wrong and what the result has to be.',
-        'Wait for its report, then continue with your own work.',
+        'it needs — the files, what is wrong and what the result has to be. Name every expected',
+        'output file in the `files` field. Delegate only a bounded piece of work,',
+        'not the whole step. Hand work over at most once in this role run.',
+        'Wait for its report, check that its files were actually written, then continue with your own work.',
     ].join('\n');
 }
 
 /**
  * The handler of the tool `delegate_role`.
  *
- * The work goes to a new session of the named role. Her answer comes back as the report of
- * the tool, and the files she named are written on the disk.
+ * The work goes to a new session of the named role. Expected output paths are scoped to that
+ * session and checked on disk before the hand-over is reported as complete.
  * @param {{ run: Function, config?: object, root: string, env?: object, notify?: Function,
  *   runContext?: object|null, role?: string|null, depth?: number, resolveRole?: Function|null }} options
  *   `run` starts a session of a role: it is the runner of the roles, called with the role, the
@@ -141,6 +145,13 @@ export function createDelegator({
         const name = String(args?.role ?? '').trim().toLowerCase();
         const task = String(args?.task ?? '').trim();
         const reason = String(args?.reason ?? '').trim();
+        const expected = [];
+        for (const file of Array.isArray(args?.files) ? args.files : []) {
+            const value = String(file ?? '').trim();
+            if (!value) continue;
+            const { rel } = await resolveInside(root, value, { forWrite: true, allowRoot: false });
+            if (!expected.some((item) => item.toLowerCase() === rel.toLowerCase())) expected.push(rel);
+        }
         if (!name) throw new Error('delegate_role: назовите роль, которой передаётся работа.');
         if (!task) throw new Error('delegate_role: задача пуста — напишите, что именно нужно сделать.');
         if (!DELEGATES[name]) {
@@ -152,8 +163,20 @@ export function createDelegator({
         if (depth > 0) {
             throw new Error('delegate_role: передача работы глубже одного уровня не делается.');
         }
+        if (!expected.length) {
+            throw new Error('delegate_role: укажите конкретные выходные файлы в поле files.');
+        }
         const spec = typeof resolveRole === 'function' ? resolveRole(name) : null;
         if (!spec) throw new Error(`delegate_role: роль ${name} недоступна.`);
+
+        const baseline = new Map();
+        for (const file of expected) {
+            try {
+                const { abs, rel } = await resolveInside(root, file, { allowRoot: false });
+                const info = await stat(abs);
+                if (info.isFile()) baseline.set(rel.toLowerCase(), `${info.size}:${info.mtimeMs}`);
+            } catch { /* A missing expected file is the usual case for delegated creation. */ }
+        }
 
         notify({ type: 'delegate.start', from: role, to: name, task, reason });
         // The separate session: its own conversation, its own instructions, its own tools.
@@ -168,6 +191,9 @@ export function createDelegator({
             context: {
                 ...context,
                 task,
+                // A delegated task is not the parent's step. Carrying it over gave the child
+                // conflicting instructions about which files it owns.
+                step: expected.length ? { id: `delegate-${name}`, title: task, role: name, files: expected, criteria: [] } : null,
                 delegated: true,
                 from: role,
                 reason,
@@ -177,32 +203,58 @@ export function createDelegator({
             env,
             notify,
             runContext,
-            maxTurns: spec.maxTurns ?? null,
+            // Leave room for runRole's final schema answer: at most seven tool turns plus
+            // one final request, rather than eight turns followed by an uncounted extra call.
+            maxTurns: Math.min(spec.maxTurns ?? 7, 7),
+            requireFiles: true,
             depth: depth + 1,
             // The pictures of the caller travel with the work: the role that receives it
             // looks at the same reference the caller looked at.
             parts,
         });
-        notify({ type: 'delegate.done', from: role, to: name, turns: result?.turns ?? 0 });
-
-        // The files the delegated role named are written: the disk is the truth.
-        const written = [];
+        // Apply files returned in the schema, then verify outputs against the disk.
+        const candidates = new Set([...expected, ...(Array.isArray(result?.outputFiles) ? result.outputFiles : [])]);
         for (const file of Array.isArray(result?.data?.files) ? result.data.files : []) {
             const rel = String(file?.path ?? '').trim();
             const content = typeof file?.content === 'string' ? file.content : null;
             if (!rel || content === null) continue;
+            if (!expected.some((item) => item.toLowerCase() === rel.toLowerCase())) continue;
             try {
-                await writeTextFile({ root, file: rel, content, overwrite: true });
-                written.push(rel);
-            } catch (error) {
-                written.push(`${rel} (не записан: ${error?.message ?? error})`);
+                const saved = await writeTextFile({ root, file: rel, content, overwrite: true });
+                candidates.add(saved.rel);
+            } catch { /* The verification below reports missing output honestly. */ }
+        }
+
+        const existing = [];
+        for (const rel of candidates) {
+            try {
+                const { abs, rel: safe } = await resolveInside(root, rel, { allowRoot: false });
+                if ((await stat(abs)).isFile()) existing.push(safe);
+            } catch { /* Missing, unsafe, or non-file output is not completed work. */ }
+        }
+        const expectedMissing = [];
+        for (const file of expected) {
+            const found = existing.find((item) => item.toLowerCase() === file.toLowerCase());
+            if (!found) {
+                expectedMissing.push(file);
+                continue;
+            }
+            const before = baseline.get(found.toLowerCase());
+            if (before) {
+                const { abs } = await resolveInside(root, found, { allowRoot: false });
+                const info = await stat(abs);
+                if (`${info.size}:${info.mtimeMs}` === before) expectedMissing.push(`${file} (не изменён)`);
             }
         }
+        const ok = existing.length > 0 && expectedMissing.length === 0;
+        notify({ type: 'delegate.done', from: role, to: name, turns: result?.turns ?? 0, ok, files: existing });
 
         const report = String(result?.text ?? '').trim() || (result?.data?.summary ? String(result.data.summary).trim() : '');
         const lines = [
-            `The role ${name} did the work in a separate session: ${result?.turns ?? 0} turns, ${result?.toolCalls?.length ?? 0} calls of tools.`,
-            written.length ? `Files: ${written.join(', ')}` : '',
+            `The role ${name} used a separate session: ${result?.turns ?? 0} turns, ${result?.toolCalls?.length ?? 0} calls of tools.`,
+            ok ? 'Delegated output: VERIFIED.' : 'Delegated output: NOT VERIFIED; continue the work here or report the blocker.',
+            existing.length ? `Verified files on disk: ${existing.join(', ')}` : 'No output files were verified on disk.',
+            expectedMissing.length ? `Expected files still missing: ${expectedMissing.join(', ')}.` : '',
             report ? '' : null,
             report || '(the role said nothing)',
         ].filter((item) => item !== null && item !== '');

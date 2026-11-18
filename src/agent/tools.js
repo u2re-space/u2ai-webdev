@@ -424,7 +424,7 @@ async function entryPage(root, page = '') {
  * @returns {{ execute: (name: string, args: object) => Promise<string>, specs: object[],
  *   specsFor: Function, setWriteDirs: Function, writeDirs: Function }}
  */
-export function createToolset({ root, config, role = null, mcp = [], writeDirs = null, env = process.env, context = null, map = null, notify = null }) {
+export function createToolset({ root, config, role = null, mcp = [], writeDirs = null, writeFiles = null, env = process.env, context = null, map = null, notify = null }) {
     const mcpTools = mcpToolEntries(mcp);
     const mcpSpecs = mcpTools.map((entry) => ({
         type: 'function',
@@ -434,6 +434,10 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
     }));
     const specs = [...buildSpecs(config?.tools, { role }), ...mcpSpecs];
     let allowed = (writeDirs ?? [root]).map((dir) => path.resolve(dir));
+    const scopedFiles = Array.isArray(writeFiles)
+        ? new Set(writeFiles.map((file) => String(file ?? '').replace(/\\/g, '/').toLowerCase()))
+        : null;
+    const scopedWrites = new Set();
 
     // The files the role has already read: the content of a file stays in the conversation,
     // and the second read of it costs the context of the run for nothing.
@@ -610,10 +614,18 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
      */
     async function writePath(value) {
         const located = await resolveInside(root, String(value ?? ''), { forWrite: true, allowRoot: false });
+        if (scopedFiles && !scopedFiles.has(located.rel.toLowerCase())) {
+            throw new Error(`Запись вне списка файлов делегированной задачи запрещена: ${located.rel}`);
+        }
         if (!allowed.some((dir) => isInside(dir, located.abs))) {
             throw new Error(`Запись вне разрешённого каталога запрещена: ${located.rel}`);
         }
         return located;
+    }
+
+    /** Remember a scoped output only after the operation has succeeded. */
+    function rememberScopedWrite(rel) {
+        if (scopedFiles && rel) scopedWrites.add(String(rel));
     }
 
     /**
@@ -627,6 +639,9 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
      */
     async function writeDirPath(value) {
         const located = await resolveInside(root, String(value ?? ''), { forWrite: true, allowRoot: true });
+        if (scopedFiles) {
+            throw new Error('Делегированная задача может писать только в явно названные файлы.');
+        }
         if (!allowed.some((dir) => isInside(dir, located.abs))) {
             throw new Error(`The write outside the allowed directory is refused: ${located.rel}`);
         }
@@ -847,6 +862,7 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                     file: target.rel,
                     edits: Array.isArray(args.edits) ? args.edits : [],
                 });
+                rememberScopedWrite(target.rel);
                 await rememberInMap(target.rel);
                 await forgetReadFact(target.rel);
                 return `Файл ${result.rel} изменён: правок ${result.applied}, строк затронуто ${result.lines}, `
@@ -883,6 +899,7 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                 const target = await writePath(args.path);
                 forgetReads(target.rel);
                 const result = await writeTextFile({ root, file: target.rel, content: String(args.content ?? '') });
+                rememberScopedWrite(target.rel);
                 await rememberInMap(target.rel);
                 await forgetReadFact(target.rel);
                 await context?.file?.(target.rel);
@@ -898,6 +915,7 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                     replacement: String(args.replacement ?? ''),
                     all: Boolean(args.all),
                 });
+                rememberScopedWrite(target.rel);
                 await rememberInMap(target.rel);
                 await forgetReadFact(target.rel);
                 return `Заменено в ${result.rel}: ${result.replacements} (${result.bytes} байт).`;
@@ -919,6 +937,7 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                 const source = await resolveInside(root, String(args.source ?? ''), { allowRoot: false });
                 const destination = await writePath(args.destination);
                 const result = await copyPath({ root, source: source.rel, destination: destination.rel });
+                rememberScopedWrite(result.destination);
                 await rememberInMap(result.rel ?? destination.rel);
                 return `Скопировано ${result.rel ?? source.rel} → ${destination.rel}.`;
             }
@@ -1086,6 +1105,9 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                 return lines.join('\n');
             }
             case 'generate_svg': {
+                if (scopedFiles && !args.path) {
+                    throw new Error('В делегированной задаче укажите точный ожидаемый путь SVG в path.');
+                }
                 const output = args.path ? (await writePath(args.path)).rel : '';
                 const result = await generateSvg({
                     prompt: String(args.prompt ?? ''),
@@ -1094,9 +1116,13 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                     output,
                     cwd: root,
                 });
+                rememberScopedWrite(result.rel);
                 return `Записан SVG ${result.rel} (${result.bytes} байт).`;
             }
             case 'download_font': {
+                if (scopedFiles && !args.path) {
+                    throw new Error('В делегированной задаче укажите точный ожидаемый путь шрифта в path.');
+                }
                 const output = args.path ? (await writePath(args.path)).rel : '';
                 const result = await downloadFont({
                     name: String(args.name ?? ''),
@@ -1105,6 +1131,7 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                     output,
                     cwd: root,
                 });
+                rememberScopedWrite(result.rel);
                 return `Загружен шрифт ${result.family}: ${result.rel} (${result.bytes} байт).`;
             }
             case 'compare_images': {
@@ -1145,6 +1172,9 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                 return lines.join('\n');
             }
             case 'download_icons': {
+                if (scopedFiles) {
+                    throw new Error('В делегированной задаче загрузка набора иконок запрещена: она пишет каталог файлов.');
+                }
                 const output = args.path ? (await writePath(args.path)).rel : '';
                 const result = await downloadIcons({
                     name: String(args.name ?? ''),
@@ -1231,6 +1261,9 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
     return {
         execute,
         specs,
+        writePaths() {
+            return [...scopedWrites];
+        },
         /**
          * The tool list of one role: the catalogue, cut down to what that role may call.
          * @param {string} roleName

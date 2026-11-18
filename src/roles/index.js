@@ -173,7 +173,12 @@ export function partialCorrection(missing = [], errors = []) {
 }
 
 /** The tools that write into the project. */
-const WRITE_TOOLS = Object.freeze(['write_file', 'replace_text', 'copy_path', 'generate_svg']);
+const WRITE_TOOLS = Object.freeze(['write_file', 'replace_text', 'patch_file', 'copy_path', 'generate_svg']);
+const DELEGATED_TOOLS = new Set([
+    'list_files', 'read_file', 'find_line', 'search_files', 'read_skill', 'web_guidance',
+    'fetch_url', 'search_icons', 'batch', 'write_file', 'replace_text', 'patch_file',
+    'copy_path', 'generate_svg',
+]);
 const READ_ONLY_TOOLS = new Set([
     'list_files', 'read_file', 'find_line', 'search_files', 'list_backups',
     'read_skill', 'web_guidance', 'fetch_url', 'search_icons',
@@ -493,10 +498,12 @@ export async function runRole({
         // The log of the sibling CLIs comes live: the run shows what the bridge does while
         // the bridge works.
         notify,
+        writeFiles: context?.delegated ? (context?.step?.files ?? []) : null,
     });
     // A delegated role never hands work over again: the hand-over is one level deep.
     const specs = tools.specsFor(key, definition.tools)
         .filter((spec) => key !== 'reviewer' || REVIEW_TOOLS.has(spec.name))
+        .filter((spec) => !context?.delegated || DELEGATED_TOOLS.has(spec.name))
         .filter((spec) => depth === 0 || spec.name !== 'delegate_role');
     const schema = roleSchema(key);
     const readSpecs = specs.filter((spec) => READ_ONLY_TOOLS.has(String(spec?.name ?? '')));
@@ -544,6 +551,7 @@ export async function runRole({
     let schemaChannel = forcedChannel ?? null;
     let withSchema = true;
     let writeReady = false;
+    let delegationUsed = false;
     // The files the step names: the role has to write them.
     const wantsFiles = Boolean(requireFiles);
     const wantedFiles = Array.isArray(context?.step?.files)
@@ -562,15 +570,18 @@ export async function runRole({
         schemaChannel: channelOverride = undefined,
         fullOutput = false,
     } = {}) => {
-        const exploring = hasActionTools && !writeReady && toolList.length > 0
-            && !toolList.every((spec) => spec.name === schemaName);
+        const availableTools = delegationUsed
+            ? toolList.filter((spec) => spec.name !== 'delegate_role')
+            : toolList;
+        const exploring = hasActionTools && !writeReady && availableTools.length > 0
+            && !availableTools.every((spec) => spec.name === schemaName);
         const useSchema = schemaOverride === undefined
             ? (withSchema && !exploring ? schema : null)
             : schemaOverride;
         const reduced = !fullOutput && (exploring || readOnlyOperation({
             schema: useSchema,
-            tools: toolList.filter((spec) => spec.name !== WRITE_READY_TOOL.name),
-            outputMode: fullOutput || (schema && !toolList.length)
+            tools: availableTools.filter((spec) => spec.name !== WRITE_READY_TOOL.name),
+            outputMode: fullOutput || (schema && !availableTools.length)
                 ? null
                 : definition.outputMode,
         }));
@@ -578,7 +589,7 @@ export async function runRole({
             model: definition.model,
             instructions,
             input: items,
-            tools: toolList,
+            tools: availableTools,
             schema: useSchema,
             schemaChannel: channelOverride === undefined ? schemaChannel : channelOverride,
             schemaName,
@@ -744,11 +755,15 @@ export async function runRole({
             } else if (call.name === WRITE_READY_TOOL.name) {
                 output = 'write_ready must be called alone, before any action-capable tool.';
             } else if (call.name === 'delegate_role') {
-                // The hand-over of the work: a separate session of the other role.
-                try {
-                    output = await delegate(call.arguments ?? {});
-                } catch (error) {
-                    output = `The tool failed: ${error?.message ?? String(error)}`;
+                if (delegationUsed) {
+                    output = 'The tool failed: this role has already handed work over once. Continue with your own step.';
+                } else {
+                    delegationUsed = true;
+                    try {
+                        output = await delegate(call.arguments ?? {});
+                    } catch (error) {
+                        output = `The tool failed: ${error?.message ?? String(error)}`;
+                    }
                 }
             } else {
                 try {
@@ -887,6 +902,7 @@ export async function runRole({
         /** The fields of the answer that do not fit the schema of the role; empty when it fits. */
         schemaProblems: Array.isArray(answer?.schemaProblems) ? answer.schemaProblems : [],
         toolCalls: calls,
+        outputFiles: tools.writePaths?.() ?? [],
         turns,
         usage: answer.usage ?? null,
         model: answer.model ?? definition.model,
