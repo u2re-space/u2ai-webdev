@@ -11,7 +11,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { buildResponsesBody, parseResponse, extractToolCalls } from '../src/openai/responses.js';
-import { getModelProfile, MODEL_PROFILES, snapEffort } from '../src/model/profiles.js';
+import { getModelProfile, maxOutputFor, MODEL_PROFILES, snapEffort } from '../src/model/profiles.js';
 import { fallbackChain } from '../src/openai/fallback.js';
 import { defaults } from '../src/config/defaults.js';
 
@@ -95,6 +95,14 @@ test('the profile of a text model is tuned by the live answers of the gateway', 
     assert.equal(kimi.ceiling, 'high', 'the levels above it cost the same seconds');
     assert.equal(snapEffort('high', kimi), 'high');
     assert.equal(snapEffort('none', kimi), 'none', 'the reasoning may be turned off');
+});
+
+test('read-only requests use one quarter of the model output cap', () => {
+    assert.equal(maxOutputFor('google/gemini-4-hydrogen', null, null, { readOnly: true }), 16_384);
+    assert.equal(maxOutputFor('google/gemini-4-hydrogen', null, 32_000, { readOnly: true }), 8_000);
+    assert.equal(maxOutputFor('google/gemini-4-hydrogen'), 65_536, 'write-ups keep the full cap');
+    assert.equal(maxOutputFor('google/gemini-4-hydrogen', null, 48_000), 48_000);
+    assert.equal(maxOutputFor('google/gemini-4-hydrogen', null, 16, { readOnly: true }), 4);
 });
 
 test('the Gemini is the alternative to the Kimi and the Kimi is the fallback', () => {

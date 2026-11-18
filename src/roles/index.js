@@ -22,7 +22,7 @@
  * @depends openai/responses, agent/schemas, agent/skills, agent/docs, agent/tools, agent/pace,
  *          model/profiles, model/trust
  * @usedBy stages/index, cli
- * @exports ROLES, ROLE_NAMES, resolveRole, buildInstructions, runRole, roleSchema, roleReason,
+ * @exports ROLES, ROLE_NAMES, resolveRole, readOnlyOperation, buildInstructions, runRole, roleSchema, roleReason,
  *          SCHEMA_CORRECTION, FINAL_ANSWER, WORK_CORRECTION, WORK_ORDER, syntaxCorrection,
  *          partialCorrection
  * @ai.tags roles, agent
@@ -41,7 +41,7 @@ import { sourcesBlock } from '../agent/sources.js';
 import { createToolset } from '../agent/tools.js';
 import { createDelegator } from '../agent/delegation.js';
 import { effortFor } from '../agent/pace.js';
-import { getModelProfile, snapEffort } from '../model/profiles.js';
+import { getModelProfile, maxOutputFor, snapEffort } from '../model/profiles.js';
 import { houseModel } from '../model/trust.js';
 
 import * as untrusted from './untrusted.js';
@@ -174,7 +174,26 @@ export function partialCorrection(missing = [], errors = []) {
 
 /** The tools that write into the project. */
 const WRITE_TOOLS = Object.freeze(['write_file', 'replace_text', 'copy_path', 'generate_svg']);
+const READ_ONLY_TOOLS = new Set([
+    'list_files', 'read_file', 'find_line', 'search_files', 'list_backups',
+    'read_skill', 'web_guidance', 'fetch_url', 'search_icons',
+]);
 const REVIEW_TOOLS = new Set(['read_file', 'find_line']);
+
+/**
+ * Whether an operation only reads and has no report or summary to produce.
+ *
+ * Read-only tools do not make a review read-only for budget purposes when its schema is the
+ * report. Plain-text roles can declare `outputMode: 'summary'` for the same reason.
+ * @param {{ schema?: object|null, tools?: object[], outputMode?: string|null }} operation
+ * @returns {boolean}
+ * @exports
+ * @ai.hint pure
+ */
+export function readOnlyOperation({ schema = null, tools = [], outputMode = null } = {}) {
+    if (schema || outputMode === 'summary') return false;
+    return Array.isArray(tools) && tools.every((tool) => READ_ONLY_TOOLS.has(String(tool?.name ?? '')));
+}
 
 /**
  * Whether the answer of a write tool says that the file is on the disk.
@@ -234,7 +253,7 @@ export function roleSchema(role) {
  * @param {object} [config]
  * @returns {{ name: string, schema: string|null, tools: string[], maxTurns: number,
  *   model: string|null, effort: string|null, summary: string|null, temperature: number|null,
- *   maxOutputTokens: number|null, instructions: string|null }|null}
+ *   maxOutputTokens: number|null, outputMode: string|null, instructions: string|null }|null}
  * @exports
  * @ai.hint pure
  */
@@ -277,6 +296,7 @@ export function resolveRole(role, config = {}) {
     return {
         name: key,
         schema: base.schema ?? null,
+        outputMode: base.outputMode ?? (base.schema ? 'writeup' : null),
         tools: Array.isArray(tools) ? tools : base.tools,
         maxTurns: Number.isInteger(maxTurns) && maxTurns > 0 ? maxTurns : base.maxTurns,
         model,
@@ -472,6 +492,14 @@ export async function runRole({
         .filter((spec) => key !== 'reviewer' || REVIEW_TOOLS.has(spec.name))
         .filter((spec) => depth === 0 || spec.name !== 'delegate_role');
     const schema = roleSchema(key);
+    const readOnly = readOnlyOperation({ schema, tools: specs, outputMode: definition.outputMode });
+    const maxOutputTokens = maxOutputFor(
+        definition.model,
+        config,
+        definition.maxOutputTokens,
+        { readOnly },
+    );
+    const verbosity = config?.verbosity ?? (readOnly ? 'low' : null);
     const schemaName = definition.schema ?? 'response';
     const requestedTurns = Number.isInteger(maxTurns) && maxTurns > 0 ? maxTurns : definition.maxTurns;
     const limit = key === 'reviewer' ? Math.min(requestedTurns, 4) : requestedTurns;
@@ -536,7 +564,8 @@ export async function runRole({
             effort: definition.effort,
             summary: definition.summary,
             temperature: definition.temperature,
-            maxOutputTokens: definition.maxOutputTokens,
+            maxOutputTokens,
+            verbosity,
             signal,
         });
 

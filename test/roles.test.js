@@ -14,7 +14,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 
-import { ROLES, ROLE_NAMES, resolveRole, roleSchema, buildInstructions, runRole, roleReason, pictureParts } from '../src/roles/index.js';
+import { ROLES, ROLE_NAMES, resolveRole, readOnlyOperation, roleSchema, buildInstructions, runRole, roleReason, pictureParts } from '../src/roles/index.js';
 import { runStepStage } from '../src/stages/step.js';
 import { WEB_DEVELOPMENT, webDevelopment } from '../src/roles/web-development.js';
 import { LIVE_ROLE_NAMES } from '../src/stages/roles.js';
@@ -585,6 +585,47 @@ test('the schema of a role comes from the catalogue', () => {
     assert.equal(roleSchema('nothing'), null);
 });
 
+test('only read operations without a report or summary get the low-output policy', () => {
+    const readTools = [{ name: 'read_file' }];
+    const writeTools = [{ name: 'write_file' }];
+    assert.equal(readOnlyOperation({ tools: readTools }), true);
+    assert.equal(readOnlyOperation({ schema: roleSchema('reviewer'), tools: readTools }), false);
+    assert.equal(readOnlyOperation({ tools: writeTools }), false);
+    assert.equal(readOnlyOperation({ tools: [{ name: 'run_command' }] }), false);
+    assert.equal(readOnlyOperation({ tools: [{ name: 'mcp:browser_click' }] }), false);
+    assert.equal(readOnlyOperation({ tools: [] }), true);
+    assert.equal(readOnlyOperation({ tools: readTools, outputMode: 'summary' }), false);
+    assert.equal(resolveRole('learner').outputMode, 'summary');
+});
+
+test('a role that writes a summary keeps the full output budget', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-readonly-budget-'));
+    const home = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-home-'));
+    const env = { HOME: home, USERPROFILE: home };
+    const api = await mockApi([textAnswer('No new lessons.')]);
+
+    try {
+        const config = structuredClone(defaults);
+        config.model = 'google/gemini-4-hydrogen';
+        config.backends = [{ baseURL: api.url, apiKey: 'test-key' }];
+        const client = await createClient({ config, env });
+
+        await runRole({
+            client,
+            config,
+            role: 'learner',
+            input: 'Review the lessons.',
+            root,
+            env,
+        });
+
+        assert.equal(api.requests[0].max_output_tokens, 65_536);
+        assert.equal(api.requests[0].text?.verbosity, undefined);
+    } finally {
+        api.close();
+    }
+});
+
 test('the instructions of a role carry the contract of the answer', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-roles-contract-'));
     const home = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-home-'));
@@ -688,6 +729,8 @@ test('the loop of a role runs the tools and returns the answer', async () => {
         const call = events.find((event) => event.type === 'role.tool' && event.name === 'write_file');
         assert.equal(call.arguments.path, 'index.html');
         assert.ok(call.arguments.content.length <= 200);
+        assert.equal(api.requests[0].max_output_tokens, 65_536, 'a write-and-report role keeps the full model cap');
+        assert.equal(api.requests[0].text?.verbosity, undefined, 'verbosity is not lowered for a write role');
 
         const body = await readFile(path.join(root, 'index.html'), 'utf8');
         assert.equal(body, '<h1>Привет</h1>');

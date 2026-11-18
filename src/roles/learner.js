@@ -18,6 +18,9 @@ export const name = 'learner';
 /** The schema of the answer of the role. */
 export const schema = null;
 
+/** This role writes a short summary of lessons even though its answer is plain text. */
+export const outputMode = 'summary';
+
 /** The tools the role may call. */
 export const tools = [
     'list_files', 'read_file', 'search_files', 'fetch_url', 'read_skill', 'web_guidance',

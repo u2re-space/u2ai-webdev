@@ -35,7 +35,7 @@ import { ENUMS } from '../config/constants.js';
  *     ceiling is `medium`, because the levels above it cost the same seconds. The model is the
  *     fallback of the house: the run answers with it when the primary model refuses.
  */
-const GPT_MAX_OUTPUT = 64 * 1024;
+const GPT_MAX_OUTPUT = 128 * 1000;
 const GPT_WINDOW = 256 * 1024;
 export const MODEL_PROFILES = Object.freeze({
     'minimax/minimax-m3.1-flash': { window: 1024 * 1024 * 4, maxOutput: 512 * 1024, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'], schemaChannel: 'format' },
@@ -150,13 +150,15 @@ export function contextBytes(level, profile) {
  * @param {string|null} model
  * @param {object} [config]
  * @param {number|null} [requested]
+ * @param {{ readOnly?: boolean }} [options]
  * @returns {number|null}
  * @exports
  */
-export function maxOutputFor(model, config = null, requested = null) {
+export function maxOutputFor(model, config = null, requested = null, { readOnly = false } = {}) {
     const profile = getModelProfile(model, config);
-    if (Number.isSafeInteger(requested) && requested > 0) {
-        return profile.maxOutput > 0 ? Math.min(requested, profile.maxOutput) : requested;
-    }
-    return profile.maxOutput > 0 ? profile.maxOutput : null;
+    const cap = Number.isSafeInteger(requested) && requested > 0
+        ? (profile.maxOutput > 0 ? Math.min(requested, profile.maxOutput) : requested)
+        : (profile.maxOutput > 0 ? profile.maxOutput : null);
+    if (readOnly && cap !== null) return Math.max(1, Math.floor(cap / 4));
+    return cap;
 }

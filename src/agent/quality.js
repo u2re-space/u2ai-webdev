@@ -18,6 +18,7 @@
  */
 
 import { parseResponse } from '../openai/responses.js';
+import { maxOutputFor } from '../model/profiles.js';
 
 /** The verdicts of a review. */
 export const VERDICTS = Object.freeze(['pass', 'partial', 'fail']);
@@ -71,6 +72,7 @@ export function verdictFromScores(scores, { passAt = 0.7, failAt = 0.4 } = {}) {
  * reason in it.
  * @param {{ client: object, model: string, instructions?: string, input?: string|object[],
  *   parts?: object[], schema?: object, schemaName?: string, effort?: string|null,
+ *   config?: object, maxOutputTokens?: number|null,
  *   signal?: AbortSignal|null, notify?: (event: object) => void }} request
  * @returns {Promise<{ verdict: 'pass'|'partial'|'fail', scores: object, issues: object[],
  *   summary: string, model: string, usage: object|null }>}
@@ -86,6 +88,8 @@ export async function assessQuality({
     schema = null,
     schemaName = 'assessment',
     effort = null,
+    config = null,
+    maxOutputTokens = null,
     signal = null,
     notify = () => {},
 }) {
@@ -100,6 +104,8 @@ export async function assessQuality({
         schema,
         schemaName,
         effort,
+        maxOutputTokens: maxOutputFor(model, config, maxOutputTokens),
+        verbosity: config?.verbosity ?? null,
         signal,
     });
 
