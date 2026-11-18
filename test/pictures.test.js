@@ -276,12 +276,13 @@ test('the stage of the pictures prepares the crops with the bridge of the images
     assert.ok(call);
     assert.equal(call[call.indexOf('--subject') + 1], 'black chess bishop');
     assert.equal(call[call.indexOf('--alpha-mode') + 1], 'auto');
-    // The models of the house are asked, and the tier of the quality goes with them.
+    assert.equal(call[call.indexOf('--attempts') + 1], '1');
+    // The default model is used once, with the tier of quality.
     assert.equal(call[call.indexOf('--image-model') + 1], 'bytedance-seed/seedream-5-5');
     assert.equal(call[call.indexOf('--quality') + 1], 'high');
 });
 
-test('the stage of the pictures asks every model and keeps the better cut-out', async () => {
+test('the stage uses one model by default and asks extra models only when configured', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-pictures-models-'));
     await mkdir(path.join(root, 'measurements', 'crops'), { recursive: true });
     await writeFile(path.join(root, 'measurements', 'crops', '08-region-bishop-artwork.png'), 'png');
@@ -295,20 +296,40 @@ test('the stage of the pictures asks every model and keeps the better cut-out', 
     });
 
     assert.equal(result.ok, true);
-    // Both models of the house were asked.
+    const asked = (await readCalls(calls)).filter((args) => args[0] === 'background');
+    assert.equal(asked.length, 1);
+    assert.equal(asked[0][asked[0].indexOf('--image-model') + 1], 'bytedance-seed/seedream-5-5');
+    assert.equal(result.pictures[0].model, 'bytedance-seed/seedream-5-5');
+    assert.deepEqual(result.pictures[0].models, ['bytedance-seed/seedream-5-5']);
+    const written = await readFile(path.join(root, 'assets', 'import', 'bishop-artwork.png'), 'utf8');
+    assert.equal(written, 'bytedance-seed/seedream-5-5');
+});
+
+test('the stage asks extra picture models when configured', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-pictures-models-configured-'));
+    await mkdir(path.join(root, 'measurements', 'crops'), { recursive: true });
+    await writeFile(path.join(root, 'measurements', 'crops', '08-region-bishop-artwork.png'), 'png');
+
+    const { bin: fake, calls } = await fakeImage(root);
+    const settings = config();
+    settings.pictures.models = ['openai/gpt-image-2.6-sunburst'];
+    const result = await picturesStage({
+        root,
+        config: settings,
+        inputs: { measurements: sheet() },
+        env: { ...process.env, AI_IMAGE_BIN: fake },
+    });
+
     const asked = (await readCalls(calls)).filter((args) => args[0] === 'background');
     assert.equal(asked.length, 2);
-    assert.equal(asked[0][asked[0].indexOf('--image-model') + 1], 'bytedance-seed/seedream-5-5');
-    assert.equal(asked[1][asked[1].indexOf('--image-model') + 1], 'openai/gpt-image-2.6-sunburst');
-
-    // The sunburst cuts the edge tighter, and the tighter edge wins.
-    assert.equal(result.pictures[0].model, 'openai/gpt-image-2.6-sunburst');
-    assert.deepEqual(result.pictures[0].models, [
-        'bytedance-seed/seedream-5-5',
+    assert.deepEqual(asked.map((args) => args[args.indexOf('--image-model') + 1]), [
         'openai/gpt-image-2.6-sunburst',
+        'bytedance-seed/seedream-5-5',
     ]);
-    const written = await readFile(path.join(root, 'assets', 'import', 'bishop-artwork.png'), 'utf8');
-    assert.equal(written, 'openai/gpt-image-2.6-sunburst');
+    assert.deepEqual(result.pictures[0].models, [
+        'openai/gpt-image-2.6-sunburst',
+        'bytedance-seed/seedream-5-5',
+    ]);
 });
 
 test('the stage of the pictures works with the sheet that was found', async () => {
@@ -340,7 +361,7 @@ test('the model of the pictures goes to the bridge when the config names it', as
     const { bin: fake, calls } = await fakeImage(root);
 
     const settings = config();
-    settings.pictures.model = 'bytedance-seed/seedream-5-5';
+    settings.pictures.model = 'sourceful/riverflow-v2.6-pro';
     const result = await picturesStage({
         root,
         config: settings,
@@ -351,7 +372,7 @@ test('the model of the pictures goes to the bridge when the config names it', as
     assert.equal(result.ok, true);
     const seen = await readCalls(calls);
     const call = seen.find((args) => args[0] === 'background');
-    assert.equal(call[call.indexOf('--image-model') + 1], 'bytedance-seed/seedream-5-5');
+    assert.equal(call[call.indexOf('--image-model') + 1], 'sourceful/riverflow-v2.6-pro');
 });
 
 test('the prepared pictures are written to the run and read back', async () => {

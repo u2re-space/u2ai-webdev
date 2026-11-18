@@ -440,11 +440,13 @@ export async function picturesStage({
         const command = String(settings.commands?.[crop.kind] ?? settings.command ?? 'background');
         // The subject tells the model what to keep: the fragments of the neighbours go away.
         const subject = pictureSubject(crop, settings);
-        const models = pictureModels(settings);
+        // Every candidate is a paid image request. Use one model by default; extra candidates
+        // are opt-in through the configuration.
+        const models = Array.isArray(settings.models) && settings.models.length
+            ? pictureModels(settings)
+            : [String(settings.model ?? '').trim() || DEFAULT_PICTURE_MODELS[0]];
         const quality = pictureQuality(settings);
-        // The candidates of the crop: every model of the list is asked, and the best cut-out
-        // wins. One model is a lottery — the edge of one cut-out is tight and the edge of the
-        // next one is chewed.
+        // If the project explicitly names extra models, compare their cut-outs and keep the best.
         const candidates = [];
         for (const model of models) {
             const args = [command, path.relative(root, source).split(path.sep).join('/')];
@@ -458,6 +460,7 @@ export async function picturesStage({
             args.push('--out', path.relative(root, candidate).split(path.sep).join('/'));
             if (command === 'background' || command === 'alpha') {
                 args.push('--alpha-mode', String(settings.alphaMode ?? 'auto'));
+                args.push('--attempts', '1');
                 if (subject) args.push('--subject', subject);
             }
             // The model of the pictures and the tier of the quality: the field of the tier
@@ -486,7 +489,8 @@ export async function picturesStage({
                 continue;
             }
             const facts = await judgePicture({ root, config, env, file: candidate });
-            candidates.push({ model, file: candidate, bytes: written.size, facts });            notify({ type: 'picture.attempt', name: crop.name, model, file: candidate, facts });
+            candidates.push({ model, file: candidate, bytes: written.size, facts });
+            notify({ type: 'picture.attempt', name: crop.name, model, file: candidate, facts });
         }
         if (!candidates.length) {
             // Ни одна модель не справилась: обрезок остаётся как есть.

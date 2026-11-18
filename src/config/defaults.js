@@ -496,12 +496,15 @@ export const defaults = {
      * The model that prepares the pictures.
      *
      * `null` keeps the model of the configuration of `ai-image` — the seedream of ByteDance
-     * by default. A name here is passed to the CLI as `--image-model` and goes first in the
-     * list of the models that are asked.
+     * by default. A name here is passed to the CLI as `--image-model`. It is the only model
+     * asked unless `pictures.models` explicitly names additional candidates.
      */
     model: null,
     /**
      * The models that prepare the pictures, one after another.
+     *
+     * By default only the first picture model is used. Naming models opts in to trying the
+     * model list and keeping the better cut-out.
      *
      * One model is a lottery: the cut-out of the seedream is tight most of the time and the
      * cut-out of the sunburst of OpenAI is smoother the other times. The house asks the
