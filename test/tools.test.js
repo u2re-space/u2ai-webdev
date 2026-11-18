@@ -216,6 +216,15 @@ test('the measurer is not asked for the direction of the design', () => {
     assert.match(spec.description, /\["measure"/);
 });
 
+test('the image bridge explains precise edits, optional crops and transparency flags', () => {
+    const spec = TOOL_SPECS.call_ai_image;
+    assert.match(spec.description, /what changes or is removed, what must remain unchanged/);
+    assert.match(spec.description, /crop.*source-pixel `--x`, `--y`, `--width`, `--height` and `--out`/);
+    assert.match(spec.description, /`--background transparent`/);
+    assert.match(spec.description, /`--reference <file>`/);
+    assert.match(spec.description, /DESIGN\.md/);
+});
+
 test('fetch_url reads the text of a page', async () => {
     const server = http.createServer((req, res) => {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });

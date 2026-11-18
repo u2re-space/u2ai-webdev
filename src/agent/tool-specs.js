@@ -552,8 +552,18 @@ export const TOOL_SPECS = Object.freeze({
     },
     call_ai_image: {
         configKey: 'external_image',
-        description: 'Call the external `ai-image` CLI to generate or edit a picture. '
-            + 'This CLI has no image generator of its own: the work is delegated to @u2ai/images.',
+        description: 'Call the external `ai-image` CLI to generate, crop or edit a project picture. '
+            + 'This CLI has no image generator of its own: the work is delegated to @u2ai/images. '
+            + 'For an edit, make the prompt explicit about what changes or is removed, what must '
+            + 'remain unchanged, and where the edit stops; protect neighboring details. If the full '
+            + 'source makes the target ambiguous, crop it first with the `crop` command using '
+            + 'source-pixel `--x`, `--y`, `--width`, `--height` and `--out`, then edit the crop; '
+            + 'keep the original and include enough context around the target. When removing a '
+            + 'background, pass `--background transparent` and use an alpha-capable output such as '
+            + 'PNG. Pass a supplied visual reference with the edit flag `--reference <file>` when it '
+            + 'is meant to guide that image; translate relevant DESIGN.md guidance into the prompt. '
+            + 'Ask `ai-image --help` through `ai_cli` before using unfamiliar flags. References and '
+            + 'DESIGN.md guide the visual intent, not unrelated changes to the source.',
         parameters: {
             type: 'object',
             properties: {

@@ -289,6 +289,19 @@ test('the roles that write the assets take the prepared pictures as they are', (
     assert.match(ROLES.editor.instructions({}), /is not redrawn/i);
 });
 
+test('the editor gets a precise image-edit, flag and optional-crop workflow', () => {
+    const text = ROLES.editor.instructions({ design: 'DESIGN.md', reference: ['landing.png'] });
+    assert.match(text, /what to remove or change, what must remain pixel-faithful/i);
+    assert.match(text, /measurements are optional/i);
+    assert.match(text, /--background transparent/);
+    assert.match(text, /--reference <file>/);
+    assert.match(text, /\["crop", "<source>", "--x", "<x>", "--y", "<y>"/);
+    assert.match(text, /"--width", "<width>", "--height", "<height>", "--out", "<crop>"\]/);
+    assert.match(text, /ai-image info <source> --json/);
+    assert.match(text, /Derive the box from the actual source image/);
+    assert.match(text, /ai-image --help/);
+});
+
 test('the planner does not plan a drawn copy of a picture of the reference', () => {
     const text = ROLES.planner.instructions({});
     assert.match(text, /If prepared crops of reference pictures already exist/);
