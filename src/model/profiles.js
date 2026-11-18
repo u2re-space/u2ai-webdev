@@ -35,7 +35,7 @@ import { ENUMS } from '../config/constants.js';
  *     ceiling is `medium`, because the levels above it cost the same seconds. The model is the
  *     fallback of the house: the run answers with it when the primary model refuses.
  */
-const GPT_MAX_OUTPUT = 128 * 1000;
+const GPT_MAX_OUTPUT = 64 * 1024;
 const GPT_WINDOW = 256 * 1024;
 export const MODEL_PROFILES = Object.freeze({
     'minimax/minimax-m3.1-flash': { window: 1024 * 1024 * 4, maxOutput: 512 * 1024, ceiling: 'xhigh', efforts: ['low', 'medium', 'high', 'xhigh'], schemaChannel: 'format' },
