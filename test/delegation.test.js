@@ -71,6 +71,8 @@ test('the rule of the hand-over names the roles and the way of it', () => {
     assert.match(note, /markup/);
     assert.match(note, /styler/);
     assert.match(note, /coder/);
+    assert.match(note, /write_ready.*not delegation/);
+    assert.match(note, /Do not delegate a file listed in your current step/);
     assert.equal(delegationNote([]), '');
 });
 
@@ -160,6 +162,33 @@ test('a hand-over without a concrete output file is refused before starting the 
         /выходные файлы/,
     );
     assert.equal(started, false);
+});
+
+test('a role may not hand work over before writing the files of its own step', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-delegate-own-step-'));
+    let started = false;
+    try {
+        const delegate = createDelegator({
+            run: async () => { started = true; return {}; },
+            root,
+            role: 'markup',
+            context: { step: { id: 'markup-1', files: ['index.html'], criteria: [] } },
+            resolveRole: () => ({ tools: [], maxTurns: 10 }),
+        });
+        await assert.rejects(
+            () => delegate({ role: 'coder', task: 'Write main.js', files: ['main.js'] }),
+            /сначала напишите файлы своего шага \(index\.html\)/,
+        );
+        assert.equal(started, false);
+
+        // The own file is on the disk: the hand-over is allowed again.
+        await writeFile(path.join(root, 'index.html'), '<main></main>\n');
+        const report = await delegate({ role: 'coder', task: 'Write main.js', files: ['main.js'] });
+        assert.match(report, /NOT VERIFIED|VERIFIED/);
+        assert.equal(started, true);
+    } finally {
+        await import('node:fs/promises').then((fs) => fs.rm(root, { recursive: true, force: true }));
+    }
 });
 
 test('a child session without output files is reported as unverified', async () => {

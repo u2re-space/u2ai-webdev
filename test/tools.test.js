@@ -265,6 +265,14 @@ test('a command that does not finish on its own is refused', async () => {
     assert.match(answer, /не заканчивается сама/);
 });
 
+test('the styler tool executor refuses shell commands even if a caller invokes them directly', async () => {
+    const { root, config } = await workspace();
+    const tools = createToolset({ root, config, role: 'styler' });
+    assert.match(await tools.execute('run_command', { command: 'python', args: '[]' }), /disabled for styler|styler cannot run shell/i);
+    assert.match(await tools.execute('run_script', { path: 'script.js' }), /disabled for styler|styler cannot run shell/i);
+    assert.match(await tools.execute('run_skill', { name: 'anything' }), /disabled for styler|styler cannot run shell/i);
+});
+
 test('the dev server of vite is refused in every form', () => {
     assert.ok(BLOCKING_COMMANDS.test('vite'), 'the bare vite is refused');
     assert.ok(BLOCKING_COMMANDS.test('npx vite'), 'the vite of npx is refused');

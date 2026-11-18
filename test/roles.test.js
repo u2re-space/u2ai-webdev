@@ -324,11 +324,70 @@ test('the planner names the roles that the stages of the run execute', () => {
 });
 
 test('the roles that check their work have the tool of the command', () => {
-    for (const name of ['coder', 'styler', 'editor']) {
+    for (const name of ['coder', 'editor']) {
         assert.ok(ROLES[name].tools.includes('run_command'), `the role ${name} cannot run a command`);
         const specs = toolSpecs(defaults.tools, { role: name });
         assert.ok(specs.some((spec) => spec.name === 'run_command'), `the role ${name} has no command to run`);
     }
+    assert.ok(!ROLES.styler.tools.includes('run_command'));
+    assert.ok(!toolSpecs(defaults.tools, { role: 'styler' }).some((spec) => spec.name === 'run_command'));
+    assert.match(ROLES.styler.instructions({}), /build stage checks the styles/);
+    assert.match(ROLES.styler.instructions({}), /styler has no shell-command tool/);
+});
+
+test('styler carries criteria after research and drops research tools at the cap', async () => {
+    const requests = [];
+    const answers = [
+        toolAnswer('write_ready', {}),
+        toolAnswer('web_guidance', { query: 'grid' }),
+        toolAnswer('web_guidance', { query: 'container' }),
+        toolAnswer('web_guidance', { query: 'overflow' }),
+        toolAnswer('web_guidance', { query: 'more research' }),
+        toolAnswer('write_file', { path: 'styles.scss', content: '/* styles */' }),
+        schemaAnswer('style', {
+            summary: 'Styles written.', tokens: [],
+            files: [{ path: 'styles.scss', content: '/* styles */', language: 'scss' }], notes: '',
+        }),
+    ];
+    const client = { responses: { async create(body) {
+        requests.push(body);
+        return answers[Math.min(requests.length - 1, answers.length - 1)];
+    } } };
+    const toolset = {
+        specsFor: () => [
+            { type: 'function', name: 'web_guidance', parameters: {} },
+            { type: 'function', name: 'write_file', parameters: {} },
+        ],
+        async execute() { return 'Written styles.scss.'; },
+    };
+    const config = structuredClone(defaults);
+    config.model = 'test-model';
+    await runRole({
+        client,
+        config,
+        role: 'styler',
+        input: 'The task: preserve a fixed 361px sidebar and do not scale the page with zoom.',
+        context: {
+            task: 'Preserve a fixed 361px sidebar and do not scale the page with zoom.',
+            step: {
+                id: 'styles-1', title: 'Write styles', files: ['styles.scss'],
+                criteria: ['Sidebar is exactly 361px', 'Body overflow remains visible'],
+            },
+        },
+        root: process.cwd(),
+        toolset,
+        requireFiles: true,
+        maxTurns: 10,
+    });
+
+    for (const request of requests) {
+        assert.match(request.instructions, /Sidebar is exactly 361px/);
+        assert.match(request.instructions, /Body overflow remains visible/);
+    }
+    const afterResearch = requests[4];
+    assert.ok(afterResearch, 'the request after three research calls should exist');
+    assert.ok(!afterResearch.tools.some((tool) => ['read_skill', 'web_guidance', 'run_command'].includes(tool.name)));
+    assert.match(JSON.stringify(afterResearch.input), /Body overflow remains visible/);
 });
 
 test('the vector editor instructions omit page and DevTools work', () => {
@@ -681,6 +740,17 @@ test('write_ready is private to the role loop and is not executed as a project t
     } finally {
         api.close();
     }
+});
+
+test('write_ready is documented as the write gate, not as a hand-off', () => {
+    const requestGate = ROLES.coder.instructions({ task: 'Write the code.' });
+    assert.match(requestGate, /write_ready/);
+    assert.match(requestGate, /starts no other role/);
+    assert.match(requestGate, /write_file/);
+
+    const handoff = toolSpecs(defaults.tools, { names: ['delegate_role'] })[0];
+    assert.match(handoff.description, /different from `write_ready`/);
+    assert.match(handoff.description, /Never delegate files listed in your current step/);
 });
 
 test('a role that writes a summary keeps the full output budget', async () => {

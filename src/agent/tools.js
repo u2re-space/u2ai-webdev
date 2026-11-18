@@ -772,6 +772,12 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
      * @returns {Promise<string>}
      */
     async function execute(name, args = {}) {
+        if (role === 'styler' && (name === 'run_command' || name === 'run_script')) {
+            return 'The styler cannot run shell commands or scripts. Write the stylesheet files; the build stage checks them.';
+        }
+        if (role === 'styler' && name === 'run_skill') {
+            return 'The styler cannot run shell commands through skills. Write the stylesheet files; the build stage checks them.';
+        }
         const mcpTool = mcpTools.find((entry) => entry.name === name);
         if (mcpTool) {
             const answer = await callMcp(mcpTool, args ?? {}, { signal });

@@ -174,6 +174,9 @@ export function partialCorrection(missing = [], errors = []) {
 
 /** The tools that write into the project. */
 const WRITE_TOOLS = Object.freeze(['write_file', 'replace_text', 'patch_file', 'copy_path', 'generate_svg']);
+const STYLER_FORBIDDEN_TOOLS = new Set(['run_command', 'run_script', 'run_skill']);
+const STYLER_RESEARCH_TOOLS = new Set(['read_skill', 'web_guidance']);
+const STYLER_RESEARCH_LIMIT = 3;
 const DELEGATED_TOOLS = new Set([
     'list_files', 'read_file', 'find_line', 'search_files', 'read_skill', 'web_guidance',
     'fetch_url', 'search_icons', 'batch', 'write_file', 'replace_text', 'patch_file',
@@ -206,7 +209,7 @@ export function readOnlyOperation({ schema = null, tools = [], outputMode = null
 const WRITE_READY_TOOL = Object.freeze({
     type: 'function',
     name: 'write_ready',
-    description: 'Signal that inspection is complete and you are ready to write or use an action-capable tool. Call this before any such tool; the next turn gets the full output budget and the remaining tools.',
+    description: 'INTERNAL WRITE GATE — not delegation. Call this exact tool name by itself after inspection to unlock your own file-writing tools on the next turn. It writes no files and starts no other role. Then write the files named by your step with write_file.',
     parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
 });
 
@@ -487,6 +490,28 @@ export async function runRole({
     if (!definition) throw new Error(`Неизвестная роль: ${role}`);
 
     let instructions = await buildInstructions({ role: key, config, context, root, env, runContext });
+    // Keep the deliverable and its acceptance criteria in the high-priority instructions on
+    // every model turn. Long guide/tool transcripts must not obscure what this step owns.
+    if (context?.step && Array.isArray(context.step.files)) {
+        const files = context.step.files.map((item) => String(item ?? '').trim()).filter(Boolean);
+        const criteria = (Array.isArray(context.step.criteria) ? context.step.criteria : [])
+            .map((item) => String(item ?? '').trim()).filter(Boolean);
+        instructions += [
+            '',
+            '## Binding step contract — do this before anything else',
+            `- You own and must write: ${files.join(', ') || '(no file paths named)'}.`,
+            criteria.length ? `- Acceptance criteria: ${criteria.join('; ')}.` : '',
+            '- These paths and criteria outrank optional research, previews and general recommendations.',
+            ...(key === 'styler' ? [
+                '- Every explicit task requirement outranks the generic styling recommendations in the role prompt.',
+                '- Preserve requested dimensions, breakpoints, content treatment and overflow behavior; do not replace specified geometry with a generic pattern.',
+            ] : []),
+            ...(key === 'styler' ? [
+                '- Write the named stylesheet files now. Do not run commands, Python, or shell: the next build stage compiles CSS/SCSS.',
+                '- Do not delegate this step. `write_ready` only unlocks your own write tools; it is not delegation.',
+            ] : []),
+        ].filter(Boolean).join('\n');
+    }
     // The toolset of a role reads through the map of the run and remembers its answers in
     // the context of the run.
     const tools = toolset ?? createToolset({
@@ -508,6 +533,7 @@ export async function runRole({
     const specs = tools.specsFor(key, definition.tools)
         .filter((spec) => key !== 'reviewer' || REVIEW_TOOLS.has(spec.name))
         .filter((spec) => !context?.delegated || DELEGATED_TOOLS.has(spec.name))
+        .filter((spec) => key !== 'styler' || !STYLER_FORBIDDEN_TOOLS.has(spec.name))
         .filter((spec) => !context?.vectorOnly || VECTOR_TOOLS.has(spec.name))
         .filter((spec) => !context?.vectorOnly || !String(spec.name).startsWith('mcp_'))
         .filter((spec) => depth === 0 || spec.name !== 'delegate_role');
@@ -558,6 +584,7 @@ export async function runRole({
     let withSchema = true;
     let writeReady = false;
     let delegationUsed = false;
+    let stylerResearchCalls = 0;
     // The files the step names: the role has to write them.
     const wantsFiles = Boolean(requireFiles);
     const wantedFiles = Array.isArray(context?.step?.files)
@@ -576,18 +603,21 @@ export async function runRole({
         schemaChannel: channelOverride = undefined,
         fullOutput = false,
     } = {}) => {
-        const availableTools = delegationUsed
+    const availableTools = delegationUsed
             ? toolList.filter((spec) => spec.name !== 'delegate_role')
             : toolList;
-        const exploring = hasActionTools && !writeReady && availableTools.length > 0
-            && !availableTools.every((spec) => spec.name === schemaName);
+        const boundedTools = key === 'styler' && stylerResearchCalls >= STYLER_RESEARCH_LIMIT
+            ? availableTools.filter((spec) => !STYLER_RESEARCH_TOOLS.has(spec.name))
+            : availableTools;
+        const exploring = hasActionTools && !writeReady && boundedTools.length > 0
+            && !boundedTools.every((spec) => spec.name === schemaName);
         const useSchema = schemaOverride === undefined
             ? (withSchema && !exploring ? schema : null)
             : schemaOverride;
         const reduced = !fullOutput && (exploring || readOnlyOperation({
             schema: useSchema,
-            tools: availableTools.filter((spec) => spec.name !== WRITE_READY_TOOL.name),
-            outputMode: fullOutput || (schema && !availableTools.length)
+            tools: boundedTools.filter((spec) => spec.name !== WRITE_READY_TOOL.name),
+            outputMode: fullOutput || (schema && !boundedTools.length)
                 ? null
                 : definition.outputMode,
         }));
@@ -595,7 +625,7 @@ export async function runRole({
             model: definition.model,
             instructions,
             input: items,
-            tools: availableTools,
+            tools: boundedTools,
             schema: useSchema,
             schemaChannel: channelOverride === undefined ? schemaChannel : channelOverride,
             schemaName,
@@ -771,8 +801,14 @@ export async function runRole({
                         output = `The tool failed: ${error?.message ?? String(error)}`;
                     }
                 }
+            } else if (key === 'styler' && STYLER_FORBIDDEN_TOOLS.has(call.name)) {
+                output = 'Styler shell/CLI tools are disabled. Write the named stylesheets; the build stage compiles them.';
+            } else if (key === 'styler' && STYLER_RESEARCH_TOOLS.has(call.name)
+                && stylerResearchCalls >= STYLER_RESEARCH_LIMIT) {
+                output = 'Styler research limit reached. Follow the step files and criteria, then write the stylesheet.';
             } else {
                 try {
+                    if (key === 'styler' && STYLER_RESEARCH_TOOLS.has(call.name)) stylerResearchCalls += 1;
                     output = await tools.execute(call.name, call.arguments);
                 } catch (error) {
                     output = `The tool failed: ${error?.message ?? String(error)}`;
@@ -831,6 +867,15 @@ export async function runRole({
                     ],
                 });
             }
+        }
+        if (key === 'styler' && work.length && wantedFiles.length) {
+            const criteria = (Array.isArray(context?.step?.criteria) ? context.step.criteria : [])
+                .map((item) => String(item ?? '').trim()).filter(Boolean);
+            items.push({ role: 'user', content: [textPart(
+                `Step contract reminder — finish these stylesheet files: ${wantedFiles.join(', ')}. `
+                + (criteria.length ? `Acceptance criteria: ${criteria.join('; ')}. ` : '')
+                + 'Preserve all explicit task requirements over generic style advice. Do not run Python, shell commands, scripts, or delegate.',
+            )] });
         }
 
         if (turns >= limit) {

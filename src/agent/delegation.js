@@ -105,12 +105,15 @@ export function delegationNote(names = []) {
         .join('\n');
     return [
         'When the work is not yours, hand it over instead of doing it yourself:',
+        '`write_ready` is not delegation: it starts no other role and only unlocks your own writing tools.',
+        'Do not delegate a file listed in your current step. Write your own step files first.',
         described,
         'Name the role, the task and the reason. The role that receives the work starts a',
         'separate session: it does not see this conversation, so the task has to say everything',
         'it needs — the files, what is wrong and what the result has to be. Name every expected',
         'output file in the `files` field. Delegate only a bounded piece of work,',
-        'not the whole step. Hand work over at most once in this role run.',
+        'not the whole step. The files of your own step are yours: write them first, and hand',
+        'work over at most once in this role run.',
         'Wait for its report, check that its files were actually written, then continue with your own work.',
     ].join('\n');
 }
@@ -168,6 +171,26 @@ export function createDelegator({
         }
         const spec = typeof resolveRole === 'function' ? resolveRole(name) : null;
         if (!spec) throw new Error(`delegate_role: роль ${name} недоступна.`);
+
+        // The work of the step belongs to the role of the step. A role that has not written
+        // its own files yet does not hand a piece of work over: it hands the step away.
+        const ownFiles = Array.isArray(context?.step?.files)
+            ? context.step.files.map((file) => String(file ?? '').trim()).filter(Boolean)
+            : [];
+        const missingOwn = [];
+        for (const file of ownFiles) {
+            if (file.endsWith('/')) continue;
+            try {
+                const { abs } = await resolveInside(root, file, { allowRoot: false });
+                if (!(await stat(abs)).isFile()) missingOwn.push(file);
+            } catch {
+                missingOwn.push(file);
+            }
+        }
+        if (missingOwn.length) {
+            throw new Error(`delegate_role: сначала напишите файлы своего шага (${missingOwn.join(', ')}) — `
+                + 'передавать работу можно только после этого.');
+        }
 
         const baseline = new Map();
         for (const file of expected) {

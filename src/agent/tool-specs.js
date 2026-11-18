@@ -288,7 +288,7 @@ export const TOOL_SPECS = Object.freeze({
             additionalProperties: false,
         },
         required: ['command'],
-        roles: ['installer', 'reviewer', 'auditor', 'coder', 'styler', 'editor'],
+        roles: ['installer', 'reviewer', 'auditor', 'coder', 'editor'],
     },
     run_script: {
         configKey: 'script',
@@ -426,9 +426,10 @@ export const TOOL_SPECS = Object.freeze({
         description: 'Hand one task to another role: the markup, the styler, the coder, the editor or the '
             + 'iconifier. The role that receives the work starts a separate session — a clean conversation, '
             + 'its own tools and its own budget of turns — and does not see this one. Use it when the work '
-            + 'is a bounded piece that is not yours. Hand work over at most once per role run; do not pass '
-            + 'the whole step around. Name every expected output path in `files`. A hand-over counts '
-            + 'as complete only when output files are verified on disk.',
+            + 'is one specific bounded piece that belongs to another role. This is different from `write_ready`: '
+            + '`write_ready` starts no other role and only unlocks your own writing tools. Never delegate files '
+            + 'listed in your current step; write your own step first. Hand over at most once per run, name every '
+            + 'expected output path in `files`, and verify that those files appeared on disk.',
         parameters: {
             type: 'object',
             properties: {

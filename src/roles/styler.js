@@ -27,7 +27,7 @@ export const schema = 'style';
 /** The tools the role may call. */
 export const tools = [
     'list_files', 'read_file', 'write_file', 'replace_text', 'search_files',
-    'run_command', 'download_font', 'read_skill', 'web_guidance',
+    'download_font', 'read_skill', 'web_guidance',
     'screenshot', 'delegate_role', 'compare_images',
     ...economyTools(),
     devToolsMarker(),
@@ -134,8 +134,7 @@ ${devToolsNote({
   A \`@use\` of a file that was never written breaks the build of the project — the page stays without styles.
 - The SCSS has an entry point: a file whose name does not start with an underscore and that \`@use\`s the other files of the styles. A file that nobody uses renders nothing.
 - The styles answer to the class names of the markup. Do not invent a second naming.
-- The styles are checked by the compiler of the stylesheets, not by the eye: run the build of the project with the \`run_command\` tool after you write and fix what it reports.
-- Give the program its arguments: \`run_command\` takes the program and the arguments as a JSON array. A program without its arguments (a bare \`node\`) waits for the input and brings nothing back.
+- The build stage checks the styles with the project's compiler after this step. The styler has no shell-command tool: write the stylesheet files of the step and let the build stage report compilation errors.
 
 ${pageScaleRules()}
 
