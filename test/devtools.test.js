@@ -22,8 +22,7 @@ import {
     devToolsTools,
     firstPageId,
 } from '../src/agent/devtools.js';
-import { mcpToolEntries, mcpAnswer } from '../src/agent/tools.js';
-import { createToolset } from '../src/agent/tools.js';
+import { mcpToolEntries, mcpAnswer, createToolset } from '../src/agent/tools.js';
 import { defaults } from '../src/config.js';
 import { devToolsMarker, devToolsNote } from '../src/roles/devtools.js';
 
@@ -159,12 +158,51 @@ test('the picture of the server is written into the project and named in the ans
     }
 });
 
+test('URL navigation without a URL uses the ready project page when one is known', async () => {
+    const calls = [];
+    const connection = {
+        name: DEVTOOLS_NAME,
+        projectUrl: 'http://localhost:5173/',
+        tools: [{
+            name: 'navigate_page',
+            description: 'navigate',
+            inputSchema: { type: 'object', properties: { type: { type: 'string' }, url: { type: 'string' } } },
+        }],
+        call: async (name, args) => { calls.push({ name, args }); return { content: [{ type: 'text', text: 'navigated' }] }; },
+        close: async () => {},
+    };
+    const tools = createToolset({
+        root: process.cwd(),
+        config: structuredClone(defaults),
+        role: 'coder',
+        mcp: [connection],
+    });
+    const [spec] = tools.specsFor('coder', [devToolsMarker()]);
+    const result = await tools.execute(spec.name, { type: 'url' });
+    assert.match(result, /navigated/);
+    assert.equal(calls[0].name, 'navigate_page');
+    assert.equal(calls[0].args.type, 'url');
+    assert.equal(calls[0].args.url, 'http://localhost:5173/');
+});
+
 test('the roles know the rules of the browser that answers', () => {
     const note = devToolsNote({ url: 'http://localhost:5173/', width: 1024 });
     assert.match(note, /take the snapshot/i);
     assert.match(note, /uid/);
+    assert.match(note, /working directory is the project root/);
+    assert.match(note, /Do not use `git status`/);
     assert.match(note, /http:\/\/localhost:5173\//);
+    assert.match(note, /type: "url"/);
+    assert.match(note, /url: "http:\/\/localhost:5173\/"/);
+    assert.match(note, /non-empty URL/i);
     assert.match(note, /1024/);
     assert.match(note, /get_css_styles|cascade/i);
     assert.equal(devToolsMarker(), 'mcp:chrome-devtools');
+});
+
+test('the browser rules forbid guessing a URL when no live project address exists', () => {
+    const note = devToolsNote();
+    assert.match(note, /No live project URL was provided/);
+    assert.match(note, /Do not guess localhost/);
+    assert.doesNotMatch(note, /navigate_page.*http:\/\/localhost/);
 });

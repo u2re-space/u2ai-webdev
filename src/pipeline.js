@@ -48,6 +48,7 @@ import { openContext } from './agent/context.js';
 import { openRunMap } from './agent/run-map.js';
 import { connectMcpServers } from './agent/mcp.js';
 import { connectDevTools, devToolsEnabled } from './agent/devtools.js';
+import { ensurePage } from './stages/dev-server.js';
 
 /**
  * Connect the MCP servers of the run.
@@ -311,6 +312,7 @@ export async function runPipeline({
 
     let progress = createProgress({ id: run, task, stages: list });
     const done = new Map((progress.stages ?? []).map((stage) => [stage.name, stage]));
+    let livePage = null;
 
     if (resume) {
         const stored = await readProgress(root, config, run);
@@ -396,6 +398,7 @@ export async function runPipeline({
         }
         const stage = queue[position];
         position += 1;
+
         const record = done.get(stage.name);
         if (resume && record?.status === 'completed' && !asked.has(stage.name)) {
             // The progress says that the stage ran. The disk says whether its work is
@@ -420,6 +423,32 @@ export async function runPipeline({
             status = 'paused';
             warnings.push(`Прогон остановлен до стадии ${stage.name}.`);
             break;
+        }
+
+        // DevTools connects before the project is set up and therefore starts on about:blank.
+        // Start the project's own dev script only when a stage is about to hand work to a
+        // browser-aware role, then give that role the ready address to navigate to.
+        const hasDevTools = (ctx.mcp ?? []).some((connection) => connection.name === 'chrome-devtools');
+        if (!livePage && hasDevTools && ['coding', 'styling', 'vector'].includes(stage.name)) {
+            try {
+                livePage = await ensurePage({
+                    root,
+                    config,
+                    env,
+                    timeoutMs: Number.isSafeInteger(config?.browser?.devTimeoutMs)
+                        ? config.browser.devTimeoutMs
+                        : 60_000,
+                });
+                runContext.browserUrl = livePage.live ? livePage.url : null;
+                for (const connection of ctx.mcp ?? []) {
+                    if (connection.name === 'chrome-devtools') connection.projectUrl = runContext.browserUrl;
+                }
+                if (livePage.reason) warnings.push(`Страница для Chrome DevTools недоступна: ${livePage.reason}.`);
+            } catch (error) {
+                livePage = { url: null, live: false, stop: async () => {} };
+                runContext.browserUrl = null;
+                warnings.push(`Страница для Chrome DevTools недоступна: ${error?.message ?? error}.`);
+            }
         }
 
         notify({ type: 'stage.start', stage: stage.name, title: stage.title });
@@ -530,6 +559,7 @@ export async function runPipeline({
     for (const connection of ctx.mcp ?? []) {
         await connection?.close?.().catch(() => {});
     }
+    await livePage?.stop?.().catch(() => {});
 
     // The digest of the run: what a person reads after it. The context of the run is the
     // witness of what happened, and it dies with the run.

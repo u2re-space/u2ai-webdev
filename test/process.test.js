@@ -10,6 +10,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createServer } from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -223,6 +224,61 @@ test('the pipeline runs the stages in order and writes the progress', async () =
     const progress = JSON.parse(await readFile(result.file, 'utf8'));
     assert.equal(progress.status, 'completed');
     assert.equal(progress.stages[0].status, 'completed');
+});
+
+test('the live project URL is attached to the browser MCP before coding roles run', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-browser-url-'));
+    await writeFile(path.join(root, 'package.json'), JSON.stringify({ scripts: {} }));
+    const server = createServer((request, response) => {
+        if (request.method === 'POST') {
+            let body = '';
+            request.on('data', (chunk) => { body += chunk; });
+            request.on('end', () => {
+                const message = JSON.parse(body || '{}');
+                const result = message.method === 'initialize'
+                    ? { protocolVersion: '2025-06-18' }
+                    : message.method === 'tools/list' ? { tools: [] } : {};
+                response.writeHead(200, { 'Content-Type': 'application/json' });
+                response.end(JSON.stringify({ jsonrpc: '2.0', id: message.id ?? null, result }));
+            });
+            return;
+        }
+        response.writeHead(200, { 'Content-Type': 'text/html' });
+        response.end('<html><body>test</body></html>');
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const url = `http://127.0.0.1:${server.address().port}/`;
+    const stages = [
+        { name: 'setup', title: 'Setup', dependsOn: [], run: async () => ({ ok: true }) },
+        {
+            name: 'coding',
+            title: 'Coding',
+            dependsOn: ['setup'],
+            run: async ({ runContext }) => {
+                assert.equal(runContext.browserUrl, url);
+                return { ok: true };
+            },
+        },
+    ];
+    try {
+        const result = await runPipeline({
+            client: { responses: { create: async () => ({ output: [] }) } },
+            config: {
+                ...CONFIG,
+                browser: { devtools: 'off', url },
+                mcp: { servers: [{ name: 'chrome-devtools', url: url.replace(/\/$/, '/mcp') }] },
+            },
+            root,
+            task: 'Inspect the project page.',
+            runId: 'run-browser-url',
+            stages,
+            env: { PATH: '' },
+        });
+
+        assert.equal(result.status, 'completed');
+    } finally {
+        await new Promise((resolve) => server.close(resolve));
+    }
 });
 
 test('the stages that do the steps of the plan go in the order of the plan', async () => {

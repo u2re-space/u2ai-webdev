@@ -196,11 +196,18 @@ async function callMcp(entry, args = {}) {
     const required = Array.isArray(entry.parameters?.required) ? entry.parameters.required : [];
     const wants = required.includes('pageId');
     const known = Number.isFinite(connection.pageId) ? connection.pageId : null;
-    const payload = (pageId) => (wants && pageId !== null ? { ...args, pageId } : args);
+    const callArgs = entry.tool === 'navigate_page'
+        && String(args?.type ?? '').toLowerCase() === 'url'
+        && !String(args?.url ?? '').trim()
+        && typeof connection.projectUrl === 'string'
+        && connection.projectUrl.trim()
+        ? { ...args, url: connection.projectUrl }
+        : args;
+    const payload = (pageId) => (wants && pageId !== null ? { ...callArgs, pageId } : callArgs);
     // The number of the page is the one the house knows, when the role did not name a page.
     const first = wants && known !== null && args?.pageId === undefined
         ? await connection.call(entry.tool, payload(known))
-        : await connection.call(entry.tool, args);
+        : await connection.call(entry.tool, callArgs);
     const text = (first?.content ?? [])
         .map((part) => (typeof part?.text === 'string' ? part.text : ''))
         .join('\n');

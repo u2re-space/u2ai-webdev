@@ -852,6 +852,7 @@ export async function runStepStage({
                 design: Boolean(design),
                 reference: reference.names,
                 referenceSizes: reference.sizes,
+                pageUrl: runContext?.browserUrl ?? null,
                 ...extra,
             },
             root,

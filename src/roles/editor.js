@@ -85,7 +85,7 @@ ${FAMILY_CLI_NOTE}
 - If unrelated parts of a source image make a precise edit ambiguous, inspect its pixels and dimensions first (read the image or use \`ai-image info <source> --json\`), then crop with \`ai_cli\` using cli \`ai-image\` and args \`["crop", "<source>", "--x", "<x>", "--y", "<y>", "--width", "<width>", "--height", "<height>", "--out", "<crop>"]\`; edit that crop, not the whole source. Derive the box from the actual source image, not guessed measurements; preserve the original, keep the crop large enough to include the whole subject and its edge, and do not crop when it would discard context needed for the edit. Use the reference and \`DESIGN.md\` to identify what matters, not as permission to change unrelated content.
 - Do not add a feature that the task and the plan do not ask for.
 ${devToolsNote({
-    url: context?.config?.browser?.url || null,
+    url: context?.pageUrl || context?.config?.browser?.url || null,
     width: context?.config?.browser?.viewport?.width ?? null,
 })}
 

@@ -75,7 +75,7 @@ ${INPUTS_IN_CONTEXT}
 ${delegationNote(DELEGATE_NAMES)}
 ${economyNote()}
 ${devToolsNote({
-    url: context?.config?.browser?.url || null,
+    url: context?.pageUrl || context?.config?.browser?.url || null,
     width: context?.config?.browser?.viewport?.width ?? null,
 })}
 - The platform of today comes before the habit of yesterday: look the guides up with the

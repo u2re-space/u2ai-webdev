@@ -80,7 +80,7 @@ ${INPUTS_IN_CONTEXT}
 ${delegationNote(DELEGATE_NAMES)}
 ${economyNote()}
 ${devToolsNote({
-    url: context?.config?.browser?.url || null,
+    url: context?.pageUrl || context?.config?.browser?.url || null,
     width: context?.config?.browser?.viewport?.width ?? null,
 })}
  - The machine compares the page with the reference: the numbers of the difference and the picture of the difference come with the request.

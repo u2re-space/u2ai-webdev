@@ -38,18 +38,25 @@ export function devToolsMarker() {
  */
 export function devToolsNote({ url = null, width = null } = {}) {
     const lines = [
+        '- The working directory is the project root: inspect it with `list_files` and `read_file`.',
+        '  Do not use `git status` to locate the project; if it says this is not a repository, continue.',
         '- The browser of the house speaks to you through the DevTools tools: the snapshot of',
         '  the page, the clicks, the keys, the window, the script, the console and the requests.',
         '  Use them when a picture is not enough: a picture shows how the page looks, the',
         '  DevTools show how it behaves.',
-        '- Take the snapshot of the page first: the identifier of an element (`uid`) comes from',
-        '  the snapshot, and a click without a fresh snapshot clicks nothing.',
     ];
     if (url) {
-        lines.push(`- The page of the project is at ${url}. Open it with the navigation tool before you work with it.`);
+        lines.push(`- The project page is ready at ${url}. Navigate to it before inspecting the page; `
+            + `the \`navigate_page\` call must include both \`type: "url"\` and \`url: "${url}"\`. `
+            + 'Never call URL navigation without a non-empty URL.');
     } else {
-        lines.push('- The page of the project is the one the stage has opened. Open it with the navigation tool if the tools say that there is no page.');
+        lines.push('- No live project URL was provided. Do not guess localhost or call URL navigation without a URL;');
+        lines.push('  inspect the files and build, and report if live browser inspection is necessary but unavailable.');
     }
+    lines.push(
+        '- Take the snapshot of the page after navigation: the identifier of an element (`uid`) comes from',
+        '  the snapshot, and a click without a fresh snapshot clicks nothing.',
+    );
     if (Number.isFinite(width) && width > 0) {
         lines.push(`- The design is ${width} pixels wide. Resize the window to that width before you judge the layout: a page that is wider than the design is a different page.`);
     }
