@@ -1,0 +1,2 @@
+ai-measure measure --image landing.png --model openai/gpt-6.2-sol --image-model bytedance-seed/seedream-5-5
+ai-webdev run --input what-needs.md --image landing.png --kind landing "Сделать лэндинг по макету изображения landing.png" --model openai/gpt-6.2-sol --image-model bytedance-seed/seedream-5-5
