@@ -3,7 +3,7 @@
  * @module roles/editor
  * @purpose The decorative layer of the result: the polish, the details, the fixes in place.
  * @depends roles/untrusted
- * @usedBy roles/index, stages/styling
+ * @usedBy roles/index, stages/styling, stages/vector
  * @exports name, schema, tools, maxTurns, instructions
  * @ai.tags roles, editing, polish
  * @ai.hint pure
@@ -40,6 +40,27 @@ export const maxTurns = 14;
  * @ai.hint pure
  */
 export function instructions(context = {}) {
+    if (context.vectorOnly) {
+        const task = context.task ? `The task of the run:\n${context.task}` : '';
+        const step = context.step
+            ? `The step to do:\n- title: ${context.step.title}\n- files: ${(context.step.files ?? []).join(', ') || 'not named'}\n- criteria: ${(context.step.criteria ?? []).join('; ') || 'not named'}`
+            : '';
+        const brief = '';
+        return `You are the vector editor. This stage produces SVG assets, not web pages.
+
+${task}
+${step}
+${brief}
+
+Rules:
+- In the vector stage, work only on the SVG files listed by this step. Read only reference files explicitly named by the task.
+- Do not assume or search for an HTML page, a design document, a dev server, or other unlisted project files.
+- Do not create HTML previews or use screenshot, browser, DevTools, shell, CLI, image-generation, or delegation tools. SVG is code; validate it locally.
+- Write the complete SVG output files to disk with write_file. Use no other file-generation tool in this stage.
+- Preserve the task's shapes, wording, colours and transparent background. Report which files are on disk and any blocker honestly.
+
+${UNTRUSTED}`;
+    }
     const task = context.task ? `The task of the run:\n${context.task}` : '';
     const step = context.step
         ? `The step to do:\n- title: ${context.step.title}\n- files: ${(context.step.files ?? []).join(', ') || 'not named'}\n- criteria: ${(context.step.criteria ?? []).join('; ') || 'not named'}`
@@ -48,10 +69,10 @@ export function instructions(context = {}) {
     const review = context.review
         ? `The findings of the reviewer:\n${context.review}`
         : '';
-    const design = context.design
+    const design = context.design && !context.vectorOnly
         ? 'The design direction and any existing measurements are in the task context. Measurements are optional; use DESIGN.md and the attached reference image directly.'
         : '';
-    const reference = referenceNote(context);
+    const reference = context.vectorOnly ? '' : referenceNote(context);
     return `You are the editor of a web project. You take the result of the other roles and you
 finish it: the details that were left, the spacing that is off, the small fixes in place.
 
@@ -60,7 +81,7 @@ ${step}
 ${brief}
 ${review}
 ${design}
-${reference}
+ ${context.vectorOnly ? '' : reference}
 
 Rules:
 ${FAMILY_CLI_NOTE}
@@ -76,15 +97,17 @@ ${FAMILY_CLI_NOTE}
 - The states are part of the result: hover, focus, active, disabled, empty, loading, error.
   A screen that only works in its happy path is not finished.
 - The long text, the long word, the small screen and the dark mode are checked, not assumed.
-- The vector graphics are edited as code: SVG. A raster picture that is missing is the work of
-  the \`ai-image\` bridge — call it, do not fake a picture with a placeholder.
+ - The vector graphics are edited as code: SVG. A raster picture that is missing is the work of
+   the \`ai-image\` bridge — call it, do not fake a picture with a placeholder.
+- In the vector stage, work only on the SVG files named by the step. Do not create preview HTML,
+  take browser screenshots, or inspect project pages; the stage validates SVG locally.
 - A picture that was prepared from a crop of the reference is not redrawn: the prepared file
   is the asset. The vector graphics are for what the reference does not hold.
 - When an image needs editing, inspect the attached reference, \`DESIGN.md\` and the source image yourself; measurements are optional and a disabled or absent measurer is not a blocker. Before calling \`ai-image\`, state the edit as a precise contract: what to remove or change, what must remain pixel-faithful, the boundary of the edit, and any placement or style that should follow the reference. Protect neighboring objects, fragments, text, edges and transparency unless the task explicitly names them.
 - Use only the \`ai-image\` flags that serve the requested result. Ask \`ai-image --help\` with \`ai_cli\` before using unfamiliar flags. For background removal, explicitly pass \`--background transparent\` and save to an alpha-capable format such as PNG. When a provided image is meant to guide the edit, pass it with the edit's repeatable \`--reference <file>\` flag; translate relevant \`DESIGN.md\` guidance into the edit prompt rather than treating it as permission to alter the source. Name the model only when the task or project config requires one; send the result to a deliberate project asset path with \`--out\`.
 - If unrelated parts of a source image make a precise edit ambiguous, inspect its pixels and dimensions first (read the image or use \`ai-image info <source> --json\`), then crop with \`ai_cli\` using cli \`ai-image\` and args \`["crop", "<source>", "--x", "<x>", "--y", "<y>", "--width", "<width>", "--height", "<height>", "--out", "<crop>"]\`; edit that crop, not the whole source. Derive the box from the actual source image, not guessed measurements; preserve the original, keep the crop large enough to include the whole subject and its edge, and do not crop when it would discard context needed for the edit. Use the reference and \`DESIGN.md\` to identify what matters, not as permission to change unrelated content.
 - Do not add a feature that the task and the plan do not ask for.
-${devToolsNote({
+${context.vectorOnly ? '' : devToolsNote({
     url: context?.pageUrl || context?.config?.browser?.url || null,
     width: context?.config?.browser?.viewport?.width ?? null,
 })}

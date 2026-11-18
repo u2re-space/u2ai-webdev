@@ -23,7 +23,7 @@ import {
     resolveEngine,
     startStaticServer,
 } from '../src/agent/browser.js';
-import { entryPage, visionEnabled, visionPrompt } from '../src/stages/vision.js';
+import { entryPage, shootPage, visionEnabled, visionPrompt } from '../src/stages/vision.js';
 import { stylesOnly } from '../src/stages/sight.js';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..');
@@ -137,6 +137,13 @@ test('the entry point of the project is found', async () => {
     } finally {
         await cleanup();
     }
+});
+
+test('a screenshot rejects SVG assets instead of opening them as project pages', async () => {
+    await assert.rejects(
+        () => shootPage({ root: process.cwd(), page: 'assets/award-badge.svg' }),
+        /HTML, а не ресурс assets\/award-badge\.svg/,
+    );
 });
 
 test('the eye of the styles is on when there is something to compare with', () => {

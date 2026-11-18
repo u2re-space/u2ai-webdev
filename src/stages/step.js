@@ -246,12 +246,21 @@ export async function projectScripts(root) {
  * the stylesheet names the partials it uses. A path that was not seen on the disk does
  * not exist.
  * @param {string} role
- * @param {{ scripts?: string[] }} [options]
+ * @param {{ scripts?: string[], vectorOnly?: boolean }} [options]
  * @returns {string}
  * @exports
  * @ai.hint pure
  */
-export function orderOfWork(role, { scripts = [] } = {}) {
+export function orderOfWork(role, { scripts = [], vectorOnly = false } = {}) {
+    if (String(role ?? '').trim().toLowerCase() === 'editor' && vectorOnly) {
+        return [
+            '## The order of the work',
+            '- Work only on the SVG files named by this step. Read those files and the exact references named in the task.',
+            '- Do not assume the project has an HTML entry point or running web page; do not search for unlisted files.',
+            '- Validate SVG locally. Do not create an HTML preview or use the page screenshot tool for an SVG asset.',
+            '- Write only the SVG files of the step and report the paths that are on disk.',
+        ].join('\n');
+    }
     const check = VERIFIES_WITH_COMMAND.has(role)
         ? '- Check your work with the command of the project (`npm run build`, the test script): the\n'
             + '  compiler and the bundler see the errors that the eye does not. Never judge the\n'
@@ -745,7 +754,7 @@ export async function roleWorkOnDisk({ root, config = {}, id = null, plan = null
  * @param {{ client: object, config?: object, root?: string, task?: string, role: string,
  *   plan?: object|null, brief?: string, inputs?: object|null, runId?: string|null,
  *   apply?: boolean, context?: object, notify?: (event: object) => void,
- *   env?: object, runContext?: object|null }} request
+ *   env?: object, runContext?: object|null, signal?: AbortSignal|null }} request
  * @returns {Promise<{ stage: string, ok: boolean, skipped: boolean, steps: object[],
  *   warnings: string[], turns: number, usage: object|null, runId: string }>}
  * @exports
@@ -766,6 +775,7 @@ export async function runStepStage({
     notify = () => {},
     env = process.env,
     runContext = null,
+    signal = null,
 } = {}) {
     if (!client?.responses) throw new Error('Клиент API не передан.');
     const run = id ?? runId();
@@ -794,10 +804,15 @@ export async function runStepStage({
     // Only the roles that look at the design get the picture itself. The scripts and the
     // icons work from the numbers and the text: a picture they do not need is uploaded,
     // read and paid for on every turn of the role.
-    const parts = LOOKS_AT_DESIGN.has(role) ? reference.parts : [];
+    const parts = LOOKS_AT_DESIGN.has(role) && !(role === 'editor' && extra?.vectorOnly)
+        ? reference.parts
+        : [];
     // The order of the work is the same for every role of a step: the project is read
     // before it is written, and the paths come from the disk.
-    const order = orderOfWork(role, { scripts: await projectScripts(root) });
+    const order = orderOfWork(role, {
+        scripts: extra?.vectorOnly ? [] : await projectScripts(root),
+        vectorOnly: Boolean(extra?.vectorOnly),
+    });
     const reports = [];
     let turns = 0;
     let usage = null;
@@ -822,12 +837,12 @@ export async function runStepStage({
         ].join('\n'));
         // What is on the disk now: the role changes the files, it does not replace them with
         // a guess of what they should be.
-        const visible = filesBlock(await visibleFiles(root, step, plan));
+        const visible = extra?.vectorOnly ? '' : filesBlock(await visibleFiles(root, step, plan));
         if (visible) blocks.push(visible);
-        if (brief) blocks.push(brief);
-        if (design) blocks.push(design);
+        if (brief && !(role === 'editor' && extra?.vectorOnly)) blocks.push(brief);
+        if (design && !(role === 'editor' && extra?.vectorOnly)) blocks.push(design);
         blocks.push(order);
-        if (reference.names.length) {
+        if (reference.names.length && !(role === 'editor' && extra?.vectorOnly)) {
             blocks.push([
                 '## The reference',
                 LOOKS_AT_DESIGN.has(role)
@@ -853,12 +868,14 @@ export async function runStepStage({
                 reference: reference.names,
                 referenceSizes: reference.sizes,
                 pageUrl: runContext?.browserUrl ?? null,
+                vectorOnly: Boolean(extra?.vectorOnly),
                 ...extra,
             },
             root,
             env,
             maxTurns: config?.stages?.[role]?.maxTurns ?? null,
             requireFiles: Boolean(step.files?.length),
+            signal,
             notify,
             runContext,
             stage: role,
@@ -923,12 +940,14 @@ export async function runStepStage({
                     design: Boolean(design),
                     reference: reference.names,
                     referenceSizes: reference.sizes,
+                    vectorOnly: Boolean(extra?.vectorOnly),
                     ...extra,
                 },
                 root,
                 env,
                 maxTurns: config?.stages?.[role]?.maxTurns ?? null,
                 requireFiles: Boolean(step.files?.length),
+                signal,
                 notify,
                 parts,
                 runContext,

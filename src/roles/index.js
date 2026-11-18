@@ -179,6 +179,9 @@ const DELEGATED_TOOLS = new Set([
     'fetch_url', 'search_icons', 'batch', 'write_file', 'replace_text', 'patch_file',
     'copy_path', 'generate_svg',
 ]);
+const VECTOR_TOOLS = new Set([
+    'list_files', 'read_file', 'write_file', 'replace_text', 'search_files', 'read_skill',
+]);
 const READ_ONLY_TOOLS = new Set([
     'list_files', 'read_file', 'find_line', 'search_files', 'list_backups',
     'read_skill', 'web_guidance', 'fetch_url', 'search_icons',
@@ -499,11 +502,14 @@ export async function runRole({
         // the bridge works.
         notify,
         writeFiles: context?.delegated ? (context?.step?.files ?? []) : null,
+        signal,
     });
     // A delegated role never hands work over again: the hand-over is one level deep.
     const specs = tools.specsFor(key, definition.tools)
         .filter((spec) => key !== 'reviewer' || REVIEW_TOOLS.has(spec.name))
         .filter((spec) => !context?.delegated || DELEGATED_TOOLS.has(spec.name))
+        .filter((spec) => !context?.vectorOnly || VECTOR_TOOLS.has(spec.name))
+        .filter((spec) => !context?.vectorOnly || !String(spec.name).startsWith('mcp_'))
         .filter((spec) => depth === 0 || spec.name !== 'delegate_role');
     const schema = roleSchema(key);
     const readSpecs = specs.filter((spec) => READ_ONLY_TOOLS.has(String(spec?.name ?? '')));

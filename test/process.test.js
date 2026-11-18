@@ -357,6 +357,52 @@ test('the pipeline pauses on the border of a stage and may continue', async () =
     assert.equal(continued.stages[0].status, 'skipped');
 });
 
+test('a failed vector stage does not claim completion or run dependent stages', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-optional-vector-'));
+    const order = [];
+    const stages = [
+        { name: 'coding', title: 'Code', dependsOn: [], run: async () => { order.push('coding'); return { ok: true }; } },
+        { name: 'vector', title: 'Vector', dependsOn: ['coding'], run: async () => { order.push('vector'); throw new Error('local SVG validation failed'); } },
+        { name: 'iconify', title: 'Icons', dependsOn: ['vector'], run: async () => { order.push('iconify'); return { ok: true }; } },
+    ];
+    const result = await runPipeline({
+        client: { responses: { async create() { return { output: [] }; } } },
+        config: CONFIG,
+        root,
+        task: 'Make a landing.',
+        runId: 'run-optional-vector',
+        stages,
+    });
+    assert.equal(result.status, 'failed');
+    assert.deepEqual(order, ['coding', 'vector']);
+    assert.equal(result.progress.stages[1].status, 'failed');
+});
+
+test('an aborted vector stage pauses the run instead of failing it', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-aborted-vector-'));
+    const controller = new AbortController();
+    const stages = [
+        { name: 'coding', title: 'Code', dependsOn: [], run: async () => ({ ok: true }) },
+        { name: 'vector', title: 'Vector', dependsOn: ['coding'], run: async () => {
+            controller.abort(new DOMException('The operation was aborted.', 'AbortError'));
+            throw controller.signal.reason;
+        } },
+        { name: 'iconify', title: 'Icons', dependsOn: ['vector'], run: async () => ({ ok: true }) },
+    ];
+    const result = await runPipeline({
+        client: { responses: { async create() { return { output: [] }; } } },
+        config: CONFIG,
+        root,
+        task: 'Make a landing.',
+        runId: 'run-aborted-vector',
+        stages,
+        signal: controller.signal,
+    });
+    assert.equal(result.status, 'paused');
+    assert.equal(result.progress.stages[1].status, 'pending');
+    assert.equal(result.progress.stages[2].status, 'pending');
+});
+
 test('a stage that was asked for by name runs again on a resumed run', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-asked-stage-'));
     const done = [];

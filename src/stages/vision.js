@@ -100,6 +100,9 @@ export async function shootPage({
     engine = null,
     url = null,
 } = {}) {
+    if (page && !/\.html?$/i.test(String(page))) {
+        throw new Error(`Снимок страницы принимает HTML, а не ресурс ${page}; SVG проверяется локально.`);
+    }
     const target = output
         ? (await resolveInside(root, output, { forWrite: true, allowRoot: false })).abs
         : path.join(root, '.ai', 'shots', `page-${Date.now().toString(36)}.png`);

@@ -436,7 +436,7 @@ export async function serverAnswers(url, { timeoutMs = 1500 } = {}) {
             method: 'GET',
             redirect: 'follow',
         });
-        return response.status < 500;
+        return response.status >= 200 && response.status < 400;
     } catch {
         return false;
     }

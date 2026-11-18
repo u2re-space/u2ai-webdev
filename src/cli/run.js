@@ -484,8 +484,11 @@ export async function runCommand(ctx) {
             return 1;
         }
         if (report.status === 'paused') {
-            renderer?.note?.(`Прогон остановлен после стадии «${stopAfter}». Продолжить: ai-webdev run --resume ${report.runId}`);
-            return 0;
+            const interrupted = controller.signal.aborted;
+            renderer?.note?.(interrupted
+                ? `Прогон прерван во время стадии «${report.progress?.stage ?? 'unknown'}». Продолжить: ai-webdev run --resume ${report.runId}`
+                : `Прогон остановлен после стадии «${stopAfter}». Продолжить: ai-webdev run --resume ${report.runId}`);
+            return interrupted ? EXIT.aborted : EXIT.ok;
         }
         if (controller.signal.aborted) return 130;
         return 0;

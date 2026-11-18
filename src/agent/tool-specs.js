@@ -375,11 +375,12 @@ export const TOOL_SPECS = Object.freeze({
     },
     screenshot: {
         configKey: 'browser',
-        description: 'Take a screenshot of the page of the project in a real browser (Ego Lite when it is '
+        description: 'Take a screenshot of an HTML page of the project in a real browser (Ego Lite when it is '
             + 'installed, otherwise headless Chrome/Edge) and read the picture. Use it to see the result of '
-            + 'your own work: a layout that compiles may still be broken. The page of the project is served '
-            + 'locally, so the call needs no running server. The answer names the file of the picture — read '
-            + 'it with the tool of the pictures to look at it.',
+            + 'your own web-page work: a layout that compiles may still be broken. Do not use this tool for '
+            + 'SVG/image assets; use an SVG validator or the appropriate image tool instead. An explicit `path` '
+            + 'is served from the project root; omit it to inspect the project entry page. The answer names the '
+            + 'file of the picture — read it with the tool of the pictures to look at it.',
         parameters: {
             type: 'object',
             properties: {

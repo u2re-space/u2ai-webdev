@@ -13,7 +13,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promises';
 
-import { stepsForRole, applyFiles, laterSteps, missingFiles, roleWorkOnDisk, stepReportPath, readStepReport, readStepReports, stepScope, inScope, runStepStage } from '../src/stages/step.js';
+import { stepsForRole, applyFiles, laterSteps, missingFiles, roleWorkOnDisk, stepReportPath, readStepReport, readStepReports, stepScope, inScope, orderOfWork, runStepStage } from '../src/stages/step.js';
 import { markupStage } from '../src/stages/markup.js';
 import { codingStage } from '../src/stages/coding.js';
 import { stylingStage, styleTokensText } from '../src/stages/styling.js';
@@ -555,6 +555,45 @@ test('the request of a step tells the role the order of the work', async () => {
     assert.match(text, /The scripts of the project: build/);
     // The work is checked with a command, not with the eye.
     assert.match(text, /npm run build/);
+});
+
+test('the vector work order does not assume an HTML entry point or page screenshot', () => {
+    const text = orderOfWork('editor', { vectorOnly: true });
+    assert.match(text, /SVG files named by this step/);
+    assert.match(text, /Do not assume the project has an HTML entry point/);
+    assert.match(text, /Do not create an HTML preview/);
+    assert.doesNotMatch(text, /scripts of the project/);
+});
+
+test('the vector step does not assume a page entry point, design file, or browser preview', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-vector-step-order-'));
+    let seen = null;
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><circle cx="5" cy="5" r="4"/></svg>';
+    const result = await runStepStage({
+        client: fakeClient([(body) => {
+            seen = body;
+            return schemaAnswer('code', {
+                summary: 'Wrote the badge SVG.',
+                files: [{ path: 'assets/badge.svg', content: svg, language: 'svg' }],
+                commands: [],
+                notes: '',
+            });
+        }]),
+        config: { output: { work: './.tmp' } },
+        root,
+        task: 'Draw the badge as SVG.',
+        role: 'editor',
+        plan: { steps: [{ id: 'vector-1', title: 'Draw badge', role: 'editor', files: ['assets/badge.svg'], criteria: ['valid SVG'] }] },
+        context: { vectorOnly: true },
+        runId: 'run-vector',
+        notify: () => {},
+    });
+    assert.equal(result.ok, true);
+    const request = JSON.stringify(seen.input);
+    assert.doesNotMatch(request, /index\.html|DESIGN\.md/);
+    assert.match(request, /Do not create an HTML preview or use the page screenshot tool/);
+    const text = await readFile(path.join(root, 'assets', 'badge.svg'), 'utf8');
+    assert.match(text, /<svg/);
 });
 
 test('the role sees the files that are on the disk', async () => {

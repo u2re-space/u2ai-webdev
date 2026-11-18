@@ -188,9 +188,10 @@ function counted(count, one, few, many) {
  * number into the call: a role that has to ask for the page first spends a turn on it.
  * @param {{ connection: object, tool: string, parameters: object }} entry the tool of the server
  * @param {object} args the arguments of the call
+ * @param {{ signal?: AbortSignal|null }} [options]
  * @returns {Promise<unknown>} the answer of the server
  */
-async function callMcp(entry, args = {}) {
+async function callMcp(entry, args = {}, { signal = null } = {}) {
     const connection = entry.connection ?? {};
     const required = Array.isArray(entry.parameters?.required) ? entry.parameters.required : [];
     const wants = required.includes('pageId');
@@ -204,19 +205,38 @@ async function callMcp(entry, args = {}) {
         : args;
     const payload = (pageId) => (wants && pageId !== null ? { ...callArgs, pageId } : callArgs);
     // The number of the page is the one the house knows, when the role did not name a page.
-    const first = wants && known !== null && args?.pageId === undefined
-        ? await connection.call(entry.tool, payload(known))
-        : await connection.call(entry.tool, callArgs);
+    const first = await callWithAbort(
+        () => wants && known !== null && args?.pageId === undefined
+            ? connection.call(entry.tool, payload(known))
+            : connection.call(entry.tool, callArgs),
+        signal,
+    );
     const text = (first?.content ?? [])
         .map((part) => (typeof part?.text === 'string' ? part.text : ''))
         .join('\n');
     if (!/no page found|page not found|invalid input.*pageId/i.test(text)) return first;
     // The page is gone or the number was wrong: the house asks for the list of the pages once
     // more and repeats the call with the page that is there.
-    const refreshed = await firstPageId(connection);
+    const refreshed = await callWithAbort(() => firstPageId(connection), signal);
     if (refreshed === null) return first;
     connection.pageId = refreshed;
-    return await connection.call(entry.tool, payload(refreshed));
+    return await callWithAbort(() => connection.call(entry.tool, payload(refreshed)), signal);
+}
+
+/** Abort a slow browser tool without waiting for its MCP timeout. */
+async function callWithAbort(call, signal) {
+    if (!signal) return await call();
+    if (signal.aborted) throw signal.reason ?? new DOMException('The operation was aborted.', 'AbortError');
+    let onAbort;
+    const aborted = new Promise((_, reject) => {
+        onAbort = () => reject(signal.reason ?? new DOMException('The operation was aborted.', 'AbortError'));
+        signal.addEventListener('abort', onAbort, { once: true });
+    });
+    try {
+        return await Promise.race([call(), aborted]);
+    } finally {
+        signal.removeEventListener('abort', onAbort);
+    }
 }
 
 /**
@@ -424,7 +444,7 @@ async function entryPage(root, page = '') {
  * @returns {{ execute: (name: string, args: object) => Promise<string>, specs: object[],
  *   specsFor: Function, setWriteDirs: Function, writeDirs: Function }}
  */
-export function createToolset({ root, config, role = null, mcp = [], writeDirs = null, writeFiles = null, env = process.env, context = null, map = null, notify = null }) {
+export function createToolset({ root, config, role = null, mcp = [], writeDirs = null, writeFiles = null, env = process.env, context = null, map = null, notify = null, signal = null }) {
     const mcpTools = mcpToolEntries(mcp);
     const mcpSpecs = mcpTools.map((entry) => ({
         type: 'function',
@@ -754,7 +774,7 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
     async function execute(name, args = {}) {
         const mcpTool = mcpTools.find((entry) => entry.name === name);
         if (mcpTool) {
-            const answer = await callMcp(mcpTool, args ?? {});
+            const answer = await callMcp(mcpTool, args ?? {}, { signal });
             return await mcpAnswer(root, mcpTool, answer);
         }
         // The answer of a question that was already asked comes from the cache of the run.
@@ -1064,12 +1084,21 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                 return `HTTP ${answer.status} · ${answer.url}\n\n${answer.text}`;
             }
             case 'screenshot': {
-                // The live page of the project: the dev server that already runs is used as
-                // it is, and a server that is not running is started for the time of the
-                // call. The static root of a project on Vite has no styles at all — the
-                // styles live inside the script — so the role would see a page that is not
-                // the page of the project.
-                const live = await ensurePage({
+                const page = String(args.path ?? '').trim();
+                // An explicit page is served from disk, not sent to whatever happens to be
+                // answering on localhost. This also lets a standalone HTML preview work when
+                // the project has no dev server. Verify it first so Chromium cannot return a
+                // convincing screenshot of its own 404 page.
+                if (page) {
+                    const { abs } = await resolveInside(root, page, { allowRoot: false });
+                    if (!(await stat(abs).then((info) => info.isFile()).catch(() => false))) {
+                        throw new Error(`Страница для снимка не найдена: ${page}`);
+                    }
+                    if (!/\.html?$/i.test(page)) {
+                        throw new Error(`Снимок принимает HTML-страницу, а не ресурс ${page}; SVG проверяется локально.`);
+                    }
+                }
+                const live = page ? { url: null, stop: async () => {} } : await ensurePage({
                     root,
                     config,
                     env,
@@ -1081,7 +1110,7 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                         root,
                         config,
                         env,
-                        page: String(args.path ?? ''),
+                        page,
                         output: String(args.output ?? ''),
                         width: Number.isSafeInteger(Number(args.width)) ? Number(args.width) : 1440,
                         height: Number.isSafeInteger(Number(args.height)) ? Number(args.height) : 900,

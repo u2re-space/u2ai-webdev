@@ -331,6 +331,47 @@ test('the roles that check their work have the tool of the command', () => {
     }
 });
 
+test('the vector editor instructions omit page and DevTools work', () => {
+    const text = ROLES.editor.instructions({ vectorOnly: true, design: true });
+    assert.match(text, /In the vector stage, work only on the SVG files/);
+    assert.doesNotMatch(text, /Take the snapshot of the page after navigation/);
+    assert.doesNotMatch(text, /DESIGN\.md directly/);
+});
+
+test('the vector editor gets no browser, screenshot, command, or delegated tools', async () => {
+    const requests = [];
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-vector-only-'));
+    const client = { responses: { async create(body) {
+        requests.push(body);
+        if (body.tools.some((tool) => tool.name === 'write_ready')) return toolAnswer('write_ready', {});
+        if (body.tools.some((tool) => tool.name === 'write_file') && requests.length > 2) {
+            return toolAnswer('write_file', { path: 'badge.svg', content: '<svg/>' });
+        }
+        return schemaAnswer('code', {
+            summary: 'Wrote the badge.',
+            files: [{ path: 'badge.svg', content: '<svg/>', language: 'svg' }],
+            commands: [],
+            notes: '',
+        });
+    } } };
+    await runRole({
+        client,
+        config: structuredClone(defaults),
+        role: 'editor',
+        input: 'Draw one SVG.',
+        context: { vectorOnly: true, task: 'Draw the SVG.', step: { title: 'Draw SVG', files: ['badge.svg'], criteria: [] } },
+        root,
+        requireFiles: true,
+    });
+    const names = requests.find((request) => request.tools.some((tool) => tool.name === 'write_file'))
+        .tools.map((tool) => tool.name);
+    for (const forbidden of ['screenshot', 'run_command', 'delegate_role', 'call_ai_image', 'navigate_page']) {
+        assert.ok(!names.includes(forbidden), forbidden);
+    }
+    assert.ok(names.includes('write_file'));
+    assert.ok(!names.includes('generate_svg'), 'vector output uses the step-scoped write_file tool');
+});
+
 test('the reviewer gets only read tools and no live-browser tools', () => {
     assert.equal(ROLES.reviewer.maxTurns, 4);
     assert.ok(ROLES.reviewer.tools.includes('find_line'));

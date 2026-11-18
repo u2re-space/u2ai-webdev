@@ -429,7 +429,7 @@ export async function runPipeline({
         // Start the project's own dev script only when a stage is about to hand work to a
         // browser-aware role, then give that role the ready address to navigate to.
         const hasDevTools = (ctx.mcp ?? []).some((connection) => connection.name === 'chrome-devtools');
-        if (!livePage && hasDevTools && ['coding', 'styling', 'vector'].includes(stage.name)) {
+        if (!livePage && hasDevTools && ['coding', 'styling'].includes(stage.name)) {
             try {
                 livePage = await ensurePage({
                     root,
@@ -463,6 +463,15 @@ export async function runPipeline({
         } catch (cause) {
             error = cause?.message ?? String(cause);
             warnings.push(`Стадия ${stage.name} упала: ${error}`);
+            if (signal?.aborted) {
+                paused = true;
+                status = 'paused';
+                progress = recordStep(progress, { stage: stage.name, status: 'pending', report: error });
+                await writeProgress(root, config, run, progress);
+                reports.push({ name: stage.name, status: 'paused', result: null, warnings: [error] });
+                notify({ type: 'stage.done', stage: stage.name, status: 'paused', result: null });
+                break;
+            }
             progress = recordStep(progress, {
                 stage: stage.name,
                 status: 'failed',
