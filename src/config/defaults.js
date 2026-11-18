@@ -92,7 +92,7 @@ export const DOCUMENTATION_SOURCES = Object.freeze({
 export const defaults = {
   // --- API -----------------------------------------------------------------
   /** Text model for the role agents. */
-  model: 'google/gemini-4-hydrogen',//'moonshotai/kimi-k3.1-pro',
+  model: 'openai/gpt-6.2-sol',//'moonshotai/kimi-k3.1-pro',
   /** Endpoint of the text API; backends[] below can override it. */
   baseURL: 'https://routerai.ru/api/v1',
   apiKey: null,
