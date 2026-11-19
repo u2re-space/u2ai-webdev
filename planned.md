@@ -2137,6 +2137,22 @@ CLI `ai-webdev` (`@u2ai/webdev`) с собственным конфигом `~/.
 
 ---
 
+### step-97 — Графическая CLI и внутренний worker
+
+- [x] Повод: `ai-webdev` вырос из линейного вывода в терминал: стадии, прогресс, живой лог
+      и управление оператора больше не помещаются в одну простыню текста
+- [x] `src/cli/protocol.js` — версионированный двунаправленный протокол worker-а и оболочки
+- [x] `src/cli/input-state.js`, `src/cli/input.js` — общее состояние оператора для терминала и worker-а
+- [x] `src/cli/worker.js`, `bin/ai-webdev-worker.js` — внутренний процесс с обычными stdout/stderr и IPC
+- [x] `src/tui/{state,render,app,worker-client,cli}.js`, `bin/ai-webdev.js` — оболочка `terminal-kit`
+- [x] `package.json` — `terminal-kit`, бинарь `ai-webdev-worker`; pipe, `--json`, `--quiet` и
+      `--headless` сохраняют машинный режим
+- [x] `test/worker.test.js`, `test/tui.test.js` — протокол, канал оператора, reducer и запуск worker-а
+- [x] README (EN) — архитектура CLI, TUI и машинный режим
+- [x] Проверка: `npm test`, `npm run check`, `git diff --check`
+
+---
+
 
 ## 2. Порядок работы и зависимости шагов
 

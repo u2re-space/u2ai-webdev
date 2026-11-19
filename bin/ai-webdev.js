@@ -2,14 +2,14 @@
 /**
  * @file bin/ai-webdev.js
  * @module bin/ai-webdev
- * @purpose Process entry for the `ai-webdev` command. Forwards every argument to `cli.main`.
- * @depends cli
+ * @purpose Process entry of the graphical ai-webdev command.
+ * @depends tui/cli
  * @usedBy package bin
- * @ai.tags cli
+ * @ai.tags cli, tui
  * @ai.hint io
  */
-import { main } from '../src/cli.js';
+import { mainTui } from '../src/tui/cli.js';
 
-// A crash that happened outside the command — an unhandled rejection, an uncaught exception —
-// keeps its own exit code: the command may have returned 0 before the process fell over.
-process.exitCode = (await main(process.argv.slice(2))) || process.exitCode || 0;
+// A crash that happened outside the command keeps its own exit code: the command may
+// have returned 0 before the process fell over.
+process.exitCode = (await mainTui(process.argv.slice(2))) || process.exitCode || 0;

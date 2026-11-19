@@ -4,7 +4,7 @@ AI web developer: it plans a web project, collects the context of the design, wr
 the code and the styles, draws the vector graphics, picks the icons, reviews the result and
 remembers the lessons.
 
-- Named CLI as `ai-webdev`.
+- Graphical CLI as `ai-webdev`; the internal process is `ai-webdev-worker`.
 - Config in `~/.ai-webdev/config.json`.
 - Node.js 26+, ESM, no SDK (plain `fetch`).
 - Only the Responses API; every role answers with a strict JSON of its own schema.
@@ -27,8 +27,8 @@ npm install
 npm link        # puts `ai-webdev` into PATH
 ```
 
-The only dependency is the MCP client (`@modelcontextprotocol/node`); everything else is a built-in
-module of Node.
+The runtime dependencies are the MCP client (`@modelcontextprotocol/node`) and the terminal UI
+(`terminal-kit`); the rest is built into Node.js.
 
 ## Quick start
 
@@ -44,12 +44,32 @@ ai-webdev stages                                           # the stages of the p
 The task is the whole input: an unknown command is a task, so `ai-webdev "make a landing"` is the
 same as `ai-webdev run "make a landing"`.
 
+## The CLI architecture
+
+`ai-webdev` has two processes:
+
+- `ai-webdev` is the graphical shell. In a terminal it opens a full-screen dashboard with the
+  stages, the progress bar, the live worker log and the operator line. Every current command is
+  available through this shell.
+- `ai-webdev-worker` is the internal worker. It owns the CLI, the pipeline and the ordinary
+  stdout/stderr. A versioned IPC protocol carries the pipeline events, the questions of the
+  operator and the commands of the shell.
+
+The operator line has the same vocabulary as the classic CLI: ordinary text steers the next role
+turn, `/skip [stage-or-step]` skips a stage or a plan step, `/help` shows the controls and `/quit`
+stops on the next safe boundary. A question raised by `ask_user` takes the next typed line.
+
+Pipes, redirects, `--json`, `--quiet` and `--headless` start the worker without the dashboard.
+This keeps the machine contract stable: `--json` still prints one JSON object per line on stdout,
+and the exit codes remain `0`, `1`, `2` and `130`.
+
 ## Commands
 
 | Command | What it does |
 |---|---|
 | `run <task>` | Take the task through the whole pipeline of the stages. |
 | `plan <task>` | Plan the work and show the plan. |
+| `sight [task]` | Look at the page and let the styler fix the styles. |
 | `stages` | Show the stages of the pipeline. |
 | `component [publish\|list\|search\|show\|rm\|path]` | The local registry of the components. |
 | `install <tag>[@version]` | Install a component as a local `file:` package. |
@@ -1604,8 +1624,10 @@ import { main, loadConfig, STAGES, ROLES } from '@u2ai/webdev';
 const exitCode = await main(['run', 'make a landing page', '--route', 'plan']);
 ```
 
-`main` is the whole CLI. `loadConfig` returns the merged configuration, `STAGES` is the registry of
-the stages, and `runPipeline` (from `src/pipeline.js`) runs the pipeline without the CLI.
+`main` is the headless programmatic CLI: it runs a command without opening the terminal dashboard.
+`loadConfig` returns the merged configuration, `STAGES` is the registry of the stages, and
+`runPipeline` (from `src/pipeline.js`) runs the pipeline without the CLI. The graphical entry is
+`mainTui` from `src/tui/cli.js`.
 
 ## The access layer
 

@@ -67,7 +67,7 @@ export function detectMode({
  * Create the renderer of the CLI.
  *
  * @param {{ mode?: string, stdout?: object, stderr?: object, colors?: object,
- *   ascii?: boolean, verbose?: boolean }} [options]
+ *   ascii?: boolean, verbose?: boolean, input?: object|null }} [options]
  * @returns {object} the renderer
  * @exports
  * @ai.hint io
@@ -81,14 +81,15 @@ export function createRenderer({
     verbose = false,
     stdin = process.stdin,
     inputEnabled = false,
+    input: inputOverride = null,
 } = {}) {
     const paint = colors ?? createColors(mode === 'tty');
     const symbols = ascii ? ASCII_SYMBOLS : SYMBOLS;
     const json = mode === 'json';
     const quiet = mode === 'quiet';
-    const input = inputEnabled
+    const input = inputOverride ?? (inputEnabled
         ? createInputChannel({ stdin, output: stderr, interactive: mode === 'tty' })
-        : null;
+        : null);
     const terminalWrite = (text) => input ? input.log(text) : stderr.write(text);
 
     /**

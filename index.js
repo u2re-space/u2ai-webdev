@@ -5,7 +5,10 @@
  * @ai.hint keep
  */
 export { EXIT, main, parseArgv, VALUE_FLAGS } from './src/cli.js';
+export { mainTui } from './src/tui/cli.js';
 export { HELP } from './src/help.js';
+export * from './src/cli/protocol.js';
+export * from './src/cli/worker.js';
 export * from './src/cli/colors.js';
 export * from './src/cli/compatibility.js';
 export * from './src/cli/stdio.js';

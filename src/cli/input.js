@@ -10,6 +10,7 @@
 
 import { clearLine, createInterface, cursorTo, moveCursor } from 'node:readline';
 import { sanitizeText } from './stdio.js';
+import { createInputState } from './input-state.js';
 
 const STAGE_TITLES = Object.freeze({
     collect: 'Collect context', plan: 'Plan', pictures: 'Prepare pictures', architect: 'Architecture',
@@ -92,7 +93,7 @@ export function createInputChannel({ stdin = process.stdin, output = process.std
         return sanitizeText(statusText).slice(0, columns - 1);
     };
     const redrawMainPrompt = () => {
-        if (questions.length || closed || quit) return;
+        if (questions.length || closed || state.shouldQuit()) return;
         readline.setPrompt(mainPrompt());
         readline.prompt(true);
     };
@@ -118,13 +119,9 @@ export function createInputChannel({ stdin = process.stdin, output = process.std
         readline.setPrompt(mainPrompt());
         readline.prompt();
     });
-    const steering = [];
-    const skips = [];
-    const stepSkips = new Set();
+    const state = createInputState();
     const questions = [];
     let closed = false;
-    let quit = false;
-    let location = null;
     let waitResolver = null;
 
     const drawStatus = () => {
@@ -153,14 +150,14 @@ export function createInputChannel({ stdin = process.stdin, output = process.std
             readline.prompt(true);
             return;
         }
-        if (quit) return;
+        if (state.shouldQuit()) return;
         if (line.startsWith('/')) {
             const target = line.slice(1).trim().toLowerCase();
             if (target === 'skip' || target === 'skip-stage' || target === 'help' || target === 'quit'
                 || target.startsWith('skip ')) {
                 // Known interactive command; handled below.
             } else {
-                if (target) skips.push({ target, location: location ? { ...location } : getLocation() });
+                if (target) state.addSkip(target, state.location() ?? getLocation());
                 return;
             }
         }
@@ -170,20 +167,20 @@ export function createInputChannel({ stdin = process.stdin, output = process.std
             return;
         }
         if (line === '/quit') {
-            quit = true;
+            state.requestQuit();
             writeLog('Run will pause after the current safe operation.\n');
             waitResolver?.();
             return;
         }
         if (line === '/skip' || line === '/skip-stage' || line.startsWith('/skip ')) {
             const target = line === '/skip-stage' ? null : (line === '/skip' ? null : line.slice(6).trim().toLowerCase() || null);
-            const where = location ?? getLocation();
-            if (target || where?.stage || where?.step) skips.push({ target, location: where });
+            const where = state.location() ?? getLocation();
+            if (target || where?.stage || where?.step) state.addSkip(target, where);
             else writeLog('No active stage to skip yet.\n');
             redrawMainPrompt();
             return;
         }
-        steering.push(line);
+        state.addSteering(line);
         redrawMainPrompt();
     });
 
@@ -204,11 +201,12 @@ export function createInputChannel({ stdin = process.stdin, output = process.std
         },
         async prompt(question) { return await askLine(String(question ?? 'Input')); },
         takeSteering() {
-            return steering.splice(0);
+            return state.takeSteering();
         },
         setLocation(next) {
-            location = next && typeof next === 'object' ? { ...next } : null;
-            if (location) {
+            state.setLocation(next);
+            if (state.location()) {
+                const location = state.location();
                 const stage = String(location.stage ?? 'run');
                 const role = String(location.role ?? location.step?.role ?? '').trim();
                 const model = String(location.model ?? '').trim();
@@ -233,41 +231,22 @@ export function createInputChannel({ stdin = process.stdin, output = process.std
         },
         log(text) { writeLog(String(text ?? '')); },
         takeSkip({ stage = '', step = '' } = {}) {
-            const stageName = String(stage).toLowerCase();
-            const stepName = String(step).toLowerCase();
-            const index = skips.findIndex((item) => {
-                if (!item.target) return (item.location?.step
-                    ? String(item.location.step).toLowerCase() === stepName
-                    : String(item.location?.stage ?? '').toLowerCase() === stageName);
-                return item.target === stageName || (stepName && item.target === stepName);
-            });
-            return index < 0 ? null : skips.splice(index, 1)[0];
+            return state.takeSkip({ stage, step });
         },
         takeCurrentSkip() {
-            const where = location ?? getLocation();
-            const index = skips.findIndex((item) => !item.target
-                && (item.location?.step === where?.step && where?.step
-                    || item.location?.stage === where?.stage && !where?.step && where?.stage));
-            return index < 0 ? null : skips.splice(index, 1)[0];
+            return state.takeCurrentSkip();
         },
         takePendingSkips({ namedOnly = false, includeCurrent = false } = {}) {
-            if (!namedOnly && includeCurrent) return skips.splice(0);
-            const named = skips.filter((item) => item.target);
-            for (const item of named) skips.splice(skips.indexOf(item), 1);
-            return named;
+            return state.takePendingSkips({ namedOnly, includeCurrent });
         },
-        location() { return location ? { ...location } : null; },
-        queueStepSkip(id) { stepSkips.add(String(id ?? '').toLowerCase()); },
-        takeStepSkip(id) {
-            const key = String(id ?? '').toLowerCase();
-            if (!stepSkips.has(key)) return false;
-            stepSkips.delete(key);
-            return true;
-        },
-        shouldQuit() { return quit; },
+        location() { return state.location(); },
+        queueStepSkip(id) { state.queueStepSkip(id); },
+        takeStepSkip(id) { return state.takeStepSkip(id); },
+        takeActiveStepSkip(id) { return state.takeStepSkip(id); },
+        shouldQuit() { return state.shouldQuit(); },
         taskPending() { return questions.length > 0; },
         waitForQuit() {
-            if (quit || closed) return Promise.resolve();
+            if (state.shouldQuit() || closed) return Promise.resolve();
             return new Promise((resolve) => {
                 waitResolver = resolve;
                 readline.once('close', resolve);

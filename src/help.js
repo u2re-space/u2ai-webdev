@@ -22,6 +22,15 @@ Usage:
   ai-webdev <command> [options]
   ai-webdev "make a landing page"        the same as: ai-webdev run "make a landing page"
 
+Interface:
+  In a terminal, ai-webdev opens the graphical worker dashboard: the stages, the
+  progress, the live log and the operator line. The internal worker is
+  ai-webdev-worker; it owns the ordinary stdout and stderr and talks to the shell
+  over a versioned IPC protocol.
+
+  A pipe, a redirect, --json, --quiet and --headless use the worker directly. The
+  machine output stays the same: --json prints one json object per line on stdout.
+
 Commands:
   run <task>                  Take the task through the whole pipeline of the stages.
   plan <task>                 Plan the work and show the plan.
@@ -77,13 +86,15 @@ Options of the run:
   --detail                    Print more of the reports of the stages.
   --json                      One json object per line on stdout.
   --quiet                     Only the result of the run.
+  --headless                  Run the worker without the graphical shell.
   --ascii                     The symbols of the terminal without the unicode ones.
   --config <file>             The config file of the run.
   -h, --help                  Print this help.
   -v, --version               Print the version.
 
-Interactive run (TTY): enter a task when none was given, or type during the run to steer the
-next role turn. The tool ask_user waits for an answer in this same input line. Controls:
+Interactive run: in a terminal, enter a task when none was given, or type during the run
+to steer the next role turn. The tool ask_user waits for an answer in the same operator line.
+Controls:
   /skip [stage-or-step]        Skip the current stage/step, or a named pending one.
   /help                        Show the interactive controls.
   /quit                        Finish the current safe operation and pause the run.

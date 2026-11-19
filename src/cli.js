@@ -147,11 +147,12 @@ const COMMANDS = Object.freeze({
 /**
  * The entry of the CLI.
  * @param {string[]} argv
+ * @param {{ renderer?: object|null, input?: object|null }} [options]
  * @returns {Promise<number>} the exit code
  * @exports
  * @ai.hint io
  */
-export async function main(argv = []) {
+export async function main(argv = [], options = {}) {
     // A run that dies must say so.
     //
     // A thinking model works for minutes, and the process may fall over somewhere deep inside
@@ -189,12 +190,13 @@ export async function main(argv = []) {
         json: Boolean(flags.json),
         quiet: Boolean(flags.quiet),
     });
-    const renderer = createRenderer({
+    const renderer = options.renderer ?? createRenderer({
         mode,
         ascii: Boolean(flags.ascii),
         verbose: Boolean(flags.detail),
         stdin: process.stdin,
-        inputEnabled: command === 'run' || !Object.hasOwn(COMMANDS, command),
+        input: options.input ?? null,
+        inputEnabled: Boolean(options.input) || command === 'run' || !Object.hasOwn(COMMANDS, command),
     });
 
     // A command that is not known is a task: `ai-webdev "make a landing"` is a run.

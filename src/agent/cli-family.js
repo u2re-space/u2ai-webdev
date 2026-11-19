@@ -71,7 +71,7 @@ export const FAMILY_CLIS = Object.freeze({
         env: 'AI_WEBDEV_BIN',
         package: '@u2ai/webdev',
         dirs: ['u2ai-webdev', '..', 'u2ai-webdev', 'submodules', 'u2ai-webdev'],
-        script: path.join('bin', 'ai-webdev.js'),
+        script: path.join('bin', 'ai-webdev-worker.js'),
         summary: 'This CLI: the web project itself — the plan, the stages, the roles.',
     },
     'ai-decompose': {
