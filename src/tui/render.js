@@ -10,7 +10,7 @@
  *
  * @depends cli/stdio
  * @usedBy tui/app
- * @exports truncate, createTuiLayout, renderTui
+ * @exports truncate, formatStatusRow, createTuiLayout, renderTui
  * @ai.tags tui, terminal, layout
  */
 
@@ -88,12 +88,43 @@ function visibleStages(state, rows) {
 }
 
 /**
+ * Build the status row shown directly above the operator input.
+ *
+ * The row is the compact view of the current work: its model, stage, role, effort,
+ * mode, plan step and state. A pending question goes first, because the answer of the
+ * operator is the most immediate action.
+ *
+ * @param {object} state
+ * @returns {string}
+ * @exports
+ * @ai.hint pure
+ */
+export function formatStatusRow(state) {
+    const location = state?.location ?? {};
+    const running = Object.values(state?.stages ?? {})
+        .find((stage) => stage?.status === 'running');
+    const text = (value) => String(value ?? '').trim();
+    const fields = [
+        `Model: ${text(location.model) || '—'}`,
+        `Stage: ${text(location.stage) || text(running?.name) || '—'}`,
+        `Role: ${text(location.role) || '—'}`,
+        `Effort: ${text(location.effort) || '—'}`,
+        `Mode: ${text(location.mode) || '—'}`,
+    ];
+    if (text(location.step)) fields.push(`Step: ${text(location.step)}`);
+    fields.push(`Status: ${text(state?.statusText) || text(state?.status) || 'starting'}`);
+    const question = state?.question ?? null;
+    if (question) fields.unshift(`Question: ${text(question.question) || 'Input'}`);
+    return fields.join(' · ');
+}
+
+/**
  * Build the lines of the dashboard.
  *
  * @param {object} state
  * @param {{ width?: number, height?: number, input?: string, ascii?: boolean,
  *   logOffset?: number }} [options]
- * @returns {{ lines: object[], inputRow: number }}
+ * @returns {{ lines: object[], inputRow: number, statusRow: number, progressRow: number }}
  * @exports
  * @ai.hint pure
  */
@@ -112,7 +143,6 @@ export function createTuiLayout(state, {
     const lines = [];
     const push = (text = '', style = 'normal') => lines.push({ text: String(text), style });
 
-    const progress = state?.progress ?? null;
     const observed = Array.isArray(state?.observed) ? state.observed : [];
     const done = observed.filter((name) => {
         const status = state?.stages?.[name]?.status;
@@ -123,26 +153,15 @@ export function createTuiLayout(state, {
     const filled = total > 0 ? Math.round((done / total) * barWidth) : 0;
     const bar = `${marks.barFull.repeat(filled)}${marks.barEmpty.repeat(Math.max(0, barWidth - filled))}`;
 
-    const status = String(state?.status ?? 'starting');
-    const statusStyle = status === 'completed' ? 'good'
-        : (status === 'failed' || status === 'partial' ? 'bad' : 'title');
-    const location = state?.location ?? null;
-    const place = location
-        ? [location.stage, location.role, location.step, location.model].filter(Boolean).join(' · ')
-        : '';
     const command = String(state?.command || 'run');
-    const header = truncate(`ai-webdev · ${command} · ${status}`, cols);
-    push(header, statusStyle);
-    push(truncate(state?.task || place || state?.statusText || 'Preparing the run…', cols), 'dim');
-
-    const progressText = total > 0 ? `${bar} ${done}/${total}` : `${bar} 0/0`;
-    const notice = String(state?.notice ?? '');
-    push(`${truncate(progressText, Math.floor(cols * 0.45))}  ${truncate(notice, Math.floor(cols * 0.5))}`, 'normal');
+    const header = truncate(`ai-webdev · ${command}`, cols);
+    push(header, 'title');
+    push(truncate(state?.task || 'Preparing the run…', cols), 'dim');
     push(marks.rule.repeat(cols), 'dim');
 
-    const footerRows = 4;
+    const footerRows = 8;
     const headerRows = lines.length;
-    const mainRows = Math.max(3, rows - headerRows - footerRows);
+    const mainRows = Math.max(3, rows - headerRows - footerRows - 1);
     const leftWidth = Math.max(24, Math.min(44, Math.floor(cols * 0.38)));
     const rightWidth = cols - leftWidth - 3;
     const stageRows = visibleStages(state, mainRows);
@@ -168,16 +187,19 @@ export function createTuiLayout(state, {
     }
 
     push(marks.rule.repeat(cols), 'dim');
+    const progressText = total > 0 ? `${bar} ${done}/${total}` : `${bar} 0/0`;
+    const notice = String(state?.notice ?? '');
+    const progressRow = lines.length;
+    push(`${truncate(progressText, Math.floor(cols * 0.45))}  ${truncate(notice, Math.floor(cols * 0.5))}`, 'normal');
     const question = state?.question ?? null;
-    const prompt = question
-        ? `Question: ${question.question}`
-        : (state?.statusText || (status === 'running' ? 'Steer the next role turn' : 'Finished'));
-    push(truncate(prompt, cols), question ? 'warn' : 'dim');
+    push(marks.rule.repeat(cols), 'dim');
+    const statusRow = lines.length;
+    push(truncate(formatStatusRow(state), cols), question ? 'warn' : 'dim');
+    push(marks.rule.repeat(cols), 'dim');
     const inputRow = lines.length;
-    push(truncate(`› ${input}`, cols), 'normal');
     push(truncate('text: steer · /skip [name] · /help · /quit · Ctrl+C: stop', cols), 'dim');
-
-    return { lines, inputRow };
+    push(truncate(`› ${input}`, cols), 'normal');
+    return { lines, inputRow, statusRow, progressRow };
 }
 
 /**
@@ -204,5 +226,8 @@ export function renderTui(term, state, { input = '', ascii = false, logOffset = 
         const style = typeof term?.[styleName] === 'function' ? term[styleName] : term;
         style(line.text);
     });
-    term.moveTo(3, layout.inputRow + 1);
+    const inputCells = Array.from(String(input ?? '')).length;
+    const cursorColumn = Math.min(width, 3 + inputCells);
+    term.moveTo(cursorColumn, layout.inputRow + 2);
+    term.hideCursor(false);
 }

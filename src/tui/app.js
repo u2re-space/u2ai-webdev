@@ -197,6 +197,11 @@ export function createTuiApp({
             // The terminal may already be in its normal mode.
         }
         try {
+            term.hideCursor(false);
+        } catch {
+            // The terminal may not expose a visible cursor.
+        }
+        try {
             term.fullscreen(false);
         } catch {
             // The terminal may not support the alternate screen.

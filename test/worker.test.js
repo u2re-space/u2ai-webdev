@@ -29,9 +29,23 @@ test('the worker operator channel keeps steering, questions, skips and quit apar
     input.receive(createFrame(FRAME.input, { text: 'make the header blue' }));
     assert.deepEqual(input.takeSteering(), ['make the header blue']);
 
-    input.setLocation({ stage: 'styling', role: 'styler', step: 'colors' });
+    input.setLocation({
+        stage: 'styling',
+        role: 'styler',
+        step: 'colors',
+        model: 'test/model',
+        effort: 'high',
+        mode: 'interactive',
+    });
     assert.equal(frames.at(-1).type, 'status');
     assert.equal(frames.at(-1).location.role, 'styler');
+    assert.equal(frames.at(-1).location.model, 'test/model');
+
+    input.setLocation({ stage: 'coding' });
+    assert.equal(frames.at(-1).location.stage, 'coding');
+    assert.equal(frames.at(-1).location.role, undefined);
+    assert.equal(frames.at(-1).location.step, undefined);
+    assert.equal(frames.at(-1).location.model, 'test/model');
 
     const answer = input.askUser('Which color?');
     const question = frames.at(-1);

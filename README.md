@@ -49,8 +49,9 @@ same as `ai-webdev run "make a landing"`.
 `ai-webdev` has two processes:
 
 - `ai-webdev` is the graphical shell. In a terminal it opens a full-screen dashboard with the
-  stages, the progress bar, the live worker log and the operator line. Every current command is
-  available through this shell.
+  stages and the live worker log. The lower block above the operator input contains the progress
+  bar and the status row with the current model, stage, role, effort, mode, plan step and state.
+  Every current command is available through this shell.
 - `ai-webdev-worker` is the internal worker. It owns the CLI, the pipeline and the ordinary
   stdout/stderr. A versioned IPC protocol carries the pipeline events, the questions of the
   operator and the commands of the shell.

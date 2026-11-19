@@ -75,9 +75,23 @@ export function createWorkerInput({ send = () => {}, stderr = process.stderr, on
         },
 
         setLocation(next) {
-            state.setLocation(next);
-            const location = state.location();
-            if (location) send(createFrame(FRAME.status, { location, status: '' }));
+            const previous = state.location() ?? {};
+            const incoming = next && typeof next === 'object' ? next : {};
+            const stageChanged = incoming.stage && incoming.stage !== previous.stage;
+            const location = { ...previous };
+            if (stageChanged) {
+                // A new stage has no role or step until its role reports them. The model
+                // and the mode belong to the run and survive the change of the stage.
+                delete location.role;
+                delete location.step;
+                delete location.effort;
+            }
+            for (const [key, value] of Object.entries(incoming)) {
+                if (value !== undefined && value !== null && value !== '') location[key] = value;
+            }
+            state.setLocation(location);
+            const current = state.location();
+            if (current) send(createFrame(FRAME.status, { location: current, status: '' }));
         },
 
         setStatus(text) {
