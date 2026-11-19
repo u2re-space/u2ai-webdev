@@ -107,6 +107,9 @@ test('the arguments of the headless Chromium are the ones of a screenshot', () =
     const dom = chromeArgs({ mode: 'dump-dom', url: 'http://x/', userDataDir: 'C:/profile' });
     assert.ok(dom.includes('--dump-dom'));
     assert.ok(!dom.some((item) => item.includes('--screenshot=')));
+    // The scrollbars stay on the picture: a second scrollbar of the page is a defect the
+    // role has to see, and a hidden scrollbar cannot be seen.
+    assert.ok(!args.includes('--hide-scrollbars'));
 });
 
 test('the local server serves the project and keeps the escape out', async () => {
