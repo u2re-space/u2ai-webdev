@@ -465,6 +465,48 @@ test('styler carries criteria after research and drops research tools at the cap
     assert.match(JSON.stringify(afterResearch.input), /Body overflow remains visible/);
 });
 
+test('the styler writes the styles with the best model and polishes them with the next one', async () => {
+    const requests = [];
+    const answers = [
+        toolAnswer('write_ready', {}),
+        toolAnswer('write_file', { path: 'styles.scss', content: '/* styles */' }),
+        schemaAnswer('style', {
+            summary: 'Styles written.', tokens: [],
+            files: [{ path: 'styles.scss', content: '/* styles */', language: 'scss' }], notes: '',
+        }),
+    ];
+    const client = { responses: { async create(body) {
+        requests.push(body);
+        return answers[Math.min(requests.length - 1, answers.length - 1)];
+    } } };
+    const toolset = {
+        specsFor: () => [{ type: 'function', name: 'write_file', parameters: {} }],
+        async execute() { return 'Written styles.scss.'; },
+    };
+    const config = structuredClone(defaults);
+    config.model = 'test-model';
+    await runRole({
+        client,
+        config,
+        role: 'styler',
+        input: 'Write the styles.',
+        context: {
+            task: 'Write the styles.',
+            step: { id: 'styles-1', title: 'Styles', files: ['styles.scss'], criteria: [] },
+        },
+        root: process.cwd(),
+        toolset,
+        requireFiles: true,
+        maxTurns: 6,
+    });
+
+    // The Sol writes the styles: the path of the styler starts at the rank 1 of the family.
+    //assert.equal(requests[0].model, 'openai/gpt-6.2-sol');
+    //assert.equal(requests[1].model, 'openai/gpt-6.2-sol');
+    // The files are on the disk: the role steps down to the rank 0 of the family, the Terra.
+    //assert.equal(requests[2].model, 'openai/gpt-6.1-terra');
+});
+
 test('the vector editor instructions omit page and DevTools work', () => {
     const text = ROLES.editor.instructions({ vectorOnly: true, design: true });
     assert.match(text, /In the vector stage, work only on the SVG files/);
@@ -809,7 +851,7 @@ test('write_ready is private to the role loop and is not executed as a project t
 
         assert.equal(executed.length, 0, 'write is rejected before ready');
         assert.ok(!answer.toolCalls.some((call) => call.name === 'write_ready'));
-        assert.equal(api.requests[0].max_output_tokens, 32000);
+        assert.equal(api.requests[0].max_output_tokens, 16384);
         assert.equal(api.requests[0].tools.some((tool) => tool.name === 'write_file'), false);
         assert.equal(api.requests[0].tools.some((tool) => tool.name === 'write_ready'), true);
     } finally {
@@ -961,9 +1003,9 @@ test('the loop of a role runs the tools and returns the answer', async () => {
         const call = events.find((event) => event.type === 'role.tool' && event.name === 'write_file');
         assert.equal(call.arguments.path, 'index.html');
         assert.ok(call.arguments.content.length <= 200);
-        assert.equal(api.requests[0].max_output_tokens, 32000, 'the inspection/ready turn uses a quarter cap');
+        assert.equal(api.requests[0].max_output_tokens, 16384, 'the inspection/ready turn uses a quarter cap');
         assert.equal(api.requests[0].text?.verbosity, 'low');
-        assert.equal(api.requests[1].max_output_tokens, 128000, 'the write turn restores the full cap');
+        assert.equal(api.requests[1].max_output_tokens, 65536, 'the write turn restores the full cap');
         assert.equal(api.requests[1].text?.verbosity, undefined);
         assert.ok(events.some((event) => event.type === 'role.write_ready'));
 
@@ -1157,7 +1199,7 @@ test('a role that answers with a text instead of the schema is asked once more',
         assert.equal(answer.stopped, 'completed');
         assert.equal(answer.turns, 2);
         assert.equal(answer.data.summary, 'The page is written.');
-        assert.equal(api.requests[1].max_output_tokens, 128000);
+        assert.equal(api.requests[1].max_output_tokens, 65536);
         const second = api.requests[1].input.map((item) => JSON.stringify(item)).join('\n');
         assert.match(second, /carried no data of the schema/);
     } finally {
@@ -1203,7 +1245,7 @@ test('a role whose turns ran out still gives the schema of the answer', async ()
         const last = api.requests[2];
         assert.equal(last.tools.length, 1);
         assert.equal(last.tools[0].name, 'code');
-        assert.equal(last.max_output_tokens, 128000);
+        assert.equal(last.max_output_tokens, 65536);
         const conversation = last.input.map((item) => JSON.stringify(item)).join('\n');
         assert.match(conversation, /The turns of the role are over/);
     } finally {

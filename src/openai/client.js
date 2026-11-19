@@ -23,7 +23,7 @@ import {
 import { buildResponsesBody } from './responses.js';
 import { createApiLogger, redactBody } from './log.js';
 import { getModelProfile, snapEffort } from '../model/profiles.js';
-import { resolveModelRef } from '../model/families.js';
+import { resolveModelRef } from '../model/refs.js';
 
 /** Statuses worth another try on the same backend. */
 const RETRYABLE_STATUS = new Set([408, 409, 425, 429, 500, 502, 503, 504]);

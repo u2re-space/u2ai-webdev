@@ -92,7 +92,7 @@ export const DOCUMENTATION_SOURCES = Object.freeze({
 export const defaults = {
   // --- API -----------------------------------------------------------------
   /** Text model for the role agents. */
-  model: 'openai/gpt-6.2-sol',//'moonshotai/kimi-k3.1-pro',
+  model: 'family:gpt',
   /** Endpoint of the text API; backends[] below can override it. */
   baseURL: 'https://routerai.ru/api/v1',
   apiKey: null,
@@ -118,12 +118,24 @@ export const defaults = {
    */
   house: {
     models: {
-      director: 'openai/gpt-6.1-terra',
-      planner: 'openai/gpt-6.1-terra',
-      markup: 'openai/gpt-6.1-terra',
-      editor: 'openai/gpt-6.1-terra',
-      iconifier: 'openai/gpt-6.1-terra',
-      coder: 'openai/gpt-6.1-terra',
+      // The styles are the work of the best model of the family: the Sol writes them, the
+      // Terra polishes them afterwards.
+      //styler: 'family:gpt',
+    },
+    /**
+     * The paths of the ranks of the models of the house in their families.
+     *
+     * A path is a list of the places of the family: the role answers on the first place and
+     * steps down to the next one when its work is done. The styler walks the family of the
+     * GPT from the end to its head — the Sol writes the styles, the Terra polishes them.
+     *
+     * `roles` is the path of a role, `stages` the path of the stages that only polish: the
+     * stage `sight` and the repair of the review answer on the head of the family, the
+     * cheaper model.
+     */
+    ranks: {
+      roles: { styler: [1, 0] },
+      stages: { styling: [1, 0], sight: [0], repair: [0] },
     },
   },
   /**
@@ -139,6 +151,25 @@ export const defaults = {
     gpt: ['openai/gpt-6.1-terra', 'openai/gpt-6.2-sol'],
     gemini: ['google/gemini-4-hydrogen', 'google/gemini-4-neon'],
     claude: ['anthropic/claude-haiku-5.5', 'anthropic/claude-sonnet-5.5'],
+  },
+  /**
+   * The groups of models: a named list of models of one kind — the small and the budget
+   * models of the house.
+   *
+   * The members of a group are peers: the one that fits the work answers. A member may name
+   * the limit of the context it is trusted with (`maxContext`, in tokens): the member is not
+   * asked when the context of the role is bigger than the limit.
+   *
+   * A group is named where a model is expected with the prefix `group:`.
+   */
+  modelGroups: {
+    small: [
+      { model: 'openai/gpt-6-luna' },
+      { model: 'anthropic/claude-haiku-5.5', maxContext: 100_000 },
+      { model: 'google/gemini-3.8-flash' },
+      { model: 'minimax/minimax-m3.1-flash' },
+      { model: 'z-ai/glm-5.3-flashx' },
+    ],
   },
 
   reasoning: {
@@ -774,8 +805,9 @@ export function defaultConfigText() {
     },
     agent: { fidelity: defaults.agent.fidelity, creativity: defaults.agent.creativity, platform: defaults.agent.platform },
     pace: { mode: defaults.pace.mode, speed: defaults.pace.speed, quality: defaults.pace.quality },
-    house: { models: structuredClone(defaults.house.models) },
+    house: { models: structuredClone(defaults.house.models), ranks: structuredClone(defaults.house.ranks) },
     modelFamilies: structuredClone(defaults.modelFamilies),
+    modelGroups: structuredClone(defaults.modelGroups),
     stages: Object.fromEntries(ENUMS.stages.map((stage) => [stage, { enabled: true }])),
     bridges: {
       decompose: { enabled: defaults.bridges.decompose.enabled, log: defaults.bridges.decompose.log },

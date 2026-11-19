@@ -119,7 +119,14 @@ test('the Gemini is the alternative to the Kimi and the Kimi is the fallback', (
     assert.deepEqual(chain, ['google/gemini-4-hydrogen', 'moonshotai/kimi-k3.1-pro', 'google/gemini-4-neon']);
     assert.deepEqual(
         fallbackChain(defaults, 'minimax/minimax-m3.1-flash'),
-        ['minimax/minimax-m3.1-flash', 'moonshotai/kimi-k3.1-pro'],
-        'every other model falls back to the Kimi too',
+        [
+            'minimax/minimax-m3.1-flash',
+            'openai/gpt-6-luna',
+            'anthropic/claude-haiku-5.5',
+            'google/gemini-3.8-flash',
+            'z-ai/glm-5.3-flashx',
+            'moonshotai/kimi-k3.1-pro',
+        ],
+        'the peers of the group of small models stand before the catch-all chain',
     );
 });

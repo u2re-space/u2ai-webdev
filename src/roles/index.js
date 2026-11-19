@@ -43,8 +43,9 @@ import { toolSpecs as buildToolSpecs } from '../agent/tool-specs.js';
 import { createDelegator } from '../agent/delegation.js';
 import { effortFor } from '../agent/pace.js';
 import { getModelProfile, maxOutputFor, snapEffort } from '../model/profiles.js';
-import { resolveModelRef } from '../model/families.js';
+import { familyOf, rankPath, resolveModelRef } from '../model/refs.js';
 import { houseModel } from '../model/trust.js';
+import { stageForRole } from '../stages/roles.js';
 import { pageFrameContractFor } from './page-frame.js';
 
 import * as untrusted from './untrusted.js';
@@ -279,7 +280,7 @@ export function roleSchema(role) {
  * @exports
  * @ai.hint pure
  */
-export function resolveRole(role, config = {}) {
+export function resolveRole(role, config = {}, { stage = null } = {}) {
     const key = String(role ?? '').trim().toLowerCase();
     const base = ROLES[key];
     if (!base) return null;
@@ -306,18 +307,28 @@ export function resolveRole(role, config = {}) {
 
     // The model of the role: the pin of the role wins, then the model of the house for the
     // role, then the pin of the default role, then the model of the run. A role that names
-    // its own model is never moved. A name that names a family of models is the cheapest
-    // member of the family that takes the effort of the role.
+    // its own model is never moved. A name that names a family of models is the member of
+    // the family that takes the effort of the role; a name that names a group of models is
+    // the member of the group that takes the effort and fits the context.
     const ownModel = own.model !== null && own.model !== undefined ? own.model : null;
     const fallbackModel = fallback.model !== null && fallback.model !== undefined ? fallback.model : null;
-    const model = resolveModelRef(ownModel, config, { effort: asked })
-        ?? houseModel(key, config, { effort: asked })
-        ?? resolveModelRef(fallbackModel, config, { effort: asked })
-        ?? resolveModelRef(config?.model ?? null, config, { effort: asked });
+    const context = pick('context', null);
+    // The path of the ranks of the role in its family: the stage that only polishes walks
+    // its own path, the role of the house keeps the path of the house.
+    const path = rankPathFor(config, key, stage);
+    const rank = path?.[0] ?? null;
+    const model = resolveModelRef(ownModel, config, { effort: asked, context, rank })
+        ?? houseModel(key, config, { effort: asked, context, rank })
+        ?? resolveModelRef(fallbackModel, config, { effort: asked, context, rank })
+        ?? resolveModelRef(config?.model ?? null, config, { effort: asked, context, rank });
 
     // The effort is pulled down to what the model really takes: a model with a lower ceiling
     // refuses the level above it. The Kimi, for one, has no levels above `medium`.
     const effort = snapEffort(asked, getModelProfile(model, config)) ?? asked;
+
+    // The family the model came from: the role may step down to the next rank of its path
+    // when its work is done.
+    const family = familyOf(config, model);
 
     return {
         name: key,
@@ -327,11 +338,41 @@ export function resolveRole(role, config = {}) {
         maxTurns: Number.isInteger(maxTurns) && maxTurns > 0 ? maxTurns : base.maxTurns,
         model,
         effort,
+        asked,
+        family,
+        path,
         summary: pick('summary', config?.reasoning?.summary ?? null),
         temperature: pick('temperature', config?.temperature ?? null),
         maxOutputTokens: pick('maxOutputTokens', config?.maxOutputTokens ?? null),
         instructions: pick('instructions', null),
     };
+}
+
+/**
+ * The path of the ranks of a role in its family of models.
+ *
+ * The path is a list of the places of the family: the role answers on the first place and
+ * steps down to the next one when its work is done. A stage that only polishes walks its own
+ * path — the stage wins over the role.
+ * @param {object|null} config
+ * @param {string} role the name of the role
+ * @param {string|null} stage the name of the stage
+ * @returns {number[]|null}
+ * @exports
+ * @ai.hint pure
+ */
+export function rankPathFor(config, role, stage = null) {
+    const ranks = config?.house?.ranks;
+    if (!ranks || typeof ranks !== 'object') return null;
+    const key = String(role ?? '').trim().toLowerCase();
+    const stageName = String(stage ?? '').trim().toLowerCase();
+    // The stage of the call, then the stage of the pipeline the role works in.
+    for (const name of [stageName, stageForRole(key)]) {
+        if (!name) continue;
+        const path = rankPath(ranks.stages?.[name]);
+        if (path) return path;
+    }
+    return rankPath(ranks.roles?.[key]);
 }
 
 /**
@@ -497,8 +538,23 @@ export async function runRole({
     inputChannel ??= runContext?.input ?? null;
     const key = String(role ?? '').trim().toLowerCase();
     const roleStage = stage ?? key;
-    const definition = resolveRole(key, config);
+    const definition = resolveRole(key, config, { stage: roleStage });
     if (!definition) throw new Error(`Неизвестная роль: ${role}`);
+    // The model of the role and the model that answers the next turn: a role that works on
+    // a family of models steps down to the next rank of its path when its work is done.
+    let currentModel = definition.model;
+    let currentEffort = definition.effort;
+    let pathIndex = 0;
+    const stepDown = () => {
+        const rank = definition.path?.[pathIndex + 1];
+        if (rank === undefined) return false;
+        const next = definition.family?.[rank];
+        if (!next) return false;
+        pathIndex += 1;
+        currentModel = next;
+        currentEffort = snapEffort(definition.asked, getModelProfile(next, config)) ?? currentEffort;
+        return true;
+    };
     inputChannel?.setLocation?.({
         stage: roleStage,
         role: key,
@@ -662,17 +718,17 @@ export async function runRole({
                 : definition.outputMode,
         }));
         const raw = await client.responses.create({
-            model: definition.model,
+            model: currentModel,
             instructions,
             input: items,
             tools: boundedTools,
             schema: useSchema,
             schemaChannel: channelOverride === undefined ? schemaChannel : channelOverride,
             schemaName,
-            effort: definition.effort,
+            effort: currentEffort,
             summary: definition.summary,
             temperature: definition.temperature,
-            maxOutputTokens: maxOutputFor(definition.model, config, definition.maxOutputTokens, { readOnly: reduced }),
+            maxOutputTokens: maxOutputFor(currentModel, config, definition.maxOutputTokens, { readOnly: reduced }),
             verbosity: config?.verbosity ?? (reduced ? 'low' : null),
             signal,
         });
@@ -703,6 +759,8 @@ export async function runRole({
 
     // The writes that really wrote a file.
     const writes = [];
+    // Whether the role has already stepped down to the next member of its family.
+    let steppedDown = false;
 
     let deferredSteering = [];
     const appendSteering = () => {
@@ -979,6 +1037,13 @@ export async function runRole({
                 + (criteria.length ? `Acceptance criteria: ${criteria.join('; ')}. ` : '')
                 + 'Preserve all explicit task requirements over generic style advice. Do not run Python, shell commands, scripts, or delegate.',
             )] });
+        }
+        // The work of the role is done: the files are on the disk. A role that works on a
+        // family of models steps down to the next rank of its path — the styles are written,
+        // the polishing of them is a cheaper work.
+        if (writes.length && !steppedDown && stepDown()) {
+            steppedDown = true;
+            notify({ type: 'role.model', role: key, model: currentModel, rank: definition.path?.[pathIndex] ?? null });
         }
 
         if (turns >= limit) {

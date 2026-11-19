@@ -64,5 +64,5 @@ export * from './src/agent/pace.js';
 export * from './src/openai/client.js';
 export * from './src/openai/responses.js';
 export * from './src/model/profiles.js';
-export * from './src/model/families.js';
+export * from './src/model/refs.js';
 export * from './src/model/trust.js';

@@ -12,19 +12,23 @@
 import { ENUMS, HEADER_NAME, SUPPORT_ALIASES } from './constants.js';
 import { defaults, ROLE_FIELDS } from './defaults.js';
 import { isRecord } from './merge.js';
-import { familyName } from '../model/families.js';
+import { familyName, groupName } from '../model/refs.js';
 
 /**
- * Check that a reference to a family names a family that exists.
- * @param {unknown} ref the reference: a model or `family:<name>`
+ * Check that a reference to a family or a group names one that exists.
+ * @param {unknown} ref the reference: a model, `family:<name>` or `group:<name>`
  * @param {string} where the path of the reference
  * @param {(message: string) => never} fail
- * @param {object} families the families of the config
+ * @param {object} config the merged config
  */
-function checkFamilyRef(ref, where, fail, families) {
-  const name = familyName(ref);
-  if (name && !Object.hasOwn(families ?? {}, name)) {
-    fail(`${where}: семейство моделей "${name}" не найдено (modelFamilies)`);
+function checkModelRef(ref, where, fail, config) {
+  const family = familyName(ref);
+  if (family && !Object.hasOwn(config.modelFamilies ?? {}, family)) {
+    fail(`${where}: семейство моделей "${family}" не найдено (modelFamilies)`);
+  }
+  const group = groupName(ref);
+  if (group && !Object.hasOwn(config.modelGroups ?? {}, group)) {
+    fail(`${where}: группа моделей "${group}" не найдена (modelGroups)`);
   }
 }
 
@@ -45,16 +49,44 @@ function validateModelFamilies(families, fail) {
 }
 
 /**
+ * Validate the groups of models: { "<name>": ["<model>" | { model, maxContext }] }.
+ * @param {unknown} groups
+ * @param {(message: string) => never} fail
+ */
+function validateModelGroups(groups, fail) {
+  if (!isRecord(groups)) fail('modelGroups должен быть объектом');
+  for (const [name, list] of Object.entries(groups)) {
+    if (!name.trim()) fail('modelGroups: пустое имя группы');
+    if (!Array.isArray(list) || !list.length) fail(`modelGroups.${name}: непустой массив моделей`);
+    for (const [index, item] of list.entries()) {
+      const where = `modelGroups.${name}[${index}]`;
+      if (typeof item === 'string') {
+        if (!item.trim()) fail(`${where}: непустая строка`);
+        continue;
+      }
+      if (!isRecord(item)) fail(`${where}: строка или объект`);
+      for (const key of Object.keys(item)) {
+        if (!['model', 'maxContext'].includes(key)) fail(`${where}.${key}: неизвестное поле`);
+      }
+      if (typeof item.model !== 'string' || !item.model.trim()) fail(`${where}.model: непустая строка`);
+      if (item.maxContext != null && !(Number.isSafeInteger(item.maxContext) && item.maxContext > 0)) {
+        fail(`${where}.maxContext: целое > 0`);
+      }
+    }
+  }
+}
+
+/**
  * Validate the house of the run: the model of the house for the roles that have one.
  * @param {unknown} house
  * @param {(message: string) => never} fail
- * @param {object} families the families of the config
+ * @param {object} config the merged config
  */
-function validateHouse(house, fail, families) {
+function validateHouse(house, fail, config) {
   const where = 'house';
   if (!isRecord(house)) fail(`${where} должен быть объектом`);
   for (const key of Object.keys(house)) {
-    if (key !== 'models') fail(`${where}.${key}: неизвестное поле (допустимо: models)`);
+    if (!['models', 'ranks'].includes(key)) fail(`${where}.${key}: неизвестное поле (допустимо: models | ranks)`);
   }
   const models = house.models;
   if (!isRecord(models)) fail(`${where}.models должен быть объектом`);
@@ -62,7 +94,24 @@ function validateHouse(house, fail, families) {
     if (!role.trim()) fail(`${where}.models: пустое имя роли`);
     if (model === null) continue;
     if (typeof model !== 'string' || !model.trim()) fail(`${where}.models.${role}: непустая строка или null`);
-    checkFamilyRef(model, `${where}.models.${role}`, fail, families);
+    checkModelRef(model, `${where}.models.${role}`, fail, config);
+  }
+  const ranks = house.ranks;
+  if (!isRecord(ranks)) fail(`${where}.ranks должен быть объектом`);
+  for (const key of Object.keys(ranks)) {
+    if (!['roles', 'stages'].includes(key)) fail(`${where}.ranks.${key}: неизвестное поле (допустимо: roles | stages)`);
+  }
+  for (const part of ['roles', 'stages']) {
+    const map = ranks[part];
+    if (!isRecord(map)) fail(`${where}.ranks.${part} должен быть объектом`);
+    for (const [name, path] of Object.entries(map)) {
+      if (!name.trim()) fail(`${where}.ranks.${part}: пустое имя`);
+      const list = Array.isArray(path) ? path : [path];
+      if (!list.length) fail(`${where}.ranks.${part}.${name}: непустой список рангов`);
+      for (const rank of list) {
+        if (!(Number.isSafeInteger(rank) && rank >= 0)) fail(`${where}.ranks.${part}.${name}: целое >= 0 или список целых`);
+      }
+    }
   }
 }
 
@@ -363,7 +412,7 @@ export function validateConfig(config) {
   const c = config;
 
   if (typeof c.model !== 'string' || !c.model.trim()) fail('укажите model (или AI_WEBDEV_MODEL / --model).');
-  checkFamilyRef(c.model, 'model', fail, c.modelFamilies);
+  checkModelRef(c.model, 'model', fail, c);
   if (typeof c.baseURL !== 'string' || !c.baseURL.trim()) fail('baseURL должен быть URL.');
   try { new URL(c.baseURL); } catch { fail('baseURL должен быть URL.'); }
   if (c.apiKey !== null && (typeof c.apiKey !== 'string' || /[\r\n]/.test(c.apiKey))) fail('apiKey: строка или null.');
@@ -381,7 +430,8 @@ export function validateConfig(config) {
   }
 
   validateModelFamilies(c.modelFamilies, fail);
-  validateHouse(c.house, fail, c.modelFamilies);
+  validateModelGroups(c.modelGroups, fail);
+  validateHouse(c.house, fail, c);
 
   if (!isRecord(c.reasoning)) fail('reasoning должен быть объектом');
   for (const key of Object.keys(c.reasoning)) if (!(key in defaults.reasoning)) fail(`reasoning.${key}: неизвестное поле`);
@@ -516,7 +566,7 @@ export function validateConfig(config) {
       if (!ROLE_FIELDS.includes(key)) fail(`roles.${name}.${key}: неизвестное поле`);
     }
     if (role.model != null && (typeof role.model !== 'string' || !role.model.trim())) fail(`roles.${name}.model: строка или null`);
-    checkFamilyRef(role.model, `roles.${name}.model`, fail, c.modelFamilies);
+    checkModelRef(role.model, `roles.${name}.model`, fail, c);
     if (role.effort != null && !ENUMS.reasoningEfforts.includes(role.effort)) fail(`roles.${name}.effort: ${ENUMS.reasoningEfforts.join(' | ')}`);
     if (role.maxEffort != null && !ENUMS.reasoningEfforts.includes(role.maxEffort)) fail(`roles.${name}.maxEffort: ${ENUMS.reasoningEfforts.join(' | ')}`);
     if (role.context != null && !(ENUMS.contextWords.includes(role.context) || (Number.isSafeInteger(role.context) && role.context > 0))) fail(`roles.${name}.context: ${ENUMS.contextWords.join(' | ')} или байты`);

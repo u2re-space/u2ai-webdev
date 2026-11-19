@@ -162,6 +162,10 @@ test('the specs of the roles are parsed', () => {
     assert.deepEqual(parseRoleSpecs('coder=family:gpt'), [
         { name: 'coder', model: 'family:gpt', effort: '', maxEffort: '' },
     ]);
+    // A group of models keeps its prefix too.
+    assert.deepEqual(parseRoleSpecs('iconifier=group:small'), [
+        { name: 'iconifier', model: 'group:small', effort: '', maxEffort: '' },
+    ]);
     assert.throws(() => parseRoleSpecs('coder'), /--role: ожидается роль=модель/);
 });
 

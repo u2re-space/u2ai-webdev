@@ -856,7 +856,7 @@ everything else stays on the defaults.
 
 ```json
 {
-  "model": "minimax/minimax-m3.1-flash",
+  "model": "family:gpt",
   "reasoning": { "effort": "xhigh", "summary": "auto" },
   "backends": [
     { "baseURL": "https://routerai.ru/api/v1", "env": "ROUTERAI_API_KEY" },
@@ -936,16 +936,17 @@ configuration names it for the Gemini and for every other model.
 
 ### The models of the house
 
-Some roles of the house have their own model: the markup — the stage `markup` and the role
-`markup` — answers on the model of the house, whatever the model of the run is.
+The model of the run is a family of models: the house answers with the cheapest member of the
+family that takes the effort of the run. The roles follow the model of the run, and a role that
+has its own model in the house (`house.models`) does not.
 
-The chain of the model of a role is: the pin of the role (`roles.markup.model` or the flag
-`--role markup=<model>`), then the model of the house for the role (`house.models`), then the
+The chain of the model of a role is: the pin of the role (`roles.styler.model` or the flag
+`--role styler=<model>`), then the model of the house for the role (`house.models`), then the
 pin of the default role (`roles.default.model`), then the model of the run. The pin of the role
-wins over everything, so a run that wants another model for the markup says so:
+wins over everything, so a run that wants another model for a role says so:
 
 ```bash
-ai-webdev run "<task>" --role markup=google/gemini-4-hydrogen
+ai-webdev run "<task>" --role coder=google/gemini-4-hydrogen
 ```
 
 The map of the house is a part of the configuration, so every name of it may be changed. A role
@@ -955,9 +956,8 @@ that is named with `null` has no model of the house and answers on the model of 
 {
   "house": {
     "models": {
-      "markup": "openai/gpt-6.1-terra",
-      "coder": "family:gpt",
-      "styler": null
+      "styler": "family:gpt",
+      "coder": null
     }
   }
 }
@@ -967,10 +967,6 @@ The Kimi has no levels of the effort above `medium` — the answer of the same q
 same seconds there — so a role that answers on it works on `medium` however deep the profile of
 the stages asks. The role also answers with its tools instead of a pinned JSON answer: a model
 that is pinned to a JSON answer never calls a tool, it describes the work instead of doing it.
-
-The vector stage — the role `editor` — has no model of its own yet: nobody drew a vector
-picture well with any of the models of the house, so the stage keeps the model of the run
-until there is a verdict.
 
 ### The families of models
 
@@ -995,6 +991,73 @@ model of the family refuses, the next member answers in its place.
 
 The list of a family is a part of the configuration, so the ladder of the budget of the house is
 whatever the config says.
+
+### The ranks of the house
+
+The list of a family is also a ranking. A path of the ranks says where in its family a role
+answers: the role takes the first place of the path and steps down to the next one when its
+work is done.
+
+The styler is the case of the house: the styles are written by the best model of the family and
+polished by the next one. The path `[1, 0]` of the family of the GPT is the Sol for the styles
+and the Terra for the polishing of them:
+
+```json
+{
+  "house": {
+    "models": { "styler": "family:gpt" },
+    "ranks": {
+      "roles": { "styler": [1, 0] },
+      "stages": { "styling": [1, 0], "sight": [0], "repair": [0] }
+    }
+  }
+}
+```
+
+`roles` is the path of a role, `stages` the path of the stages that only polish: the stage
+`sight` and the repair of the review answer on the head of the family, the cheaper model. The
+stage wins over the role.
+
+The step down happens twice: inside the call of the role, when the files are on the disk — the
+Sol writes the styles, the Terra polishes them — and on the stages that follow, which answer on
+the head of the family from the start.
+
+### The groups of small models
+
+A group is a named list of models of one kind — the small and the budget models of the house.
+The members of a group are peers: the one that fits the work answers. The house knows one
+group of them:
+
+```json
+{
+  "modelGroups": {
+    "small": [
+      { "model": "openai/gpt-6-luna" },
+      { "model": "anthropic/claude-haiku-5.5", "maxContext": 100000 },
+      { "model": "google/gemini-3.8-flash" },
+      { "model": "minimax/minimax-m3.1-flash" },
+      { "model": "z-ai/glm-5.3-flashx" }
+    ]
+  }
+}
+```
+
+A group is named where a model is expected with the prefix `group:`:
+
+```json
+{
+  "roles": { "iconifier": { "model": "group:small" } }
+}
+```
+
+The member that answers is the first one that takes the effort of the role and fits its
+context. The limit of a member (`maxContext`, in tokens) says how much context the model is
+trusted with: the member is not asked when the context of the role (`roles.<role>.context`) is
+bigger than the limit. The Haiku of the group is a model of a small context, so it answers the
+roles with a small context and stays out of the way of the roles with a big one.
+
+The other members of the group are the peers of the one that answered: when the model of the
+group refuses, the next member of the group answers in its place.
 
 The effort of a run is not one number for everybody. `reasoning.effort` is the ceiling of the
 run, and `reasoning.stageEffort` says what every stage asks for:

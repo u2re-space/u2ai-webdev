@@ -2,7 +2,7 @@
  * @file src/model/trust.js
  * @module model/trust
  * @purpose The model of the house for the roles that have one: the markup is a Kimi job.
- * @depends config/defaults, model/families
+ * @depends config/defaults, model/refs
  * @usedBy roles/index
  * @exports HOUSE_MODELS, houseModel
  * @ai.tags model, trust
@@ -10,7 +10,7 @@
  */
 
 import { defaults } from '../config/defaults.js';
-import { resolveModelRef } from './families.js';
+import { rankPath, resolveModelRef } from './refs.js';
 
 const isRecord = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 
@@ -37,15 +37,18 @@ export const HOUSE_MODELS = Object.freeze({ ...defaults.house.models });
  * The model of the house for a role, or null when the role has none of its own.
  *
  * The name of the model may be a family of models (`family:gpt`): the role then answers
- * with the cheapest member of the family that takes the effort of the role.
+ * with the cheapest member of the family that takes the effort of the role. It may be a
+ * group of models (`group:small`): the role then answers with the member of the group that
+ * takes the effort and fits the context.
  * @param {string|null} role the name of the role
  * @param {object|null} [config] the configuration of the run
- * @param {{ effort?: string|null }} [options] the effort the model has to take
+ * @param {{ effort?: string|null, context?: string|number|null, rank?: number|null }} [options]
+ *   the effort, the context budget and the rank in the family the model has to take
  * @returns {string|null}
  * @exports
  * @ai.hint pure
  */
-export function houseModel(role, config = null, { effort = null } = {}) {
+export function houseModel(role, config = null, { effort = null, context = null, rank = null } = {}) {
     const key = String(role ?? '').trim().toLowerCase();
     if (!key) return null;
     const models = config?.house?.models;
@@ -58,5 +61,8 @@ export function houseModel(role, config = null, { effort = null } = {}) {
     } else {
         ref = HOUSE_MODELS[key] ?? null;
     }
-    return resolveModelRef(ref, config, { effort });
+    // The place of the family the role answers on: the path of the role, unless the caller
+    // names the place itself.
+    const place = rank ?? rankPath(config?.house?.ranks?.roles?.[key])?.[0] ?? null;
+    return resolveModelRef(ref, config, { effort, context, rank: place });
 }

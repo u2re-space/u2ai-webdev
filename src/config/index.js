@@ -19,7 +19,7 @@ import {
   homeMemoryDb, homeJobsDir, resolveConfigPath, ensureHomeDir,
 } from './paths.js';
 import { validateConfig } from './validate.js';
-import { resolveModelRef } from '../model/families.js';
+import { resolveModelRef } from '../model/refs.js';
 
 export {
   ENUMS, defaults, cloneDefaults, defaultConfigText, validateConfig,

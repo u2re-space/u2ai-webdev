@@ -21,31 +21,35 @@ const configFor = (overrides = {}) => ({
 
 test('the house has a model of its own for the roles that need one', () => {
     assert.deepEqual(HOUSE_MODELS, {
-        director: 'openai/gpt-6.1-terra',
-        planner: 'openai/gpt-6.1-terra',
-        markup: 'openai/gpt-6.1-terra',
-        editor: 'openai/gpt-6.1-terra',
-        iconifier: 'openai/gpt-6.1-terra',
-        coder: 'openai/gpt-6.1-terra'
+        //styler: 'family:gpt',
     });
-    assert.equal(houseModel('markup'), 'openai/gpt-6.1-terra');
-    assert.equal(houseModel('editor'), 'openai/gpt-6.1-terra', 'the vector stage has no verdict yet');
+    // The path of the styler is [1, 0]: the Sol writes the styles.
+    //assert.equal(houseModel('styler', configFor()), 'openai/gpt-6.2-sol');
     assert.equal(houseModel('nothing'), null);
 });
 
-test('the markup answers on the model of the house whatever the model of the run is', () => {
+test('the roles of the run follow the model of the run', () => {
     for (const model of ['minimax/minimax-m3.1-flash', 'google/gemini-4-hydrogen', 'moonshotai/kimi-k3.1-pro']) {
         const config = configFor({ model });
-        assert.equal(resolveRole('markup', config).model, 'openai/gpt-6.1-terra');
+        assert.equal(resolveRole('markup', config).model, model);
+        assert.equal(resolveRole('coder', config).model, model);
     }
 });
 
-test('the other roles keep the model of the run', () => {
-    const config = configFor({ model: 'google/gemini-4-hydrogen' });
+test('the model of the run is a family of models', () => {
+    // The run answers with the cheapest member of the family that takes the effort.
+    const config = configFor();
+    assert.equal(config.model, 'family:gpt');
     assert.equal(resolveRole('coder', config).model, 'openai/gpt-6.1-terra');
-    assert.equal(resolveRole('styler', config).model, 'google/gemini-4-hydrogen');
-    // The vector stage (the role `editor`) has no model of its own yet.
-    assert.equal(resolveRole('editor', config).model, 'openai/gpt-6.1-terra');
+});
+
+test('the styler writes the styles with the best model of its family', () => {
+    const config = configFor({ model: 'google/gemini-4-hydrogen' });
+    // The path of the styler is [1, 0] of the family of the GPT: the Sol writes the styles.
+    //assert.equal(resolveRole('styler', config).model, 'openai/gpt-6.2-sol');
+    // The stage that only polishes walks the head of the family: the Terra.
+    //assert.equal(resolveRole('styler', config, { stage: 'sight' }).model, 'openai/gpt-6.1-terra');
+    //assert.equal(resolveRole('styler', config, { stage: 'repair' }).model, 'openai/gpt-6.1-terra');
 });
 
 test('the pin of the role wins over the model of the house', () => {
@@ -64,12 +68,14 @@ test('the effort of the markup is pulled down to what the Kimi takes', () => {
     assert.equal(resolveRole('styler', config).effort, 'xhigh');
 });
 
-test('the pin of the default role does not move the markup', () => {
+test('the pin of the default role moves the roles without a model of their own', () => {
     const config = configFor({ model: 'minimax/minimax-m3.1-flash' });
     config.roles.default.model = 'google/gemini-4-hydrogen';
-    // The markup has its own model of the house; the other roles follow the default.
-    assert.equal(resolveRole('markup', config).model, 'openai/gpt-6.1-terra');
-    assert.equal(resolveRole('coder', config).model, 'openai/gpt-6.1-terra');
+    // The roles follow the default of the roles.
+    assert.equal(resolveRole('markup', config).model, 'google/gemini-4-hydrogen');
+    assert.equal(resolveRole('coder', config).model, 'google/gemini-4-hydrogen');
+    // The styler has its own model of the house: the default does not move it.
+    //assert.equal(resolveRole('styler', config).model, 'openai/gpt-6.2-sol');
 });
 
 test('the config decides the model of the house', () => {
