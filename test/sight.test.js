@@ -136,6 +136,43 @@ test('the stage of the sight shoots the page and asks the styler to fix the styl
     }
 });
 
+test('the stage of the sight tells the operator the model that works', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-sight-model-'));
+    try {
+        await writeFile(path.join(root, 'index.html'), '<!doctype html><html><body><p>x</p></body></html>', 'utf8');
+        await writeFile(path.join(root, 'styles.scss'), 'body { color: red; }\n', 'utf8');
+
+        const config = structuredClone(defaults);
+        config.browser.stylingVision = 'always';
+        config.browser.stylingVisionRounds = 1;
+        config.browser.devServer = 'off';
+
+        const client = fakeClient([
+            schemaAnswer('style', {
+                summary: 'The styles are fixed.',
+                tokens: [],
+                files: [{ path: 'styles.scss', content: 'body { color: blue; }\n', language: 'scss' }],
+                notes: '',
+            }),
+        ]);
+
+        // The panel of the shell: it shows the model of the work, not the model of the run.
+        const seen = [];
+        const input = { setLocation: (location) => seen.push({ ...location }) };
+
+        await sightStage({ client, config, root, task: 'A page.', input });
+
+        const models = seen.map((item) => item.model).filter(Boolean);
+        // The styler of the house works on the head of its ladder, and the panel says so.
+        assert.equal(models[0], 'openai/gpt-6.2-sol', `the panel says ${models.join(', ')}`);
+        // The work of the stage is one answer of the schema: there is no polish of the
+        // files on the disk, so the panel does not step down to the tail.
+        assert.ok(!models.includes('openai/gpt-6.1-terra'), `the panel says ${models.join(', ')}`);
+    } finally {
+        await import('node:fs/promises').then((fs) => fs.rm(root, { recursive: true, force: true }));
+    }
+});
+
 test('the stage of the sight reports a page that cannot be opened and does not stop the run', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-sight-broken-'));
     try {

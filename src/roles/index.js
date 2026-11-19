@@ -567,8 +567,12 @@ export async function runRole({
             rank,
         });
         if (!model) return null;
+        const changed = model !== currentModel;
         currentModel = model;
         currentEffort = snapEffort(definition.asked, getModelProfile(model, config)) ?? definition.effort;
+        // The panel of the shell shows the model that works right now: when the role steps
+        // down to the tail of its ladder for the polish, the tail is the model on the screen.
+        if (changed) inputChannel?.setLocation?.({ model: currentModel, effort: currentEffort });
         return model;
     };
     inputChannel?.setLocation?.({

@@ -90,7 +90,8 @@ export function stylesOnly(styles = [], files = []) {
  * when the styler has nothing to change.
  * @param {{ client: object, config?: object, root?: string, task?: string, plan?: object|null,
  *   architecture?: object|null, inputs?: object|null, runId?: string|null, apply?: boolean,
- *   notify?: (event: object) => void, env?: object, runContext?: object|null }} request
+ *   notify?: (event: object) => void, env?: object, runContext?: object|null,
+ *   input?: object|null }} request
  * @returns {Promise<object>} the report of the stage
  * @exports
  * @ai.hint io
@@ -108,6 +109,7 @@ export async function sightStage({
     notify = () => {},
     env = process.env,
     runContext = null,
+    input = null,
 } = {}) {
     const run = id ?? runId();
     const warnings = [];
@@ -296,6 +298,9 @@ export async function sightStage({
                 notify,
                 runContext,
                 stage: 'sight',
+                // The operator sees the model that works: the styler of the house answers on
+                // the head of its ladder, and the panel of the shell has to say so.
+                inputChannel: input,
                 requireFiles: true,
             });
 

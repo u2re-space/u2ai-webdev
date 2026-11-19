@@ -117,6 +117,43 @@ test('a role that has to write again goes back to the head of the ladder', async
     assert.equal(requests.at(-1).model, 'openai/gpt-6.1-terra');
 });
 
+test('the panel of the operator follows the model that works', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-ranks-panel-'));
+    const requests = [];
+    const client = { responses: { async create(body) {
+        requests.push(body);
+        if (requests.length === 1) return toolAnswer('write_ready', {});
+        if (requests.length === 2) return toolAnswer('write_file', { path: 'style.scss', content: '/* styles */' });
+        return schemaAnswer('style', {
+            summary: 'The styles are written.',
+            files: [{ path: 'style.scss', content: '/* styles */', language: 'scss' }],
+            commands: [],
+            notes: '',
+        });
+    } } };
+
+    // The panel of the shell: it shows the model of the work and the model of the polish.
+    const seen = [];
+    await runRole({
+        client,
+        config: configFor(),
+        role: 'styler',
+        input: 'Write the styles.',
+        context: {
+            task: 'Write the styles.',
+            step: { id: 'styles', title: 'Styles', files: ['style.scss'], criteria: [] },
+        },
+        root,
+        requireFiles: true,
+        inputChannel: { setLocation: (location) => seen.push({ ...location }) },
+    });
+
+    const models = seen.map((item) => item.model).filter(Boolean);
+    assert.equal(models[0], 'openai/gpt-6.2-sol', `the panel says ${models.join(', ')}`);
+    // The files are on the disk: the polish is the tail of the ladder, and the panel says so.
+    assert.ok(models.includes('openai/gpt-6.1-terra'), `the panel says ${models.join(', ')}`);
+});
+
 test('the model of the run is the head of its family, the roles keep their own ladder', () => {
     const config = configFor();
     // The run answers with the head of the family of the run...

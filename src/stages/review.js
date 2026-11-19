@@ -682,6 +682,9 @@ export async function reviewStage({
             parts: [...reference.parts, ...shots.parts, ...comparisonParts],
             runContext,
             stage: 'review',
+            // The operator sees the model that works: the reviewer of the house answers on
+            // the head of its ladder, and the panel of the shell has to say so.
+            inputChannel: input,
         });
 
         const data = result.data ?? {};
