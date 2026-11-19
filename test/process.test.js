@@ -357,6 +357,35 @@ test('the pipeline pauses on the border of a stage and may continue', async () =
     assert.equal(continued.stages[0].status, 'skipped');
 });
 
+test('the pipeline records an operator stage skip without marking it completed', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-stage-skip-'));
+    const ran = [];
+    const input = {
+        interactive: true,
+        setLocation() {},
+        takePendingSkips({ namedOnly = false } = {}) { return namedOnly ? [{ target: 'two' }] : []; },
+        takeSteering() { return []; },
+        shouldQuit() { return false; },
+    };
+    const stages = [
+        { name: 'one', title: 'One', dependsOn: [], run: async () => { ran.push('one'); return { ok: true }; } },
+        { name: 'two', title: 'Two', dependsOn: ['one'], run: async () => { ran.push('two'); return { ok: true }; } },
+        { name: 'three', title: 'Three', dependsOn: ['two'], run: async () => { ran.push('three'); return { ok: true }; } },
+    ];
+    const result = await runPipeline({
+        client: { responses: { create: async () => ({ output: [] }) } },
+        config: CONFIG,
+        root,
+        task: 'Test skips.',
+        runId: 'run-skip',
+        stages,
+        input,
+    });
+    assert.deepEqual(ran, ['one', 'three']);
+    assert.equal(result.progress.stages.find((stage) => stage.name === 'two').status, 'skipped');
+    assert.equal(result.status, 'partial');
+});
+
 test('a failed vector stage does not claim completion or run dependent stages', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-optional-vector-'));
     const order = [];

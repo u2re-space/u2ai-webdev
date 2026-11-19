@@ -19,6 +19,18 @@ import { fileURLToPath } from 'node:url';
 import { EXIT, VALUE_FLAGS, parseArgv } from '../src/cli.js';
 import { configOverrides, parseRoleSpecs, expandRoute, routeStages, requestedStages, splitKind, stopAfterStage, resumeCommand } from '../src/cli/run.js';
 import { createRenderer, detectMode } from '../src/cli/renderer.js';
+import { createInputChannel, readPipedInput } from '../src/cli/input.js';
+import { PassThrough } from 'node:stream';
+import { Writable } from 'node:stream';
+
+function ttyOutput() {
+    const chunks = [];
+    const stream = new Writable({ write(chunk, _encoding, done) { chunks.push(String(chunk)); done(); } });
+    stream.isTTY = true;
+    stream.columns = 100;
+    stream.readText = () => chunks.join('');
+    return stream;
+}
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BIN = path.join(ROOT, 'bin', 'ai-webdev.js');
@@ -388,6 +400,60 @@ test('the renderer of json writes the events as json', () => {
     const event = JSON.parse(lines[0]);
     assert.equal(event.type, 'stages');
     assert.equal(event.stages[0].name, 'plan');
+});
+
+test('piped input reads the task/context with a byte limit and ignores TTY streams', async () => {
+    const pipe = new PassThrough();
+    const read = readPipedInput({ stdin: pipe, maxBytes: 32 });
+    pipe.end('stdin task');
+    assert.equal(await read, 'stdin task');
+
+    const emptyOpenPipe = new PassThrough();
+    assert.equal(await readPipedInput({ stdin: emptyOpenPipe }), '');
+    emptyOpenPipe.destroy();
+
+    const tty = new PassThrough();
+    tty.isTTY = true;
+    assert.equal(await readPipedInput({ stdin: tty }), '');
+    const tooMuch = new PassThrough();
+    const rejected = readPipedInput({ stdin: tooMuch, maxBytes: 2 });
+    tooMuch.end('long');
+    await assert.rejects(rejected, /stdin is larger than the limit/);
+});
+
+test('the interactive input channel separates steering, questions, and skip controls', async () => {
+    const input = new PassThrough();
+    input.isTTY = true;
+    const output = ttyOutput();
+    const channel = createInputChannel({ stdin: input, output, interactive: true });
+    input.write('make the header blue\n');
+    assert.deepEqual(channel.takeSteering(), ['make the header blue']);
+
+    channel.setLocation({ stage: 'styling', step: 'colors' });
+    input.write('/skip\n');
+    assert.ok(channel.takeCurrentSkip());
+    input.write('/skip markup-1\n');
+    assert.equal(channel.takePendingSkips({ namedOnly: true })[0].target, 'markup-1');
+    input.write('/quit\n');
+    assert.equal(channel.shouldQuit(), true);
+
+    channel.close();
+    assert.equal(createInputChannel({ stdin: new PassThrough(), interactive: false }), null);
+});
+
+test('the interactive status is updated from the active role and model settings', () => {
+    const input = new PassThrough();
+    input.isTTY = true;
+    const output = ttyOutput();
+    const channel = createInputChannel({ stdin: input, output, interactive: true });
+    channel.setLocation({ stage: 'styling', role: 'styler', model: 'example/model', effort: 'medium', mode: 'style' });
+    const text = output.readText();
+    assert.match(text, /Styles/);
+    assert.match(text, /styler/);
+    assert.match(text, /example\/model/);
+    assert.match(text, /reasoning medium/);
+    assert.match(text, /style/);
+    channel.close();
 });
 
 test('the renderer says what a tool call touches', () => {

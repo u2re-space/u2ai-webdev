@@ -147,14 +147,15 @@ export function recordStep(progress, { stage, status = 'completed', report = '',
         known.add(file);
         added.push({ path: file, stepId: name });
     }
-    const open = list.findIndex((item) => item.status !== 'completed');
+    const open = list.findIndex((item) => !['completed', 'skipped'].includes(item.status));
     return {
         ...progress,
         stages: list,
         files: [...(progress?.files ?? []), ...added],
         cursor: open < 0 ? list.length : open,
         stage: name,
-        status: status === 'completed' ? 'running' : status,
+        status: open < 0 ? (status === 'failed' ? 'failed' : 'completed')
+            : (status === 'completed' || status === 'skipped' ? 'running' : status),
     };
 }
 
@@ -308,9 +309,9 @@ export function resolveResumeStep(plan, token) {
  */
 export function isOpenProgress(progress) {
     if (!progress) return false;
-    if (['completed', 'failed', 'cancelled'].includes(progress.status)) return false;
+    if (['completed', 'partial', 'failed', 'cancelled'].includes(progress.status)) return false;
     const stages = Array.isArray(progress.stages) ? progress.stages : [];
-    return stages.some((stage) => stage.status !== 'completed');
+    return stages.some((stage) => !['completed', 'skipped'].includes(stage.status));
 }
 
 /**

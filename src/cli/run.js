@@ -386,7 +386,11 @@ export function resumeCommand({ runId = '', flags = {}, configPath = null } = {}
  */
 export async function runCommand(ctx) {
     const { config, cwd, args = [], flags = {}, renderer = null, env = process.env } = ctx;
-    const { kind, task } = splitKind(args, flags);
+    const { kind, task: argTask } = splitKind(args, flags);
+    const stdinText = String(ctx.stdinText ?? '').trim();
+    const input = renderer?.input ?? null;
+    let inputWait = null;
+    const taskWithContext = argTask && stdinText ? `${argTask}\n\n--- stdin context ---\n${stdinText}` : (argTask || stdinText);
     if (kind && config?.agent) config.agent.kind = kind;
     if (flags.resume === true) {
         throw new UsageError('--resume: нужен идентификатор прогона.');
@@ -394,8 +398,14 @@ export async function runCommand(ctx) {
     const resumeId = flags.resume === undefined || flags.resume === null
         ? null
         : String(flags.resume).trim();
-    if (!task && !resumeId) {
+    if (!taskWithContext && !resumeId && !input) {
         throw new UsageError('Укажите задачу: ai-webdev run "сделать лендинг".');
+    }
+    const resolvedTask = taskWithContext || (input && !resumeId ? await input.prompt('Task') : '');
+    if (!resolvedTask && !resumeId) throw new UsageError('Укажите задачу: ai-webdev run "сделать лендинг".');
+    input?.setLocation?.({ stage: 'run', mode: 'interactive', model: config?.model ?? '' });
+    if (input?.interactive && resolvedTask) {
+        inputWait = input.waitForQuit();
     }
 
     const stages = routeStages(flags);
@@ -409,9 +419,12 @@ export async function runCommand(ctx) {
     const onInterrupt = () => controller.abort();
     process.on('SIGINT', onInterrupt);
 
+
     // The pictures of the task are staged in the project and become the references of the
     // run: the roles that look at the design see them.
     const images = pathListFlag(flags, 'image');
+    const cleanupInput = () => { input?.close?.(); };
+    process.once('exit', cleanupInput);
     if (images.length) {
         const staged = await stageReferences({
             images,
@@ -431,6 +444,7 @@ export async function runCommand(ctx) {
     }
 
     const notify = (event) => {
+        if (event?.type === 'stage.start') input?.setLocation({ stage: event.stage });
         renderer?.event?.(event);
         if (event?.type === 'stage.done' && event.stage === 'plan' && event.result?.plan) {
             renderer?.plan?.(event.result.plan);
@@ -456,7 +470,8 @@ export async function runCommand(ctx) {
             client,
             config,
             root: cwd,
-            task,
+            task: resolvedTask,
+            input,
             runId,
             stageNames: stages,
             requested,
@@ -466,13 +481,21 @@ export async function runCommand(ctx) {
             env,
         };
         const report = resumeId
-            ? await resumePipeline(request)
-            : await runPipeline(request);
+        ? await resumePipeline(request)
+        : await runPipeline(request);
+
+        if (input?.interactive && report.status === 'completed') {
+            input.setStatus('completed · /quit to close');
+        }
+        if (input?.interactive && report.status === 'completed') {
+            inputWait = input.waitForQuit();
+            await inputWait;
+        }
 
         for (const warning of report.warnings ?? []) renderer?.warning?.(warning);
         renderer?.progress?.(report.progress);
         renderer?.summary?.(report);
-        if (report.status === 'failed') {
+        if (report.status === 'failed' || report.status === 'partial') {
             // A fallen run is continued, not started again: the command of the continuation
             // is named with everything the run needs.
             const command = resumeCommand({
@@ -487,13 +510,20 @@ export async function runCommand(ctx) {
             const interrupted = controller.signal.aborted;
             renderer?.note?.(interrupted
                 ? `Прогон прерван во время стадии «${report.progress?.stage ?? 'unknown'}». Продолжить: ai-webdev run --resume ${report.runId}`
-                : `Прогон остановлен после стадии «${stopAfter}». Продолжить: ai-webdev run --resume ${report.runId}`);
+                : `Прогон приостановлен. Продолжить: ai-webdev run --resume ${report.runId}`);
+            if (!interrupted && input?.interactive) {
+                inputWait = input.waitForQuit();
+                await inputWait;
+            }
             return interrupted ? EXIT.aborted : EXIT.ok;
         }
         if (controller.signal.aborted) return 130;
         return 0;
     } finally {
         process.off('SIGINT', onInterrupt);
+        process.removeListener('exit', cleanupInput);
+        input?.close?.();
+        if (inputWait) await inputWait.catch(() => {});
         client.close?.();
     }
 }

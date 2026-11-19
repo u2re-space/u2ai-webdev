@@ -217,6 +217,8 @@ export const defaults = {
     browser: true,
     /** Compare two pictures of the project and measure the difference between them. */
     compare: true,
+    /** Ask the operator a blocking question in interactive runs. */
+    ask_user: true,
     /** Hand the work from one role to another, in a separate session. */
     delegate: true,
     /** Call the external `ai-decompose` CLI. */

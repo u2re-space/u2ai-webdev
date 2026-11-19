@@ -191,7 +191,7 @@ export async function runStage(stage, args, timeoutMs = 0) {
  *   stageNames?: string[]|null, requested?: string[]|null, stopAfter?: string|null,
  *   signal?: AbortSignal|null,
  *   notify?: (event: object) => void, env?: object, inputs?: object|null, resume?: boolean,
- *   stages?: object[]|null }} request
+ *   stages?: object[]|null, input?: object|null }} request
  * @returns {Promise<{ status: string, runId: string, stages: object[], progress: object,
  *   file: string|null, warnings: string[], error: string|null }>}
  * @exports
@@ -212,6 +212,7 @@ export async function runPipeline({
     inputs = null,
     resume = false,
     stages: override = null,
+    input = null,
 } = {}) {
     const run = id || makeRunId();
     const selected = override
@@ -239,7 +240,7 @@ export async function runPipeline({
         cache: config?.context?.cache !== false,
         maxBriefChars: config?.context?.maxBriefChars,
     });
-
+    runContext.input = input;
     // The map of the run: the files of the working directory with their lines and their
     // symbols. The searches and the reads of the files the map knows do not touch the disk.
     const map = await openRunMap({
@@ -255,6 +256,7 @@ export async function runPipeline({
     // The map hangs on the context: the tools of a role need both, and the role runner gets
     // the context alone.
     runContext.map = map;
+    runContext.input = input;
 
     // The context of the run: every stage reads it and puts its result into it.
     const ctx = {
@@ -265,6 +267,7 @@ export async function runPipeline({
         runId: run,
         notify,
         env,
+        input,
         inputs,
         memory: null,
         memoryText: '',
@@ -385,6 +388,28 @@ export async function runPipeline({
     const queue = [...list];
     let position = 0;
     let ordered = false;
+    const pendingSkips = new Set();
+    const roleStages = { markup: 'markup', coder: 'coding', styler: 'styling', editor: 'vector', iconifier: 'iconify' };
+    const stageByRole = Object.fromEntries(Object.entries(roleStages).map(([role, stage]) => [stage, role]));
+    const drainNamedSkips = () => {
+        for (const item of input?.takePendingSkips?.({ namedOnly: true }) ?? []) {
+            const name = String(item?.target ?? '').toLowerCase();
+            if (!name) continue;
+            if (list.some((candidate) => candidate.name === name)) pendingSkips.add(name);
+            else if (ctx.plan?.steps?.some((step) => String(step.id).toLowerCase() === name)) input?.queueStepSkip?.(name);
+            else if (roleStages[name] && list.some((candidate) => candidate.name === roleStages[name])) {
+                for (const step of ctx.plan?.steps?.filter((candidate) => candidate.role === name) ?? []) {
+                    input?.queueStepSkip?.(step.id);
+                }
+            }
+        }
+    };
+    const forwardNotify = notify;
+    notify = (event) => {
+        if (event?.type === 'role.done') drainNamedSkips();
+        forwardNotify?.(event);
+    };
+    ctx.notify = notify;
 
     while (position < queue.length) {
         if (!ordered && ctx.plan) {
@@ -399,6 +424,23 @@ export async function runPipeline({
         const stage = queue[position];
         position += 1;
 
+        input?.setLocation?.({ stage: stage.name });
+        drainNamedSkips();
+        const where = input?.location?.();
+        const currentSkip = where?.stage === stage.name && !where?.step ? input?.takeCurrentSkip?.() : null;
+        const exactStageSkip = input?.takeSkip?.({ stage: stage.name });
+        const roleForStage = stageByRole[stage.name];
+        const exactRoleSkip = roleForStage ? input?.takeSkip?.({ stage: roleForStage }) : null;
+        if (currentSkip || exactStageSkip || exactRoleSkip || pendingSkips.has(stage.name)) {
+            pendingSkips.delete(stage.name);
+            const reason = 'Skipped by the operator.';
+            progress = recordStep(progress, { stage: stage.name, status: 'skipped', report: reason });
+            await writeProgress(root, config, run, progress);
+            await runContext?.stage?.(stage.name, 'skipped', reason);
+            reports.push({ name: stage.name, status: 'skipped', result: null, warnings: [] });
+            notify({ type: 'stage.skip', stage: stage.name, status: 'skipped' });
+            continue;
+        }
         const record = done.get(stage.name);
         if (resume && record?.status === 'completed' && !asked.has(stage.name)) {
             // The progress says that the stage ran. The disk says whether its work is
@@ -411,6 +453,10 @@ export async function runPipeline({
             }
             warnings.push(`Стадия ${stage.name}: работа потеряна — стадия выполняется заново.`);
             progress = recordStep(progress, { stage: stage.name, status: 'pending' });
+        } else if (resume && record?.status === 'skipped') {
+            reports.push({ name: stage.name, status: 'skipped', result: null, warnings: [] });
+            notify({ type: 'stage.skip', stage: stage.name, status: 'skipped' });
+            continue;
         } else if (resume && record?.status === 'completed' && asked.has(stage.name)) {
             // The stage was asked for by name: it runs again, even when the progress of
             // the earlier run says that it is done. The repair of the review needs it.
@@ -452,6 +498,7 @@ export async function runPipeline({
         }
 
         notify({ type: 'stage.start', stage: stage.name, title: stage.title });
+        input?.setLocation?.({ stage: stage.name });
         let result = null;
         try {
             const args = typeof stage.args === 'function' ? { ...ctx, ...stage.args(ctx) } : ctx;
@@ -488,6 +535,8 @@ export async function runPipeline({
 
         const stageWarnings = Array.isArray(result?.warnings) ? result.warnings : [];
         warnings.push(...stageWarnings.map((item) => `${stage.name}: ${item}`));
+        const operatorPartial = result?.partial === true
+            || (Array.isArray(result?.steps) && result.steps.some((step) => step?.skipped === true));
         const ok = result?.ok !== false;
 
         // The files of the stage go into the map and into the context of the run: the next
@@ -509,17 +558,17 @@ export async function runPipeline({
 
         progress = recordStep(progress, {
             stage: stage.name,
-            status: ok ? 'completed' : 'failed',
-            report: reportOf(result),
+            status: operatorPartial ? 'partial' : (ok ? 'completed' : 'failed'),
+            report: operatorPartial ? 'One or more steps were skipped by the operator.' : reportOf(result),
             files: pipelineFiles(result),
         });
         await writeProgress(root, config, run, progress);
 
         // The stage goes into the context of the run: the stages after it know what is done.
-        await runContext?.stage?.(stage.name, ok ? 'done' : 'failed', reportOf(result));
+        await runContext?.stage?.(stage.name, operatorPartial ? 'partial' : (ok ? 'done' : 'failed'), reportOf(result));
 
-        reports.push({ name: stage.name, status: ok ? 'completed' : 'failed', result, warnings: stageWarnings });
-        notify({ type: 'stage.done', stage: stage.name, status: ok ? 'completed' : 'failed', result });
+        reports.push({ name: stage.name, status: operatorPartial ? 'partial' : (ok ? 'completed' : 'failed'), result, warnings: stageWarnings });
+        notify({ type: 'stage.done', stage: stage.name, status: operatorPartial ? 'partial' : (ok ? 'completed' : 'failed'), result });
 
         if (!ok) {
             status = 'failed';
@@ -533,8 +582,10 @@ export async function runPipeline({
         }
     }
 
+    if (status === 'completed' && (progress.stages ?? []).some((item) => ['skipped', 'partial'].includes(item.status))) status = 'partial';
     if (status === 'completed') progress = { ...progress, status: 'completed' };
     else if (paused) progress = { ...progress, status: 'paused' };
+    else if (status === 'partial') progress = { ...progress, status: 'partial' };
     else progress = { ...progress, status: 'failed' };
 
     const file = await writeProgress(root, config, run, progress);

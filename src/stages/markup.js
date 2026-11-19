@@ -28,7 +28,7 @@ export const role = 'markup';
  *
  * @param {{ client: object, config?: object, root?: string, task?: string, plan?: object|null,
  *   architecture?: object|null, inputs?: object|null, runId?: string|null, apply?: boolean,
- *   notify?: (event: object) => void, env?: object }} request
+ *   notify?: (event: object) => void, env?: object, input?: object|null }} request
  * @returns {Promise<object>} the report of the stage
  * @exports
  * @ai.hint io
@@ -45,6 +45,7 @@ export async function markupStage({
     apply = true,
     notify = () => {},
     env = process.env,
+    input = null,
 } = {}) {
     const brief = architecture ? architectureText(architecture) : '';
     return await runStepStage({
@@ -60,6 +61,7 @@ export async function markupStage({
         apply,
         notify,
         env,
+        input,
         context: {
             markup: architecture?.stack?.markup ?? config?.stack?.markupLanguage ?? 'html',
         },

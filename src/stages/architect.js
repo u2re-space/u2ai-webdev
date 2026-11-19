@@ -194,7 +194,7 @@ export async function readArchitecture(root, config = {}, id = null) {
  * the code.
  *
  * @param {{ client: object, config?: object, root?: string, task?: string, plan?: object|null,
- *   inputs?: object|null, runId?: string|null, notify?: (event: object) => void, env?: object }} request
+ *   inputs?: object|null, runId?: string|null, notify?: (event: object) => void, env?: object, input?: object|null }} request
  * @returns {Promise<{ stage: string, ok: boolean, architecture: object|null, brief: string,
  *   file: string|null, warnings: string[], turns: number, usage: object|null, runId: string }>}
  * @exports
@@ -211,6 +211,7 @@ export async function architectStage({
     notify = () => {},
     env = process.env,
     runContext = null,
+    input = null,
 } = {}) {
     if (!client?.responses) throw new Error('Клиент API не передан.');
 
@@ -244,6 +245,7 @@ export async function architectStage({
         parts: reference.parts,
         runContext,
         stage: 'architect',
+        inputChannel: input,
     });
 
     if (!result.data) {

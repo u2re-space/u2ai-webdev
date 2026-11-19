@@ -28,6 +28,7 @@ import { loadConfig } from './config/index.js';
 import { UsageError, CommandError } from './cli/errors.js';
 import { checkNode } from './cli/compatibility.js';
 import { createRenderer, detectMode } from './cli/renderer.js';
+import { readPipedInput } from './cli/input.js';
 import { runCommand, planCommand, stagesCommand, configOverrides } from './cli/run.js';
 import { sightCommand } from './cli/sight.js';
 import { installCommand } from './cli/install.js';
@@ -192,6 +193,8 @@ export async function main(argv = []) {
         mode,
         ascii: Boolean(flags.ascii),
         verbose: Boolean(flags.detail),
+        stdin: process.stdin,
+        inputEnabled: command === 'run' || !Object.hasOwn(COMMANDS, command),
     });
 
     // A command that is not known is a task: `ai-webdev "make a landing"` is a run.
@@ -206,6 +209,9 @@ export async function main(argv = []) {
             cwd: process.cwd(),
             env: process.env,
         });
+        const stdinText = ['run', 'plan'].includes(name) && !process.stdin.isTTY
+            ? await readPipedInput({ stdin: process.stdin, maxBytes: config?.limits?.maxStdinBytes })
+            : '';
         const runner = COMMANDS[name];
         return await runner({
             config,
@@ -216,6 +222,8 @@ export async function main(argv = []) {
             renderer,
             write: (text) => renderer.note(text),
             env: process.env,
+            stdin: process.stdin,
+            stdinText,
         });
     } catch (error) {
         if (error instanceof UsageError) {

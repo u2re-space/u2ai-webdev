@@ -260,7 +260,8 @@ export async function readPlan(root, config = {}, id = null) {
  * The stage of the plan: the planner reads the project and answers with the steps of the work.
  *
  * @param {{ client: object, config?: object, root?: string, task?: string, inputs?: object|null,
- *   runId?: string|null, notify?: (event: object) => void, env?: object, runContext?: object|null }} request
+ *   runId?: string|null, notify?: (event: object) => void, env?: object, runContext?: object|null,
+ *   input?: object|null }} request
  * @returns {Promise<{ stage: string, ok: boolean, plan: object|null, file: string|null,
  *   text: string, warnings: string[], turns: number, usage: object|null, runId: string }>}
  * @exports
@@ -276,6 +277,7 @@ export async function planStage({
     notify = () => {},
     env = process.env,
     runContext = null,
+    input = null,
 } = {}) {
     if (!client?.responses) throw new Error('Клиент API не передан.');
 
@@ -306,6 +308,7 @@ export async function planStage({
         notify,
         runContext,
         stage: 'plan',
+        inputChannel: input,
     };
 
     let result = await runRole(request);

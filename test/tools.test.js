@@ -58,6 +58,22 @@ test('read_file attaches an image as a visual input instead of rejecting it as b
     assert.doesNotMatch(result, /Бинарный файл/);
 });
 
+test('ask_user waits for the operator only when an interactive callback is provided', async () => {
+    const { root, config } = await workspace();
+    let asked = '';
+    const tools = createToolset({
+        root,
+        config,
+        askUser: async (question) => { asked = question; return 'Use the blue option.'; },
+    });
+    const answer = await tools.execute('ask_user', { question: 'Which color should the accent use?' });
+    assert.equal(asked, 'Which color should the accent use?');
+    assert.equal(answer, 'Use the blue option.');
+
+    const nonInteractive = createToolset({ root, config });
+    assert.match(await nonInteractive.execute('ask_user', { question: 'Choose?' }), /No interactive operator/);
+});
+
 test('the search greps the content, the names and the glob', async () => {
     const { root, tools } = await workspace();
     await tools.execute('write_file', { path: 'src/index.html', content: '<h1>hi</h1>\n' });

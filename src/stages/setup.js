@@ -424,7 +424,7 @@ export async function readSetup(root, config = {}, id = null) {
  *
  * @param {{ client: object, config?: object, root?: string, task?: string, plan?: object|null,
  *   architecture?: object|null, runId?: string|null, overwrite?: boolean,
- *   notify?: (event: object) => void, env?: object, runContext?: object|null }} request
+ *   notify?: (event: object) => void, env?: object, runContext?: object|null, input?: object|null }} request
  * @returns {Promise<{ stage: string, ok: boolean, setup: object|null, applied: object|null,
  *   readiness: object, file: string|null, warnings: string[], turns: number, usage: object|null,
  *   runId: string }>}
@@ -443,6 +443,7 @@ export async function setupStage({
     notify = () => {},
     env = process.env,
     runContext = null,
+    input = null,
 } = {}) {
     if (!client?.responses) throw new Error('Клиент API не передан.');
 
@@ -493,6 +494,7 @@ export async function setupStage({
         notify,
         runContext,
         stage: 'setup',
+        inputChannel: input,
     });
 
     // The installer that only described its work is asked to do it.
@@ -516,6 +518,7 @@ export async function setupStage({
             notify,
             runContext,
             stage: 'setup',
+            inputChannel: input,
         });
     }
 

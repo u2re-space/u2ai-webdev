@@ -82,6 +82,12 @@ Options of the run:
   -h, --help                  Print this help.
   -v, --version               Print the version.
 
+Interactive run (TTY): enter a task when none was given, or type during the run to steer the
+next role turn. The tool ask_user waits for an answer in this same input line. Controls:
+  /skip [stage-or-step]        Skip the current stage/step, or a named pending one.
+  /help                        Show the interactive controls.
+  /quit                        Finish the current safe operation and pause the run.
+
 The CLIs of the house:
   The roles of a run may call the CLIs of the family \`ai-*\` themselves. The tool \`ai_cli\`
   takes the name of the CLI and the arguments of its command line, one argument per element,

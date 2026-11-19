@@ -679,6 +679,30 @@ test('a plan without a step of the role skips the stage', async () => {
     assert.ok(result.warnings[0].includes('planner'));
 });
 
+test('an operator step skip is written as skipped, not completed', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-step-skip-'));
+    const input = {
+        interactive: true,
+        setLocation() {},
+        takeSkip() { return { target: 'markup-1' }; },
+        takeSteering() { return []; },
+    };
+    const result = await runStepStage({
+        client: fakeClient([]),
+        config: { output: { work: './.tmp' } },
+        root,
+        task: 'Make a landing.',
+        role: 'markup',
+        plan: PLAN,
+        runId: 'run-skip',
+        input,
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.skipped, true);
+    assert.equal(result.steps[0].skipped, true);
+    assert.equal((await readStepReport(root, { output: { work: './.tmp' } }, 'run-skip', 'markup-1')).skipped, true);
+});
+
 test('the stage of the markup keeps the landmarks of the answer', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-markup-'));
     const client = fakeClient([schemaAnswer('markup', {

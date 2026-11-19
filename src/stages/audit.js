@@ -197,7 +197,7 @@ export function auditContext({ listing = null, build = null, design = '' } = {})
  *
  * @param {{ client: object, config?: object, root?: string, task?: string, plan?: object|null,
  *   architecture?: object|null, inputs?: object|null, build?: object|null, runId?: string|null,
- *   notify?: (event: object) => void, env?: object }} request
+ *   notify?: (event: object) => void, env?: object, input?: object|null }} request
  * @returns {Promise<{ stage: string, ok: boolean, verdict: string, audit: object|null,
  *   issues: object[], file: string|null, warnings: string[], runId: string }>}
  * @exports
@@ -216,6 +216,7 @@ export async function auditStage({
     notify = () => {},
     env = process.env,
     runContext = null,
+    input = null,
 } = {}) {
     if (!client?.responses) throw new Error('Клиент API не передан.');
     const run = id ?? runId();
@@ -255,6 +256,7 @@ export async function auditStage({
         notify,
         runContext,
         stage: 'audit',
+        inputChannel: input,
     };
 
     let result = await runRole(request);

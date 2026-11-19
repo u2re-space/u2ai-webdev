@@ -145,7 +145,7 @@ export function preparedVectorPlan(plan = null, pictures = []) {
  *
  * @param {{ client: object, config?: object, root?: string, task?: string, plan?: object|null,
  *   architecture?: object|null, inputs?: object|null, runId?: string|null, apply?: boolean,
- *   notify?: (event: object) => void, env?: object, signal?: AbortSignal|null }} request
+ *   notify?: (event: object) => void, env?: object, signal?: AbortSignal|null, input?: object|null }} request
  * @returns {Promise<object>} the report of the stage
  * @exports
  * @ai.hint io
@@ -163,6 +163,7 @@ export async function vectorStage({
     notify = () => {},
     env = process.env,
     signal = null,
+    input = null,
 } = {}) {
     const brief = architecture ? architectureText(architecture) : '';
     // Картинка, вырезанная из референса, — это и есть ассет: нарисованный по памяти SVG
@@ -182,6 +183,7 @@ export async function vectorStage({
         notify,
         env,
         signal,
+        input,
         context: {
             stack: config?.stack ?? {},
             vectorOnly: true,

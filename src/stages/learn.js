@@ -109,7 +109,7 @@ export async function readLessons(root, config = {}, id = null) {
  *
  * @param {{ client: object, config?: object, root?: string, task?: string, plan?: object|null,
  *   review?: object|null, memory?: string, runId?: string|null, store?: object|null,
- *   notify?: (event: object) => void, env?: object, runContext?: object|null }} request
+ *   notify?: (event: object) => void, env?: object, runContext?: object|null, input?: object|null }} request
  * @returns {Promise<{ stage: string, ok: boolean, lessons: object[], text: string,
  *   file: string|null, stored: object, warnings: string[], runId: string }>}
  * @exports
@@ -128,6 +128,7 @@ export async function learnStage({
     notify = () => {},
     env = process.env,
     runContext = null,
+    input = null,
 } = {}) {
     if (!client?.responses) throw new Error('Клиент API не передан.');
     const run = id ?? runId();
@@ -168,6 +169,7 @@ export async function learnStage({
         notify,
         runContext,
         stage: 'learn',
+        inputChannel: input,
     });
 
     const text = String(result.text ?? '').trim();

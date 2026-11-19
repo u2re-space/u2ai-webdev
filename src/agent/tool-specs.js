@@ -625,6 +625,18 @@ export const TOOL_SPECS = Object.freeze({
         required: ['topic'],
         roles: ['planner', 'architect', 'editor', 'reviewer', 'auditor', 'installer'],
     },
+    ask_user: {
+        configKey: 'ask_user',
+        description: 'Ask the human operator one blocking question and wait for their answer. Use only when the answer changes what work should be done; do not ask about facts already in the task or project. In a non-interactive run, proceed with a reasonable assumption instead.',
+        parameters: {
+            type: 'object',
+            properties: { question: str('One concise question for the operator.') },
+            required: ['question'],
+            additionalProperties: false,
+        },
+        required: ['question'],
+        roles: [],
+    },
 });
 
 /** The names of every tool, in catalogue order. */

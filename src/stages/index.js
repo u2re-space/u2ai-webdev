@@ -81,6 +81,7 @@ export const STAGES = Object.freeze([
         title: 'Plan the work',
         dependsOn: ['collect'],
         run: planStage,
+        args: (ctx) => ({ input: ctx.input ?? null }),
         apply: (ctx, result) => { ctx.plan = result?.plan ?? null; },
     },
     {
@@ -108,6 +109,8 @@ export const STAGES = Object.freeze([
         title: 'Design the structure',
         dependsOn: ['plan'],
         run: architectStage,
+        args: (ctx) => ({ input: ctx.input ?? null }),
+        args: (ctx) => ({ input: ctx.input ?? null }),
         apply: (ctx, result) => { ctx.architecture = result?.architecture ?? null; },
     },
     {
@@ -115,6 +118,8 @@ export const STAGES = Object.freeze([
         title: 'Prepare the environment',
         dependsOn: ['architect'],
         run: setupStage,
+        args: (ctx) => ({ input: ctx.input ?? null }),
+        args: (ctx) => ({ input: ctx.input ?? null }),
         apply: (ctx, result) => { ctx.setup = result?.setup ?? null; },
     },
     {
@@ -122,7 +127,7 @@ export const STAGES = Object.freeze([
         title: 'Write the markup',
         dependsOn: ['setup'],
         run: markupStage,
-        args: (ctx) => ({ apply: ctx.apply !== false }),
+        args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
         verify: workOnDisk('markup'),
         apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
     },
@@ -131,7 +136,7 @@ export const STAGES = Object.freeze([
         title: 'Write the code',
         dependsOn: ['markup'],
         run: codingStage,
-        args: (ctx) => ({ apply: ctx.apply !== false }),
+        args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
         verify: workOnDisk('coder'),
         apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
     },
@@ -140,7 +145,7 @@ export const STAGES = Object.freeze([
         title: 'Write the styles',
         dependsOn: ['coding'],
         run: stylingStage,
-        args: (ctx) => ({ apply: ctx.apply !== false }),
+        args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
         verify: workOnDisk('styler'),
         apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
     },
@@ -159,7 +164,7 @@ export const STAGES = Object.freeze([
         // there is something to look at.
         dependsOn: ['build'],
         run: sightStage,
-        args: (ctx) => ({ apply: ctx.apply !== false }),
+        args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
         apply: (ctx, result) => {
             ctx.shots = [...(ctx.shots ?? []), ...(result?.shots ?? [])];
             // The words of the page — the console of the browser and the log of the bundler —
@@ -173,7 +178,7 @@ export const STAGES = Object.freeze([
         title: 'Draw the vector graphics',
         dependsOn: ['coding'],
         run: vectorStage,
-        args: (ctx) => ({ apply: ctx.apply !== false }),
+        args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
         apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
     },
     {
@@ -181,7 +186,7 @@ export const STAGES = Object.freeze([
         title: 'Choose the icons',
         dependsOn: ['markup'],
         run: iconifyStage,
-        args: (ctx) => ({ apply: ctx.apply !== false }),
+        args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
         apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
     },
     {
@@ -193,6 +198,7 @@ export const STAGES = Object.freeze([
         // pictures of the result, and the reference is the picture of the target. The words of
         // the page come with them.
         args: (ctx) => ({
+            input: ctx.input ?? null,
             screenshots: ctx.shots ?? [],
             logs: (ctx.pageLogs ?? []).join('\n\n'),
         }),
@@ -203,6 +209,7 @@ export const STAGES = Object.freeze([
         title: 'Audit the project',
         dependsOn: ['review'],
         run: auditStage,
+        args: (ctx) => ({ input: ctx.input ?? null }),
         apply: (ctx, result) => { ctx.audit = result ?? null; },
     },
     {
@@ -210,7 +217,7 @@ export const STAGES = Object.freeze([
         title: 'Learn the lessons',
         dependsOn: ['audit'],
         run: learnStage,
-        args: (ctx) => ({ memory: ctx.memoryText ?? '', store: ctx.memory ?? null }),
+        args: (ctx) => ({ memory: ctx.memoryText ?? '', store: ctx.memory ?? null, input: ctx.input ?? null }),
         apply: (ctx, result) => { ctx.lessons = result?.lessons ?? []; },
     },
 ]);

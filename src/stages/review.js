@@ -339,7 +339,7 @@ export function repairText(step, issues = [], { again = false } = {}) {
  * is a defect in a new place.
  * @param {{ client: object, config?: object, root?: string, task?: string, plan?: object|null,
  *   architecture?: object|null, issues?: object[], notify?: (event: object) => void,
- *   env?: object, again?: boolean, runContext?: object|null }} request
+ *   env?: object, again?: boolean, runContext?: object|null, input?: object|null }} request
  * @returns {Promise<{ repaired: object[], written: string[], warnings: string[], errors: string[] }>}
  * @exports
  * @ai.hint io
@@ -357,6 +357,7 @@ export async function repairIssues({
     again = false,
     runContext = null,
     parts = [],
+    input = null,
 } = {}) {
     const list = Array.isArray(issues) ? issues : [];
     const repaired = [];
@@ -398,6 +399,7 @@ export async function repairIssues({
             notify,
             runContext,
             stage: 'repair',
+            inputChannel: input,
             // The role that repairs the styles sees the page and the reference: a defect of
             // the layout is a picture, not a line of text.
             parts: LOOKS_AT_DESIGN.has(group.role) ? parts : [],
@@ -511,7 +513,7 @@ export async function stylePairIssues({
  * @param {{ client: object, config?: object, root?: string, task?: string, plan?: object|null,
  *   architecture?: object|null, inputs?: object|null, reports?: object[], screenshots?: string[],
  *   logs?: string, runId?: string|null, notify?: (event: object) => void, env?: object,
- *   runContext?: object|null }} request
+ *   runContext?: object|null, input?: object|null }} request
  * @returns {Promise<{ stage: string, ok: boolean, verdict: string, reviews: object[],
  *   issues: object[], file: string|null, warnings: string[], runId: string }>}
  * @exports
@@ -532,6 +534,7 @@ export async function reviewStage({
     notify = () => {},
     env = process.env,
     runContext = null,
+    input = null,
 } = {}) {
     if (!client?.responses) throw new Error('Клиент API не передан.');
     const run = id ?? runId();
@@ -544,6 +547,7 @@ export async function reviewStage({
     if (!steps.length) {
         return {
             stage: 'review',
+            inputChannel: input,
             ok: false,
             verdict: 'fail',
             reviews: [],
@@ -798,6 +802,7 @@ export async function reviewStage({
                 env,
                 again: round > 0,
                 runContext,
+                input,
                 // The role that repairs the styles sees the page and the reference.
                 parts: [...shots.parts, ...reference.parts, ...comparisonParts],
             });

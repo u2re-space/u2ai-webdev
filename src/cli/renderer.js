@@ -22,6 +22,7 @@
 import { createColors } from './colors.js';
 import { sanitizeText } from './stdio.js';
 import { formatBridgeLine } from '../shared/child-log.js';
+import { createInputChannel } from './input.js';
 
 /** The symbols of the status lines. */
 export const SYMBOLS = Object.freeze({
@@ -78,11 +79,16 @@ export function createRenderer({
     colors = null,
     ascii = false,
     verbose = false,
+    stdin = process.stdin,
+    inputEnabled = false,
 } = {}) {
     const paint = colors ?? createColors(mode === 'tty');
     const symbols = ascii ? ASCII_SYMBOLS : SYMBOLS;
     const json = mode === 'json';
     const quiet = mode === 'quiet';
+    const input = inputEnabled
+        ? createInputChannel({ stdin, output: stderr, interactive: mode === 'tty' })
+        : null;
 
     /**
      * Write one line on stdout.
@@ -148,6 +154,8 @@ export function createRenderer({
         mode,
         colors: paint,
         verbose,
+        input,
+        get interactive() { return Boolean(input); },
 
         /**
          * A line of the answer: the text of the run.
@@ -347,7 +355,7 @@ export function createRenderer({
             const status = String(report?.status ?? 'completed');
             const label = status === 'completed'
                 ? paint.green('completed')
-                : (status === 'paused' ? paint.yellow('paused') : paint.red(status));
+                : (status === 'paused' ? paint.yellow('paused') : (status === 'partial' ? paint.yellow('partial') : paint.red(status)));
             const lines = [`${paint.bold('Run')} ${report?.runId ?? ''}: ${label}`];
             for (const stage of Array.isArray(report?.stages) ? report.stages : []) {
                 const mark = stage?.status === 'completed' ? symbols.ok

@@ -440,11 +440,11 @@ async function entryPage(root, page = '') {
  * already asked comes from the cache, and every call is written into the journal.
  * @param {{ root: string, config: object, role?: string|null, mcp?: object[],
  *   writeDirs?: string[], env?: object, context?: object|null, map?: object|null,
- *   notify?: ((event: object) => void)|null }} opts
+ *   notify?: ((event: object) => void)|null, askUser?: Function|null }} opts
  * @returns {{ execute: (name: string, args: object) => Promise<string>, specs: object[],
  *   specsFor: Function, setWriteDirs: Function, writeDirs: Function }}
  */
-export function createToolset({ root, config, role = null, mcp = [], writeDirs = null, writeFiles = null, env = process.env, context = null, map = null, notify = null, signal = null }) {
+export function createToolset({ root, config, role = null, mcp = [], writeDirs = null, writeFiles = null, env = process.env, context = null, map = null, notify = null, signal = null, askUser = null }) {
     const mcpTools = mcpToolEntries(mcp);
     const mcpSpecs = mcpTools.map((entry) => ({
         type: 'function',
@@ -1288,6 +1288,10 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
             }
             case 'ai_cli_help':
                 return familyDoc(args.topic);
+            case 'ask_user':
+                if (!config?.tools?.ask_user) return 'Operator questions are disabled; make a reasonable assumption and continue.';
+                if (typeof askUser !== 'function') return 'No interactive operator is available. Make a reasonable assumption, continue, and state it in your final answer.';
+                return await askUser(String(args.question ?? ''));
             default:
                 return `Неизвестный инструмент: ${name}`;
         }

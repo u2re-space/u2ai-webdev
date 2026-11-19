@@ -685,7 +685,8 @@ export async function resumableStep(root, config = {}, id = null, step = {}, pla
     const stepId = String(step?.id ?? '').trim();
     if (!stepId) return null;
     const report = await readStepReport(root, config, id, stepId).catch(() => null);
-    if (!report || report.ok !== true) return null;
+    if (!report || (report.ok !== true && report.skipped !== true)) return null;
+    if (report.skipped === true) return { ...report, resumed: true };
     const written = Array.isArray(report.applied?.written) && report.applied.written.length
         ? report.applied.written
         : (Array.isArray(report.files) ? report.files.map((file) => file?.path ?? file) : []);
@@ -724,10 +725,12 @@ export async function resumableStep(root, config = {}, id = null, step = {}, pla
 export async function roleWorkOnDisk({ root, config = {}, id = null, plan = null, role } = {}) {
     const steps = stepsForRole(plan, role);
     if (!steps.length) return true;
+    let skipped = 0;
     for (const step of steps) {
         const stepId = String(step?.id ?? '').trim();
         const report = await readStepReport(root, config, id, stepId).catch(() => null);
-        if (!report || report.ok !== true) return false;
+        if (!report || (report.ok !== true && report.skipped !== true)) return false;
+        if (report.skipped === true) { skipped += 1; continue; }
         const own = new Set((Array.isArray(report.applied?.own) ? report.applied.own : []).map((item) => String(item)));
         const reportTime = await fileTime(stepReportPath(root, config, id, stepId));
         for (const file of Array.isArray(report.files) ? report.files : []) {
@@ -745,7 +748,7 @@ export async function roleWorkOnDisk({ root, config = {}, id = null, plan = null
             return false;
         }
     }
-    return true;
+    return skipped < steps.length;
 }
 
 /**
@@ -754,8 +757,8 @@ export async function roleWorkOnDisk({ root, config = {}, id = null, plan = null
  * @param {{ client: object, config?: object, root?: string, task?: string, role: string,
  *   plan?: object|null, brief?: string, inputs?: object|null, runId?: string|null,
  *   apply?: boolean, context?: object, notify?: (event: object) => void,
- *   env?: object, runContext?: object|null, signal?: AbortSignal|null }} request
- * @returns {Promise<{ stage: string, ok: boolean, skipped: boolean, steps: object[],
+ *   env?: object, runContext?: object|null, signal?: AbortSignal|null, input?: object|null }} request
+ * @returns {Promise<{ stage: string, ok: boolean, skipped: boolean, partial: boolean, steps: object[],
  *   warnings: string[], turns: number, usage: object|null, runId: string }>}
  * @exports
  * @ai.hint io
@@ -776,6 +779,7 @@ export async function runStepStage({
     env = process.env,
     runContext = null,
     signal = null,
+    input = null,
 } = {}) {
     if (!client?.responses) throw new Error('Клиент API не передан.');
     const run = id ?? runId();
@@ -818,6 +822,36 @@ export async function runStepStage({
     let usage = null;
 
     for (const step of steps) {
+        const stageName = role === 'coder' ? 'coding' : role === 'styler' ? 'styling' : role === 'editor' ? 'vector' : role;
+        input?.setLocation?.({ stage: stageName, role, step: step.id });
+        const skip = input?.takeSkip?.({ stage: stageName, step: step.id })
+            || input?.takeActiveStepSkip?.(step.id)
+            || input?.takeStepSkip?.(step.id);
+        if (skip) {
+            const report = {
+                stage: role,
+                step: { id: step.id, title: step.title, files: step.files, criteria: step.criteria },
+                ok: false,
+                skipped: true,
+                summary: 'Skipped by the operator.',
+                files: [],
+                commands: [],
+                notes: '',
+                landmarks: [],
+                accessibility: [],
+                tokens: [],
+                set: '',
+                icons: [],
+                applied: { written: [], skipped: [], replaced: [], failed: [], own: [] },
+                syntax: { checked: [], errors: [] },
+                partials: { missing: [], planned: [], forgotten: [] },
+                turns: 0,
+                stopped: 'skipped',
+            };
+            await writeStepReport(root, config, run, step.id, report);
+            reports.push(report);
+            continue;
+        }
         // A step that is already done is not done again: the run continues with what is
         // on the disk. A model that has to write the same file a second time pays for
         // the whole stage and changes nothing.
@@ -879,9 +913,27 @@ export async function runStepStage({
             notify,
             runContext,
             stage: role,
+            inputChannel: input,
         });
         turns += result.turns;
         usage = usage ?? result.usage;
+        if (result.stopped === 'skipped') {
+            const report = {
+                stage: role,
+                step: { id: step.id, title: step.title, files: step.files, criteria: step.criteria },
+                ok: false,
+                skipped: true,
+                summary: 'Skipped by the operator.',
+                files: [], commands: [], notes: '', landmarks: [], accessibility: [], tokens: [], set: '', icons: [],
+                applied: { written: [], skipped: [], replaced: [], failed: [], own: [] },
+                syntax: { checked: [], errors: [] }, partials: { missing: [], planned: [], forgotten: [] },
+                turns: result.turns,
+                stopped: 'skipped',
+            };
+            await writeStepReport(root, config, run, step.id, report);
+            reports.push(report);
+            continue;
+        }
         for (const problem of result.schemaProblems ?? []) {
             warnings.push(`Шаг ${step.id}: ответ роли ${role} не по схеме — ${problem}.`);
         }
@@ -952,6 +1004,7 @@ export async function runStepStage({
                 parts,
                 runContext,
                 stage: role,
+                inputChannel: input,
             });
             turns += repair.turns;
             usage = usage ?? repair.usage;
@@ -1050,7 +1103,8 @@ export async function runStepStage({
     return {
         stage: role,
         ok: reports.every((report) => report.ok),
-        skipped: false,
+        skipped: reports.length > 0 && reports.every((report) => report.skipped === true),
+        partial: reports.some((report) => report.skipped === true),
         steps: reports,
         warnings,
         turns,

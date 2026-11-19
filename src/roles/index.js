@@ -39,6 +39,7 @@ import { buildSkillInstructions, discoverSkills, skillsForRole } from '../agent/
 import { documentationForRole } from '../agent/docs.js';
 import { sourcesBlock } from '../agent/sources.js';
 import { createToolset } from '../agent/tools.js';
+import { toolSpecs as buildToolSpecs } from '../agent/tool-specs.js';
 import { createDelegator } from '../agent/delegation.js';
 import { effortFor } from '../agent/pace.js';
 import { getModelProfile, maxOutputFor, snapEffort } from '../model/profiles.js';
@@ -189,7 +190,7 @@ const VECTOR_TOOLS = new Set([
 const PAGE_FRAME_ROLES = new Set(['markup', 'styler']);
 const READ_ONLY_TOOLS = new Set([
     'list_files', 'read_file', 'find_line', 'search_files', 'list_backups',
-    'read_skill', 'web_guidance', 'fetch_url', 'search_icons',
+    'read_skill', 'web_guidance', 'fetch_url', 'search_icons', 'ask_user',
 ]);
 const REVIEW_TOOLS = new Set(['read_file', 'find_line']);
 
@@ -461,7 +462,7 @@ export async function pictureParts(root, text) {
  * @param {{ client: object, config?: object, role: string, input?: string, parts?: object[],
  *   context?: object, root?: string, env?: object, toolset?: object, maxTurns?: number,
  *   signal?: AbortSignal|null, notify?: (event: object) => void, runContext?: object|null,
- *   stage?: string|null, schemaChannel?: string|null, depth?: number }} request
+ *   stage?: string|null, schemaChannel?: string|null, depth?: number, inputChannel?: object|null }} request
  * @returns {Promise<{ role: string, text: string, data: object|null, toolCalls: object[],
  *   turns: number, usage: object|null, model: string|null, stopped: string }>}
  * @exports
@@ -485,11 +486,22 @@ export async function runRole({
     stage = null,
     schemaChannel: forcedChannel = null,
     depth = 0,
+    inputChannel = null,
 }) {
     if (!client?.responses) throw new Error('Клиент API не передан.');
+    inputChannel ??= runContext?.input ?? null;
     const key = String(role ?? '').trim().toLowerCase();
+    const roleStage = stage ?? key;
     const definition = resolveRole(key, config);
     if (!definition) throw new Error(`Неизвестная роль: ${role}`);
+    inputChannel?.setLocation?.({
+        stage: roleStage,
+        role: key,
+        step: context?.step?.id ?? null,
+        model: definition.model,
+        effort: definition.effort,
+                mode: forcedChannel ?? 'interactive',
+    });
 
     let instructions = await buildInstructions({ role: key, config, context, root, env, runContext });
     const frameContract = pageFrameContractFor(key);
@@ -538,14 +550,27 @@ export async function runRole({
         notify,
         writeFiles: context?.delegated ? (context?.step?.files ?? []) : null,
         signal,
+        askUser: inputChannel?.askUser ? (question) => inputChannel.askUser(question) : null,
     });
     // A delegated role never hands work over again: the hand-over is one level deep.
-    const specs = tools.specsFor(key, definition.tools)
-        .filter((spec) => key !== 'reviewer' || REVIEW_TOOLS.has(spec.name))
+    const roleToolNames = inputChannel?.interactive && config?.tools?.ask_user !== false
+        ? [...new Set([...definition.tools, 'ask_user'])]
+        : definition.tools;
+    const localSpecs = tools.specsFor(key, roleToolNames)
+        .filter((spec) => roleToolNames.includes(spec.name) || spec.name.startsWith('mcp_'));
+    const askUserSpec = inputChannel?.interactive && config?.tools?.ask_user !== false
+        ? buildToolSpecs(config?.tools, { names: ['ask_user'], role: key })
+        : [];
+    const specs = [
+        ...localSpecs,
+        ...askUserSpec.filter((spec) => !localSpecs.some((item) => item.name === spec.name)),
+    ]
+        .filter((spec) => key !== 'reviewer' || REVIEW_TOOLS.has(spec.name) || spec.name === 'ask_user')
         .filter((spec) => !context?.delegated || DELEGATED_TOOLS.has(spec.name))
         .filter((spec) => key !== 'styler' || !STYLER_FORBIDDEN_TOOLS.has(spec.name))
         .filter((spec) => !context?.vectorOnly || VECTOR_TOOLS.has(spec.name))
         .filter((spec) => !context?.vectorOnly || !String(spec.name).startsWith('mcp_'))
+        .filter((spec) => spec.name !== 'ask_user' || (inputChannel?.interactive && config?.tools?.ask_user !== false))
         .filter((spec) => depth === 0 || spec.name !== 'delegate_role');
     const schema = roleSchema(key);
     const readSpecs = specs.filter((spec) => READ_ONLY_TOOLS.has(String(spec?.name ?? '')));
@@ -674,11 +699,49 @@ export async function runRole({
     // The writes that really wrote a file.
     const writes = [];
 
+    let deferredSteering = [];
+    const appendSteering = () => {
+        const steering = inputChannel?.takeSteering?.() ?? [];
+        if (!steering.length) return false;
+        const addition = `## Operator steering for this turn\n${steering.map((line) => `- ${line}`).join('\n')}`;
+        items.push({ role: 'user', content: [textPart(addition)] });
+        return true;
+    };
+
     while (turns < limit) {
         turns += 1;
+        appendSteering();
+        inputChannel?.setLocation?.({
+            stage: roleStage,
+            role: key,
+            step: context?.step?.id ?? null,
+            model: definition.model,
+            effort: definition.effort,
+            mode: forcedChannel ?? 'interactive',
+        });
         const { parsed, work, schemaUsed, prematureSchemaAnswer } = await ask();
+        deferredSteering = inputChannel?.takeSteering?.() ?? [];
+        const skip = inputChannel?.takeSkip?.({
+            stage: roleStage === 'coder' ? 'coding' : roleStage === 'styler' ? 'styling' : roleStage === 'editor' ? 'vector' : roleStage,
+            step: context?.step?.id ?? '',
+        }) ?? inputChannel?.takeCurrentSkip?.();
+        if (skip) {
+            stopped = 'skipped';
+            answer = { ...parsed, data: null };
+            break;
+        }
 
         if (!work.length) {
+            if (deferredSteering.length && turns < limit) {
+                const pendingText = items.map((item) => item.content?.map?.((part) => part.text ?? '').join('\n') ?? '').join('\n');
+                items[items.length - 1] = { role: 'user', content: [textPart(`${pendingText}\n\n## Operator steering for this turn\n${deferredSteering.map((line) => `- ${line}`).join('\n')}`)] };
+                deferredSteering = [];
+                continue;
+            }
+            if (deferredSteering.length) {
+                items.push({ role: 'user', content: [textPart(`## Operator steering received at the end of this role\n${deferredSteering.map((line) => `- ${line}`).join('\n')}`)] });
+                deferredSteering = [];
+            }
             answer = parsed;
             if (prematureSchemaAnswer && hasActionTools) {
                 fallback = parsed;
@@ -796,6 +859,8 @@ export async function runRole({
                 output = `The tool failed: the arguments of the call are not a JSON object (${call.parseError}). Call the tool again with valid JSON.`;
             } else if (hasActionTools && !readyAtTurnStart && !READ_ONLY_TOOLS.has(call.name)) {
                 output = 'The tool was not run: call write_ready first. The next turn will have the full output budget.';
+            } else if (call.name === 'ask_user' && !inputChannel?.interactive) {
+                output = 'No interactive operator is available. Make a reasonable assumption, continue, and state it in your final answer.';
             } else if (call.name === WRITE_READY_TOOL.name && readyAtTurnStart) {
                 output = 'Write-ready was already signaled; continue with the requested action.';
             } else if (call.name === WRITE_READY_TOOL.name) {
@@ -816,6 +881,12 @@ export async function runRole({
             } else if (key === 'styler' && STYLER_RESEARCH_TOOLS.has(call.name)
                 && stylerResearchCalls >= STYLER_RESEARCH_LIMIT) {
                 output = 'Styler research limit reached. Follow the step files and criteria, then write the stylesheet.';
+            } else if (call.name === 'ask_user' && inputChannel?.interactive) {
+                try {
+                    output = await tools.execute(call.name, call.arguments);
+                } catch (error) {
+                    output = `The tool failed: ${error?.message ?? String(error)}`;
+                }
             } else {
                 try {
                     if (key === 'styler' && STYLER_RESEARCH_TOOLS.has(call.name)) stylerResearchCalls += 1;
@@ -833,6 +904,18 @@ export async function runRole({
                     arguments: toolCallDetail(call.arguments),
                     turn: turns,
                 });
+            }
+            if (call.name === 'ask_user' && inputChannel?.interactive) {
+                const callId = call.callId ?? call.id ?? `${call.name}-${calls.length}`;
+                items.push({
+                    type: 'function_call',
+                    call_id: callId,
+                    name: call.name,
+                    arguments: JSON.stringify(call.arguments ?? {}),
+                });
+                items.push({ type: 'function_call_output', call_id: callId, output: String(output ?? '') });
+                inputChannel?.setLocation?.({ stage: roleStage, role: key, step: context?.step?.id ?? null });
+                continue;
             }
             if (WRITE_TOOLS.includes(call.name) && wroteSomething(output)) writes.push(call);
             const callId = call.callId ?? call.id ?? `${call.name}-${calls.length}`;
@@ -878,6 +961,11 @@ export async function runRole({
                 });
             }
         }
+        if (deferredSteering.length) {
+            const pendingText = items.map((item) => item.content?.map?.((part) => part.text ?? '').join('\n') ?? '').join('\n');
+            items.push({ role: 'user', content: [textPart(`## Operator steering for this turn\n${deferredSteering.map((line) => `- ${line}`).join('\n')}\n\n${pendingText}`)] });
+            deferredSteering = [];
+        }
         if (key === 'styler' && work.length && wantedFiles.length) {
             const criteria = (Array.isArray(context?.step?.criteria) ? context.step.criteria : [])
                 .map((item) => String(item ?? '').trim()).filter(Boolean);
@@ -901,7 +989,7 @@ export async function runRole({
 
     // The last turn belongs to the answer: the role is asked to give it without any tool, so a
     // long run of tool calls still ends with the data of the schema.
-    if (schema && !needsFullSummary && !answer?.data && !answer?.refusal && !answer?.error) {
+    if (stopped !== 'skipped' && schema && !needsFullSummary && !answer?.data && !answer?.refusal && !answer?.error) {
         items.push({ role: 'user', content: [textPart(FINAL_ANSWER)] });
         let final = null;
         try {
@@ -945,7 +1033,7 @@ export async function runRole({
         answer = { text: '', data: null, toolCalls: [], usage: null, model: definition.model, refusal: '', error: null, raw: null };
     }
 
-    notify({ type: 'role.done', role: key, turns, toolCalls: calls.length, stopped });
+    notify({ type: 'role.done', role: key, stage, turns, toolCalls: calls.length, stopped });
 
     // The answer of the role goes into the context of the run: the next role builds on it
     // instead of asking the model the same thing again.

@@ -357,6 +357,59 @@ test('the binding page-frame contract is present in high-priority instructions f
     }
 });
 
+test('steering entered during a model call is included in the next safe role turn', async () => {
+    const requests = [];
+    let count = 0;
+    const inputChannel = {
+        interactive: true,
+        setLocation() {},
+        takeSteering() { return count++ === 0 ? [] : ['keep the existing header unchanged']; },
+    };
+    const client = { responses: { async create(body) {
+        requests.push(body);
+        return schemaAnswer('plan', {
+            summary: 'A landing page.',
+            steps: [
+                { id: 'markup-1', title: 'Markup', role: 'markup', dependsOn: [], files: ['index.html'], criteria: ['opens'] },
+                { id: 'style-1', title: 'Styles', role: 'styler', dependsOn: ['markup-1'], files: ['styles.css'], criteria: ['match'] },
+            ],
+            risks: [], questions: [],
+        });
+    } } };
+    await runRole({ client, config: structuredClone(defaults), role: 'planner', input: 'Make a page.', inputChannel });
+    assert.ok(requests.length >= 2);
+    assert.ok(requests.some((request) => JSON.stringify(request.input).includes('keep the existing header unchanged')));
+});
+
+test('ask_user is exposed to interactive roles and returns the operator answer as tool output', async () => {
+    const requests = [];
+    const inputChannel = {
+        interactive: true,
+        setLocation() {},
+        takeSteering() { return []; },
+        async askUser(question) { assert.equal(question, 'Which option?'); return 'Choose blue.'; },
+    };
+    const client = { responses: { async create(body) {
+        requests.push(body);
+        if (requests.length === 1) return toolAnswer('ask_user', { question: 'Which option?' });
+        return schemaAnswer('plan', {
+            summary: 'A page.',
+            steps: [
+                { id: 'markup-1', title: 'Markup', role: 'markup', dependsOn: [], files: ['index.html'], criteria: ['opens'] },
+                { id: 'style-1', title: 'Styles', role: 'styler', dependsOn: ['markup-1'], files: ['styles.css'], criteria: ['matches'] },
+            ],
+            risks: [], questions: [],
+        });
+    } } };
+
+    const answer = await runRole({ client, config: structuredClone(defaults), role: 'planner', input: 'Plan.', inputChannel });
+
+    assert.equal(answer.data.summary, 'A page.');
+    assert.ok(requests[0].tools?.some((spec) => spec.name === 'ask_user')
+        || requests.some((request) => request.tools?.some((spec) => spec.name === 'ask_user')));
+    assert.match(JSON.stringify(requests.at(-1).input), /Choose blue\./);
+});
+
 test('styler carries criteria after research and drops research tools at the cap', async () => {
     const requests = [];
     const answers = [
