@@ -1489,6 +1489,17 @@ ai-webdev skills path modern-web-guidance
 ai-webdev skills rm demo             # only the packs of the project
 ```
 
+The design and anti-slop workflows can be installed globally and are then available to both
+`ai-webdev` and `u2ai-webdev`:
+
+```bash
+npx skills add heydamir/unslop -g
+npx skills add felipebasurto/unslop-ui -g
+npx skills add oil-oil/oil-ui -g
+npx skills add GoogleChrome/modern-web-guidance -g
+npx modern-web-guidance@latest install
+```
+
 The pack of the package is `modern-web-guidance`: 209 guides of the modern web platform
 (the dialogs, the forms, the layout, the animation, the accessibility, the performance) by the
 Chrome, Edge, Firefox and MDN teams, under Apache-2.0. The roles that write or judge the

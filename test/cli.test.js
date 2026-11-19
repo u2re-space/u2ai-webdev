@@ -38,17 +38,17 @@ const BIN = path.join(ROOT, 'bin', 'ai-webdev.js');
 /**
  * Run the CLI in a child process with a home of its own.
  * @param {string[]} args
- * @param {{ home?: string, cwd?: string }} [options]
+ * @param {{ home?: string, cwd?: string, env?: object }} [options]
  * @returns {Promise<{ code: number, stdout: string, stderr: string }>}
  */
-async function cli(args, { home, cwd } = {}) {
+async function cli(args, { home, cwd, env = {} } = {}) {
     const targetHome = home ?? await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-cli-'));
     const work = cwd ?? targetHome;
     return new Promise((resolve) => {
         execFile(
             process.execPath,
             [BIN, ...args],
-            { cwd: work, env: { ...process.env, AI_WEBDEV_HOME: targetHome } },
+            { cwd: work, env: { ...process.env, AI_WEBDEV_HOME: targetHome, ...env } },
             (error, stdout, stderr) => {
                 resolve({ code: error?.code ?? 0, stdout: String(stdout), stderr: String(stderr) });
             },
@@ -288,16 +288,17 @@ test('the command of the skills lists the packs of the project and of the packag
 });
 
 test('a skill pack of the project is removed and the pack of the package is not', async () => {
+    const home = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-skills-home-'));
     const work = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-skills-rm-'));
     const pack = path.join(work, '.agents', 'skills', 'demo');
     await mkdir(pack, { recursive: true });
     await writeFile(path.join(pack, 'SKILL.md'), '---\nname: demo\ndescription: a demo pack\n---\n\nThe steps.');
 
-    const removed = await cli(['skills', 'rm', 'demo'], { cwd: work });
+    const removed = await cli(['skills', 'rm', 'demo'], { home, cwd: work, env: { HOME: home } });
     assert.equal(removed.code, EXIT.ok);
     assert.equal(existsSync(path.join(pack, 'SKILL.md')), false);
 
-    const builtin = await cli(['skills', 'rm', 'modern-web-guidance'], { cwd: work });
+    const builtin = await cli(['skills', 'rm', 'modern-web-guidance'], { home, cwd: work, env: { HOME: home } });
     assert.equal(builtin.code, EXIT.failure);
     assert.match(builtin.stdout, /встроен/);
 });
