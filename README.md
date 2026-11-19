@@ -578,6 +578,22 @@ asset is taken as it is — and the stage `vector` does not draw an SVG whose na
 a prepared picture: the step that would draw it is not done, and the report says why. The roles
 that write the markup and the code take the prepared file as it is.
 
+A vector graphic comes into being in one of two ways. The role writes the SVG itself — it is
+code, and the code is checked locally — or it asks the sibling CLI for the document:
+
+```bash
+# the tracing of a raster picture: the same shapes as a document
+ai-image vectorize logo.png --out assets/logo.svg
+
+# the drawing of a new one: the picture never existed
+ai-image generate "a fox badge" --format svg --out assets/fox.svg
+```
+
+The bridge picks the vector model of the house by itself (`openai/gpt-image-2.6-sunburst`), so
+the role names no model. Every path of the call stays inside the project, and the file of the
+result lands in a directory the stage opened for writing. The SVG that comes back goes through
+the same pipe as the one written by hand: it is validated, tidied and reported.
+
 ## The roles
 
 Every stage is done by a role: a prompt, a schema of the answer, a list of tools and a limit of

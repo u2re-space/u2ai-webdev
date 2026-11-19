@@ -362,16 +362,17 @@ The flags of every CLI:
                    --creativity, --platform, --kind, --frontend-framework,
                    --frontend-markup-language, --frontend-style-language, --icon-set,
                    --input, --image, --extract, --approve, --role, --model, --effort,
-                   --summary, --context, --detail, --json, --quiet, --ascii, --config
+                   --summary, --context, --detail, --json, --quiet, --headless, --ascii,
+                   --config
   ai-decompose    --image, --out, --prompt, --stages, --stop-after, --advanced, --dry-run,
                    --image-model, --model, --effort, --batch, --batch-fetch, --verbose
   ai-measure      --image, --out, --stages, --task, --model, --effort, --colors, --x, --y,
                    --width, --height, --output, --rows, --cols, --out-dir, --dry-run,
                    --verbose
   ai-image        --out, --model, --image-model, --effort, --summary, --quality, --purpose,
-                   --image, --reference, --size, --width, --height, --mode, --alpha-mode,
-                   --subject, --attempts, --rows, --cols, --fuzz, --trim, --color, --dry-run,
-                   --batch, --batch-fetch, --verbose
+                   --format, --image, --reference, --size, --width, --height, --mode,
+                   --alpha-mode, --subject, --attempts, --rows, --cols, --fuzz, --trim,
+                   --color, --dry-run, --batch, --batch-fetch, --verbose
 
   The table above is a summary, not the truth: \`ai --help\` is the truth.`;
 

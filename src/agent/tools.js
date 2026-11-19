@@ -697,6 +697,24 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
      */
     async function callBridge(name, args) {
         const list = parseArgsList(args.args);
+        // Every path of the command stays inside the root of the run.
+        for (const arg of familyPathArgs(list)) {
+            try {
+                await resolveInside(root, arg, { allowRoot: false });
+            } catch (error) {
+                return `Мост ${name}: ${error.message}`;
+            }
+        }
+        // The files of the result land in a directory the stage opened for writing.
+        let output = null;
+        const asked = familyOutputArg(list);
+        if (asked) {
+            try {
+                output = await writeDirPath(asked);
+            } catch (error) {
+                return `Мост ${name}: ${error.message}`;
+            }
+        }
         const result = await runBridge({
             name,
             args: list,
@@ -710,6 +728,8 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
             const detail = (result.stderr || result.stdout || '').trim();
             return `Мост ${name} не отработал: ${result.reason ?? 'неизвестная причина'}${detail ? `\n${detail}` : ''}`;
         }
+        // The file of the bridge is a file of the run: the stage may pick it up.
+        if (output?.rel) rememberScopedWrite(output.rel);
         return (result.stdout.trim() || result.stderr.trim() || `${name} отработал.`);
     }
 

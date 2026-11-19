@@ -514,6 +514,14 @@ test('the vector editor instructions omit page and DevTools work', () => {
     assert.doesNotMatch(text, /DESIGN\.md directly/);
 });
 
+test('the vector editor may ask the sibling CLI for a vector graphic', () => {
+    const text = ROLES.editor.instructions({ vectorOnly: true, design: true });
+    // The tracing of a raster picture and the drawing of a new one.
+    assert.match(text, /vectorize/);
+    assert.match(text, /--format", "svg/);
+    assert.match(text, /The bridge chooses the vector model itself/);
+});
+
 test('the vector editor gets no browser, screenshot, command, or delegated tools', async () => {
     const requests = [];
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-vector-only-'));
@@ -541,10 +549,11 @@ test('the vector editor gets no browser, screenshot, command, or delegated tools
     });
     const names = requests.find((request) => request.tools.some((tool) => tool.name === 'write_file'))
         .tools.map((tool) => tool.name);
-    for (const forbidden of ['screenshot', 'run_command', 'delegate_role', 'call_ai_image', 'navigate_page']) {
+    for (const forbidden of ['screenshot', 'run_command', 'delegate_role', 'navigate_page']) {
         assert.ok(!names.includes(forbidden), forbidden);
     }
     assert.ok(names.includes('write_file'));
+    assert.ok(names.includes('call_ai_image'), 'the bridge draws the vector graphic when the role asks');
     assert.ok(!names.includes('generate_svg'), 'vector output uses the step-scoped write_file tool');
 });
 

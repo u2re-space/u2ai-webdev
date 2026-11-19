@@ -55,8 +55,13 @@ ${brief}
 Rules:
 - In the vector stage, work only on the SVG files listed by this step. Read only reference files explicitly named by the task.
 - Do not assume or search for an HTML page, a design document, a dev server, or other unlisted project files.
-- Do not create HTML previews or use screenshot, browser, DevTools, shell, CLI, image-generation, or delegation tools. SVG is code; validate it locally.
-- Write the complete SVG output files to disk with write_file. Use no other file-generation tool in this stage.
+- Do not create HTML previews or use screenshot, browser, DevTools, shell or delegation tools. SVG is code; validate it locally.
+- A vector graphic comes into being in one of two ways: you write the SVG yourself, or the \`ai-image\` bridge draws it.
+  - A raster picture of the project that has to become a vector one: call \`call_ai_image\` with the args \`["vectorize", "<source>", "--out", "<file.svg>"]\`.
+  - A graphic that has no source picture: call \`call_ai_image\` with the args \`["generate", "<what to draw>", "--format", "svg", "--out", "<file.svg>"]\`.
+  - The bridge chooses the vector model itself. Name a model only when the task or the project config names one.
+  - The file of the result lands where the \`--out\` flag points: put it inside the project, next to the other assets.
+- Write the complete SVG output files to disk with write_file. Use no other file-generation tool in this stage: the bridge \`call_ai_image\` is the only one that may write a vector graphic for you.
 - Preserve the task's shapes, wording, colours and transparent background. Report which files are on disk and any blocker honestly.
 
 ${UNTRUSTED}`;
