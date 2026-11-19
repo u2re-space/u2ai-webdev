@@ -934,30 +934,67 @@ configuration names it for the Gemini and for every other model.
 }
 ```
 
-### The markup is a Kimi job
+### The models of the house
 
-One role of the house has its own model: the markup — the stage `markup` and the role `markup`
-— answers on the Kimi K3.1 Pro, whatever the model of the run is. The Kimi builds the structure
-of the page faster and more surely than the Gemini 4 Hydrogen, and it answers in a fraction of
-the time.
+Some roles of the house have their own model: the markup — the stage `markup` and the role
+`markup` — answers on the model of the house, whatever the model of the run is.
 
 The chain of the model of a role is: the pin of the role (`roles.markup.model` or the flag
-`--role markup=<model>`), then the model of the house for the role, then the pin of the default
-role (`roles.default.model`), then the model of the run. The pin of the role wins over
-everything, so a run that wants another model for the markup says so:
+`--role markup=<model>`), then the model of the house for the role (`house.models`), then the
+pin of the default role (`roles.default.model`), then the model of the run. The pin of the role
+wins over everything, so a run that wants another model for the markup says so:
 
 ```bash
 ai-webdev run "<task>" --role markup=google/gemini-4-hydrogen
 ```
 
+The map of the house is a part of the configuration, so every name of it may be changed. A role
+that is named with `null` has no model of the house and answers on the model of the run:
+
+```json
+{
+  "house": {
+    "models": {
+      "markup": "openai/gpt-6.1-terra",
+      "coder": "family:gpt",
+      "styler": null
+    }
+  }
+}
+```
+
 The Kimi has no levels of the effort above `medium` — the answer of the same question costs the
-same seconds there — so the markup works on `medium` however deep the profile of the stages
-asks. The role also answers with its tools instead of a pinned JSON answer: a model that is
-pinned to a JSON answer never calls a tool, it describes the work instead of doing it.
+same seconds there — so a role that answers on it works on `medium` however deep the profile of
+the stages asks. The role also answers with its tools instead of a pinned JSON answer: a model
+that is pinned to a JSON answer never calls a tool, it describes the work instead of doing it.
 
 The vector stage — the role `editor` — has no model of its own yet: nobody drew a vector
 picture well with any of the models of the house, so the stage keeps the model of the run
 until there is a verdict.
+
+### The families of models
+
+A family is a named list of interchangeable models, from the cheapest to the most expensive.
+The house knows three of them:
+
+```json
+{
+  "modelFamilies": {
+    "gpt": ["openai/gpt-6.1-terra", "openai/gpt-6.2-sol"],
+    "gemini": ["google/gemini-4-hydrogen", "google/gemini-4-neon"],
+    "claude": ["anthropic/claude-haiku-5.5", "anthropic/claude-sonnet-5.5"]
+  }
+}
+```
+
+A family is named where a model is expected with the prefix `family:` — in the model of the run
+(`--model family:gpt`), in the pin of a role (`--role coder=family:gpt`) or in the model of the
+house (`house.models.coder`). The run answers with the cheapest member of the family that takes
+the effort the role asks for, and the rest of the list is the ladder of the budget: when the
+model of the family refuses, the next member answers in its place.
+
+The list of a family is a part of the configuration, so the ladder of the budget of the house is
+whatever the config says.
 
 The effort of a run is not one number for everybody. `reasoning.effort` is the ceiling of the
 run, and `reasoning.stageEffort` says what every stage asks for:

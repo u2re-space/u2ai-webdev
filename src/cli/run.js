@@ -121,6 +121,8 @@ function pathListFlag(flags, name) {
 /**
  * The specs of the roles: `name=model[:effort[:max-effort]]`.
  *
+ * A model that names a family of models (`family:gpt`) keeps its prefix: the colon of the
+ * family is not the separator of the effort.
  * @param {unknown} value the value of the flag `--role`
  * @returns {{ name: string, model: string, effort: string, maxEffort: string }[]}
  * @exports
@@ -137,7 +139,12 @@ export function parseRoleSpecs(value) {
                 throw new UsageError(`--role: ожидается роль=модель[:effort[:max-effort]], получено "${text}".`);
             }
             const name = text.slice(0, at).trim();
-            const [model = '', effort = '', maxEffort = ''] = text.slice(at + 1).split(':').map((part) => part.trim());
+            const rest = text.slice(at + 1).trim();
+            const family = rest.toLowerCase().startsWith('family:') ? rest.slice(0, 7) : '';
+            const parts = (family ? rest.slice(family.length) : rest).split(':').map((part) => part.trim());
+            const model = family ? `${family}${parts[0] ?? ''}` : (parts[0] ?? '');
+            const effort = parts[1] ?? '';
+            const maxEffort = parts[2] ?? '';
             if (!name) throw new UsageError('--role: имя роли не может быть пустым.');
             out.push({ name, model, effort, maxEffort });
         }

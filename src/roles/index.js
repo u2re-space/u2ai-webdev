@@ -43,6 +43,7 @@ import { toolSpecs as buildToolSpecs } from '../agent/tool-specs.js';
 import { createDelegator } from '../agent/delegation.js';
 import { effortFor } from '../agent/pace.js';
 import { getModelProfile, maxOutputFor, snapEffort } from '../model/profiles.js';
+import { resolveModelRef } from '../model/families.js';
 import { houseModel } from '../model/trust.js';
 import { pageFrameContractFor } from './page-frame.js';
 
@@ -263,9 +264,9 @@ export function roleSchema(role) {
  *
  * The chain of the config is `roles.<name>` and then `roles.default`; a field that is null in
  * both falls back to the built-in value. The model has one link more: the model of the house
- * for the role (`model/trust`) sits between the pin of the role and the pin of the default
- * role, so a role that has its own model of the house keeps it — and a role that names its
- * own model in the config keeps that one.
+ * for the role (`house.models` of the config, `model/trust`) sits between the pin of the role
+ * and the pin of the default role, so a role that has its own model of the house keeps it —
+ * and a role that names its own model in the config keeps that one.
  *
  * The effort is pulled down to what the model really takes: the Kimi has no levels above
  * `medium`, so the markup — a Kimi job — works on `medium` however deep the profile of the
@@ -305,10 +306,14 @@ export function resolveRole(role, config = {}) {
 
     // The model of the role: the pin of the role wins, then the model of the house for the
     // role, then the pin of the default role, then the model of the run. A role that names
-    // its own model is never moved.
+    // its own model is never moved. A name that names a family of models is the cheapest
+    // member of the family that takes the effort of the role.
     const ownModel = own.model !== null && own.model !== undefined ? own.model : null;
     const fallbackModel = fallback.model !== null && fallback.model !== undefined ? fallback.model : null;
-    const model = ownModel ?? houseModel(key) ?? fallbackModel ?? (config?.model ?? null);
+    const model = resolveModelRef(ownModel, config, { effort: asked })
+        ?? houseModel(key, config, { effort: asked })
+        ?? resolveModelRef(fallbackModel, config, { effort: asked })
+        ?? resolveModelRef(config?.model ?? null, config, { effort: asked });
 
     // The effort is pulled down to what the model really takes: a model with a lower ceiling
     // refuses the level above it. The Kimi, for one, has no levels above `medium`.

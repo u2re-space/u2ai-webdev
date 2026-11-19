@@ -77,8 +77,10 @@ Options of the run:
   --extract <mode>            off | auto | always — the files of the answers.
   --approve <level>           ask | read | write | all — the confirmations.
   --role <role=model[:effort[:max-effort]]>
-                              The model of a role. May be given many times.
-  --model <id>                The model of the run.
+                              The model of a role. May be given many times. The model
+                              may be a family of models: family:<name>.
+  --model <id>                The model of the run. May be a family of models too:
+                              family:<name> takes the cheapest member of the family.
   --effort <level>            The ceiling of the reasoning effort of the run: a stage
                               never works above it.
   --summary <mode>            auto | concise | detailed | none — the reasoning summary.

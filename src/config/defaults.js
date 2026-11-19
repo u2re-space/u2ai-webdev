@@ -106,6 +106,41 @@ export const defaults = {
   maxOutputTokens: null,
   /** Per-model ceilings: { "<model>": { window, maxOutput, ceiling } }. */
   models: {},
+
+  // --- the house of the run ----------------------------------------------------
+  /**
+   * The model of the house for the roles that have one.
+   *
+   * A role that is named here does not answer on the model of the run: it answers on the
+   * model of the house. The config may change every name of the map and may put a family
+   * of models in its place (`family:gpt`); a role that is named with an empty value has no
+   * model of its own and answers on the model of the run.
+   */
+  house: {
+    models: {
+      director: 'openai/gpt-6.1-terra',
+      planner: 'openai/gpt-6.1-terra',
+      markup: 'openai/gpt-6.1-terra',
+      editor: 'openai/gpt-6.1-terra',
+      iconifier: 'openai/gpt-6.1-terra',
+      coder: 'openai/gpt-6.1-terra',
+    },
+  },
+  /**
+   * The families of models: a named list of interchangeable models, from the cheapest to
+   * the most expensive.
+   *
+   * A family is named where a model is expected with the prefix `family:`: the run answers
+   * with the cheapest member of the family that takes the effort of the role, and the rest
+   * of the list is the ladder of the budget — the next member answers when the first one
+   * refuses.
+   */
+  modelFamilies: {
+    gpt: ['openai/gpt-6.1-terra', 'openai/gpt-6.2-sol'],
+    gemini: ['google/gemini-4-hydrogen', 'google/gemini-4-neon'],
+    claude: ['anthropic/claude-haiku-5.5', 'anthropic/claude-sonnet-5.5'],
+  },
+
   reasoning: {
     /**
      * The ceiling of the reasoning effort of the run. A stage asks for the effort it
@@ -739,6 +774,8 @@ export function defaultConfigText() {
     },
     agent: { fidelity: defaults.agent.fidelity, creativity: defaults.agent.creativity, platform: defaults.agent.platform },
     pace: { mode: defaults.pace.mode, speed: defaults.pace.speed, quality: defaults.pace.quality },
+    house: { models: structuredClone(defaults.house.models) },
+    modelFamilies: structuredClone(defaults.modelFamilies),
     stages: Object.fromEntries(ENUMS.stages.map((stage) => [stage, { enabled: true }])),
     bridges: {
       decompose: { enabled: defaults.bridges.decompose.enabled, log: defaults.bridges.decompose.log },

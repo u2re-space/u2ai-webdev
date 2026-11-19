@@ -1,8 +1,8 @@
 /**
  * @file test/trust.test.js
  * @module test/trust
- * @purpose Tests of the model of the house for the roles that have one: the markup is a Kimi
- *          job, the vector stage has no verdict yet.
+ * @purpose Tests of the model of the house for the roles that have one: the map of the house
+ *          is a part of the config, and a role may be taken out of it.
  * @depends node:test, roles/index, model/trust
  * @ai.tags test, model
  */
@@ -19,13 +19,13 @@ const configFor = (overrides = {}) => ({
     ...overrides,
 });
 
-test('the markup is a Kimi job', () => {
-    assert.deepEqual(HOUSE_MODELS, { 
+test('the house has a model of its own for the roles that need one', () => {
+    assert.deepEqual(HOUSE_MODELS, {
         director: 'openai/gpt-6.1-terra',
         planner: 'openai/gpt-6.1-terra',
         markup: 'openai/gpt-6.1-terra',
         editor: 'openai/gpt-6.1-terra',
-        iconfier: 'openai/gpt-6.1-terra',
+        iconifier: 'openai/gpt-6.1-terra',
         coder: 'openai/gpt-6.1-terra'
     });
     assert.equal(houseModel('markup'), 'openai/gpt-6.1-terra');
@@ -33,7 +33,7 @@ test('the markup is a Kimi job', () => {
     assert.equal(houseModel('nothing'), null);
 });
 
-test('the markup answers on the Kimi whatever the model of the run is', () => {
+test('the markup answers on the model of the house whatever the model of the run is', () => {
     for (const model of ['minimax/minimax-m3.1-flash', 'google/gemini-4-hydrogen', 'moonshotai/kimi-k3.1-pro']) {
         const config = configFor({ model });
         assert.equal(resolveRole('markup', config).model, 'openai/gpt-6.1-terra');
@@ -70,4 +70,18 @@ test('the pin of the default role does not move the markup', () => {
     // The markup has its own model of the house; the other roles follow the default.
     assert.equal(resolveRole('markup', config).model, 'openai/gpt-6.1-terra');
     assert.equal(resolveRole('coder', config).model, 'openai/gpt-6.1-terra');
+});
+
+test('the config decides the model of the house', () => {
+    const config = configFor({ model: 'google/gemini-4-hydrogen' });
+    config.house.models.markup = 'minimax/minimax-m3.1-flash';
+    assert.equal(resolveRole('markup', config).model, 'minimax/minimax-m3.1-flash');
+    assert.equal(houseModel('markup', config), 'minimax/minimax-m3.1-flash');
+});
+
+test('a role with an empty model of the house answers on the model of the run', () => {
+    const config = configFor({ model: 'google/gemini-4-hydrogen' });
+    config.house.models.markup = null;
+    assert.equal(houseModel('markup', config), null);
+    assert.equal(resolveRole('markup', config).model, 'google/gemini-4-hydrogen');
 });

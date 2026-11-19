@@ -155,6 +155,13 @@ test('the specs of the roles are parsed', () => {
     assert.deepEqual(parseRoleSpecs('coder=model:high:max'), [
         { name: 'coder', model: 'model', effort: 'high', maxEffort: 'max' },
     ]);
+    // A family of models keeps its prefix: the colon of the family is not the separator.
+    assert.deepEqual(parseRoleSpecs('coder=family:gpt:high'), [
+        { name: 'coder', model: 'family:gpt', effort: 'high', maxEffort: '' },
+    ]);
+    assert.deepEqual(parseRoleSpecs('coder=family:gpt'), [
+        { name: 'coder', model: 'family:gpt', effort: '', maxEffort: '' },
+    ]);
     assert.throws(() => parseRoleSpecs('coder'), /--role: ожидается роль=модель/);
 });
 

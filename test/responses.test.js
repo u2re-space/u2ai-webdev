@@ -113,9 +113,10 @@ test('the Gemini is the alternative to the Kimi and the Kimi is the fallback', (
     assert.deepEqual(gemini.efforts, ['low', 'medium', 'high', 'xhigh']);
     assert.equal(snapEffort('none', gemini), 'low', 'the card of the vendor has no none');
     assert.equal(snapEffort('xhigh', gemini), 'xhigh');
-    // The chain of the house: the Kimi answers when the Gemini refuses.
+    // The chain of the house: the Kimi answers when the Gemini refuses, and the ladder of
+    // the family of the Gemini stands behind it.
     const chain = fallbackChain(defaults, 'google/gemini-4-hydrogen');
-    assert.deepEqual(chain, ['google/gemini-4-hydrogen', 'moonshotai/kimi-k3.1-pro']);
+    assert.deepEqual(chain, ['google/gemini-4-hydrogen', 'moonshotai/kimi-k3.1-pro', 'google/gemini-4-neon']);
     assert.deepEqual(
         fallbackChain(defaults, 'minimax/minimax-m3.1-flash'),
         ['minimax/minimax-m3.1-flash', 'moonshotai/kimi-k3.1-pro'],

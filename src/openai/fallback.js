@@ -2,18 +2,22 @@
  * @file src/openai/fallback.js
  * @module openai/fallback
  * @purpose Model fallback: a chain of models to try when one refuses or fails.
+ * @depends model/families
  * @exports fallbackChain, withModelFallback, fallbackModels
  * @ai.tags fallback
  * @ai.hint pure
  * @ai.hint legacy-0.2
  */
 
+import { familyLadder } from '../model/families.js';
+
 const isRecord = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const textOf = (value) => (typeof value === 'string' ? value : '');
 
 /**
  * The models to try after the given one: the list under `fallback.models.<model>`, then the
- * list under `fallback.models.*` (the catch-all chain).
+ * ladder of the budget of the family of the model, then the list under `fallback.models.*`
+ * (the catch-all chain).
  * @param {object} config
  * @param {string|null} model
  * @returns {string[]}
@@ -22,13 +26,17 @@ const textOf = (value) => (typeof value === 'string' ? value : '');
 export function fallbackModels(config, model) {
     if (config?.fallback?.enabled === false) return [];
     const map = config?.fallback?.models;
-    if (!isRecord(map)) return [];
     const pick = (list) => (Array.isArray(list)
         ? list.map((item) => (typeof item === 'string' ? item : textOf(item?.model))).filter(Boolean)
         : []);
-    const own = pick(map[model]);
-    const shared = pick(map['*']);
-    return [...own, ...shared.filter((item) => !own.includes(item))];
+    const own = isRecord(map) ? pick(map[model]) : [];
+    const shared = isRecord(map) ? pick(map['*']) : [];
+    const ladder = familyLadder(config, model);
+    return [
+        ...own,
+        ...ladder.filter((item) => !own.includes(item)),
+        ...shared.filter((item) => !own.includes(item) && !ladder.includes(item)),
+    ];
 }
 
 /**

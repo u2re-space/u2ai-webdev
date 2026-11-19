@@ -23,6 +23,7 @@ import {
 import { buildResponsesBody } from './responses.js';
 import { createApiLogger, redactBody } from './log.js';
 import { getModelProfile, snapEffort } from '../model/profiles.js';
+import { resolveModelRef } from '../model/families.js';
 
 /** Statuses worth another try on the same backend. */
 const RETRYABLE_STATUS = new Set([408, 409, 425, 429, 500, 502, 503, 504]);
@@ -450,14 +451,14 @@ export async function createClient({ config, env = process.env, signal = null, o
         // The channel of the schema comes from the profile of the model: a model that is
         // pinned to a JSON answer never calls a tool, and the profile knows which models
         // need the pin and which ones have to stay free to call their tools.
-        const wanted = model ?? config?.model ?? null;
+        const wanted = resolveModelRef(model ?? config?.model ?? null, config);
         const profile = getModelProfile(wanted, config);
         const channel = schemaChannel ?? profile?.schemaChannel ?? 'auto';
         // The effort of the stage is pulled down to what the model really takes: a model
         // with a lower ceiling refuses the level above it.
         const level = snapEffort(effort, profile);
         const body = buildResponsesBody({
-            model, instructions, input, parts, tools, schema, schemaName, schemaChannel: channel, strict,
+            model: wanted, instructions, input, parts, tools, schema, schemaName, schemaChannel: channel, strict,
             effort: level, summary, mode,
             maxOutputTokens, temperature, store, truncation, verbosity, stream, previousResponseId,
             toolChoice, parallelToolCalls,
@@ -514,7 +515,7 @@ export async function createClient({ config, env = process.env, signal = null, o
              * @returns {Promise<object>}
              */
             async create({ model = null, messages = [], stream = false, signal: callSignal = null, onEvent: callEvent = null } = {}) {
-                const body = { model: model ?? config?.model ?? null, messages };
+                const body = { model: resolveModelRef(model ?? config?.model ?? null, config), messages };
                 const answer = await call(CHAT_PATH, {
                     method: 'POST', body, kind: 'text', model: body.model, signal: callSignal,
                     stream: stream ? 'chat' : false, onEvent: callEvent, supports: 'chat',
