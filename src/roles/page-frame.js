@@ -63,7 +63,6 @@ export function pageFrameRules() {
 
 \`\`\`css
 @property --background-color    { syntax: "<color>"; initial-value: #fff0; inherits: true; };
-@property --body-scrollbar-size { syntax: "<length>"; initial-value: 0.5rem; inherits: true; };
 @property --zoom { syntax: "<number>"; initial-value: 1; inherits: true; };
 
 /* also needs to generate \`@property\` for ${PAGE_WIDTH_TOKEN}, ${PAGE_HEIGHT_TOKEN} and other tokens... */
@@ -76,31 +75,18 @@ export function pageFrameRules() {
   html {
     margin: 0px;
     padding: 0px;
-    overflow: hidden;
-    inline-size: 100dvi;
-    block-size: 100dvb;
-    max-inline-size: 100dvi;
-    max-block-size: 100dvb;
-    container-type: size;
+    /* The document scrolls, and it is the only thing that scrolls: one scrollbar of the page. */
+    scrollbar-width: thin;
+    scrollbar-color: contrast-color(var(--background-color)) var(--background-color);
   }
 
   body {
-    /* \`--body-scrollbar-size\` needs to accounting when doing paddings or margins */
     --background-color: light-dark(#fff, #111);
-    --body-scrollbar-size: 0.5rem;
-    scroll-snap-type: y mandatory;
 
-    container-type: size;
-    inline-size: 100dvi;
-    block-size: 100dvb;
-    max-block-size: 100dvb;
-    min-block-size: 100dvb;
-    max-inline-size: 100dvi;
-    scrollbar-width: thin;
-    scrollbar-color: contrast-color(var(--background-color)) var(--background-color);
-    scrollbar-gutter: stable; /* or \`auto\` if system supports adaptive \`--body-scrollbar-size\` */
-    overflow: hidden;
-    overflow-y: auto;
+    /* The body is the container of the width of the page, not a scroller of its own:
+       a scroller inside the scroller of the document gives the page two scrollbars. */
+    container-type: inline-size;
+    min-block-size: 100dvh;
     margin: 0px;
     padding: 0px;
 
@@ -108,43 +94,38 @@ export function pageFrameRules() {
   }
 
   @media (prefers-contrast: more) {
-    body {
+    html {
       scrollbar-color: light-dark(#000, #fff) var(--background-color);
     }
   }
 
   @supports not (scrollbar-color: auto) {
-    body {
+    html {
       scrollbar-width: auto;
     }
 
-    body::-webkit-scrollbar {
+    html::-webkit-scrollbar {
       width: 12px;
       height: 12px;
     }
 
-    body::-webkit-scrollbar-thumb {
+    html::-webkit-scrollbar-thumb {
       background: CanvasText;
     }
 
-    body::-webkit-scrollbar-track {
+    html::-webkit-scrollbar-track {
       background: var(--background-color);
     }
   }
 
   ${PAGE_CLASS} {
-    --zoom: calc(calc(100cqi - var(--body-scrollbar-size, 0.5rem)) / var(${PAGE_WIDTH_TOKEN}, ${DEFAULT_PAGE_WIDTH}));
+    --zoom: calc(100cqi / var(${PAGE_WIDTH_TOKEN}, ${DEFAULT_PAGE_WIDTH}));
 
     zoom: var(--zoom, 1);
     container-type: inline-size;
-    min-block-size: 100%; /* 
-      or \`max(var(${PAGE_HEIGHT_TOKEN}, 100%), 100%);\`
-      or \`calc-size(var(${PAGE_HEIGHT_TOKEN}, 100%), max(100%, size));\`
-    */
-    block-size: max-content;
+    min-block-size: 100dvh;
     overflow: visible;
-    inline-size: 100cqi;
-    max-inline-size: 100cqi;
+    inline-size: var(${PAGE_WIDTH_TOKEN}, ${DEFAULT_PAGE_WIDTH});
     margin: 0px;
   }
 }
@@ -166,10 +147,10 @@ export function pageFrameRules() {
 export const PAGE_FRAME_CONTRACT = [
     '## Binding page-frame contract',
     `- Markup keeps one page canvas (class ${PAGE_CLASS}) inside body containing the page regions; markup never adds inline layout styles.`,
-    `- CSS registers ${PAGE_WIDTH_TOKEN} as <length>, ${ZOOM_TOKEN} as <number>, and --body-scrollbar-size as <length> with @property.`,
-    '- Body is a size container and vertical scroller: container-type:size; min-block-size:100dvh; overflow-y:auto. Do not clip page content.',
+    `- CSS registers ${PAGE_WIDTH_TOKEN} as <length> and ${ZOOM_TOKEN} as <number> with @property.`,
+    '- One scrollbar: the document scrolls, the body does not. The body is container-type:inline-size with min-block-size:100dvh and no overflow of its own — a body with overflow-y:auto inside the scrolling document gives the page two scrollbars.',
     `- Canvas is container-type: inline-size, inline-size: var(${PAGE_WIDTH_TOKEN}, ${DEFAULT_PAGE_WIDTH}), and zoom: var(${ZOOM_TOKEN}, 1).`,
-    `- Theme computes ${ZOOM_TOKEN}:calc((100cqi - var(--body-scrollbar-size, 0.5rem)) / var(${PAGE_WIDTH_TOKEN}, ${DEFAULT_PAGE_WIDTH})).`,
+    `- Theme computes ${ZOOM_TOKEN}:calc(100cqi / var(${PAGE_WIDTH_TOKEN}, ${DEFAULT_PAGE_WIDTH})).`,
     '- At narrow widths, reflow content and reset the canvas to inline-size:100%; --zoom:1; zoom:1. Never scale the whole mobile page.',
     '- This contract applies across partial steps and survives long guidance/tool history. Explicit task geometry wins; report an intentional override.',
 ].join('\n');
@@ -184,26 +165,28 @@ export function pageFrameContractFor(role) {
 export function pageScaleRules() {
     return `## The canvas of the page and the scale
 ${PAGE_FRAME_CONTRACT}
-- The body is the container of the page: \`container-type: size;\` on the \`body\`. A body with
-  the size containment has no height of its own — it is given one:
-  \`min-block-size: 100dvh;\`.
-- The background of the page belongs to the canvas, not to the body: the body is as tall as
-  the viewport, and the canvas is as tall as the content.
+- The body is the container of the width of the page: \`container-type: inline-size;\` on the
+  \`body\`. The body is not a scroller of its own: the document scrolls, and the scrollbar of
+  the window is the only scrollbar of the page — a \`body\` with \`overflow-y: auto;\` inside the
+  scrolling document gives the page two scrollbars.
+- The background of the page belongs to the canvas, not to the body: the body is at least as
+  tall as the viewport (\`min-block-size: 100dvh;\`), and the canvas is as tall as the content.
 - Set \`--background-color\` to the actual page surface color from the design tokens; it is the
   scrollbar track color too, not the thumb color. Use \`scrollbar-width: thin;\` and
   \`scrollbar-color: contrast-color(var(--background-color)) var(--background-color);\` on the
-  scrolling body so the thumb remains distinct from its track. Keep at least 3:1 contrast
-  against the surface; increase it for \`prefers-contrast: more\`. If adding legacy
+  scrolling root (\`html\`) so the thumb remains distinct from its track. Keep at least 3:1
+  contrast against the surface; increase it for \`prefers-contrast: more\`. If adding legacy
   \`::-webkit-scrollbar\` rules, put them under \`@supports not (scrollbar-color: auto)\` and reset
   \`scrollbar-width: auto\` there.
 - The canvas of the page is the element with the class \`${PAGE_CLASS}\` inside the body:
   \`container-type: inline-size;\` and
   \`inline-size: var(${PAGE_WIDTH_TOKEN}, ${DEFAULT_PAGE_WIDTH});\`. The content of the page is
   laid out in the width of the design, not in the width of the window.
-- The canvas is scaled into the window: \`${ZOOM_TOKEN}: calc(calc(100cqi - var(--body-scrollbar-size, 0.5rem)) / var(${PAGE_WIDTH_TOKEN}, ${DEFAULT_PAGE_WIDTH}));\`
+- The canvas is scaled into the window: \`${ZOOM_TOKEN}: calc(100cqi / var(${PAGE_WIDTH_TOKEN}, ${DEFAULT_PAGE_WIDTH}));\`
   in the theme layer, and \`zoom: var(${ZOOM_TOKEN}, 1);\` on the canvas. The \`100cqi\` is the
-  inline size of the body — the nearest container of the canvas — so the canvas takes the
-  whole width of the window, and the proportions of the design are kept.
+  inline size of the body — the nearest container of the canvas — and it is already free of the
+  scrollbar of the window, so the canvas takes the whole width of the window without a
+  horizontal scrollbar, and the proportions of the design are kept.
 - \`${PAGE_WIDTH_TOKEN}\` is the width the design really has, in CSS pixels, and it is a token
    of the theme layer. The width of the reference picture may not equal the CSS width: infer a
    practical design width from visible type and proportions, using the image dimensions as a hint

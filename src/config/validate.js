@@ -99,9 +99,13 @@ function validateHouse(house, fail, config) {
   const ranks = house.ranks;
   if (!isRecord(ranks)) fail(`${where}.ranks должен быть объектом`);
   for (const key of Object.keys(ranks)) {
-    if (!['roles', 'stages'].includes(key)) fail(`${where}.ranks.${key}: неизвестное поле (допустимо: roles | stages)`);
+    if (key === 'stages') {
+      fail(`${where}.ranks.stages: раздел больше не поддерживается — лестница рангов принадлежит `
+        + 'роли (house.ranks.roles), а стадия наследует её; удалите раздел из конфигурации.');
+    }
+    if (key !== 'roles') fail(`${where}.ranks.${key}: неизвестное поле (допустимо: roles)`);
   }
-  for (const part of ['roles', 'stages']) {
+  for (const part of ['roles']) {
     const map = ranks[part];
     if (!isRecord(map)) fail(`${where}.ranks.${part} должен быть объектом`);
     for (const [name, path] of Object.entries(map)) {

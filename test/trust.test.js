@@ -21,10 +21,10 @@ const configFor = (overrides = {}) => ({
 
 test('the house has a model of its own for the roles that need one', () => {
     assert.deepEqual(HOUSE_MODELS, {
-        //styler: 'family:gpt',
+        styler: 'family:gpt',
     });
     // The path of the styler is [1, 0]: the Sol writes the styles.
-    //assert.equal(houseModel('styler', configFor()), 'openai/gpt-6.2-sol');
+    assert.equal(houseModel('styler', configFor()), 'openai/gpt-6.2-sol');
     assert.equal(houseModel('nothing'), null);
 });
 

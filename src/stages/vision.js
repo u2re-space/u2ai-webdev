@@ -152,17 +152,21 @@ export async function shootPage({
  * both and names the difference. The instruction is short and concrete — the role has the
  * tools to fix what it sees.
  *
+ * Without a reference there is nothing to compare with, and the task of the operator is the
+ * target: the picture says how the page looks now, the task says what has to change.
+ *
  * The words of the page come along: the console of the browser and the log of the bundler say
  * what is broken inside the page, and the picture says how it looks. A role that has both
  * fixes the cause, not the symptom.
  * @param {{ reference: string[], result: string, round: number, rounds: number, log?: string,
- *   comparison?: object|null }} options
+ *   comparison?: object|null, task?: string }} options
  * @returns {string}
  * @exports
  * @ai.hint pure
  */
-export function visionPrompt({ reference = [], result = '', round = 1, rounds = 1, log = '', comparison = null } = {}) {
-    const lines = [
+export function visionPrompt({ reference = [], result = '', round = 1, rounds = 1, log = '', comparison = null, task = '' } = {}) {
+    const withReference = reference.length > 0;
+    const lines = withReference ? [
         'The page has been opened in a browser and shot. The picture of the result is attached to',
         'this request, and the picture of the reference of the design is attached with it.',
         '',
@@ -171,7 +175,21 @@ export function visionPrompt({ reference = [], result = '', round = 1, rounds = 
         'The reference is the target: the result must look like it at the same width.',
         '',
         `The picture of the result: ${result}`,
-        reference.length ? `The pictures of the reference: ${reference.join(', ')}` : '',
+        `The pictures of the reference: ${reference.join(', ')}`,
+    ] : [
+        'The page has been opened in a browser and shot. The picture of the result is attached to',
+        'this request.',
+        '',
+        'There is no reference of the design here: the task of the operator is the target.',
+        task ? `The task:\n${task}` : '',
+        '',
+        'Fix what the task names, with the tools: the proportions of the blocks, the size of the',
+        'type, the spaces, the colours, the shape of the corners, the alignment — whatever the',
+        'task asks for and whatever the picture shows to be wrong.',
+        '',
+        `The picture of the result: ${result}`,
+    ];
+    lines.push(
         '',
         round < rounds
             ? `Fix the styles now, with the tools. This is the pass ${round} of ${rounds}: after the fix the page is shot again.`
@@ -185,8 +203,8 @@ export function visionPrompt({ reference = [], result = '', round = 1, rounds = 
         'they do not see the picture.',
         comparisonNote(comparison),
         log ? `\n## What the page says about itself\n${log}\nThe lines above are the words of the page and of the bundler. Use them: they name the cause of what the picture shows.` : '',
-    ].filter(Boolean);
-    return lines.join('\n');
+    );
+    return lines.filter(Boolean).join('\n');
 }
 
 /**

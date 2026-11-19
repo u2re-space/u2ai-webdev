@@ -279,6 +279,7 @@ export async function sightStage({
                         rounds,
                         log: pageLog,
                         comparison,
+                        task: String(task ?? ''),
                     }),
                 ].filter(Boolean).join('\n\n'),
                 context: {

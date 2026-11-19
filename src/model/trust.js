@@ -34,6 +34,30 @@ const isRecord = (value) => value !== null && typeof value === 'object' && !Arra
 export const HOUSE_MODELS = Object.freeze({ ...defaults.house.models });
 
 /**
+ * The reference of the house for a role: the model, the family or the group it names.
+ *
+ * The reference is not a model: it is the name of the place in the house. The model of the
+ * role is decided by the rank the work sits on — see `roles/index.js`.
+ * @param {string|null} role the name of the role
+ * @param {object|null} [config]
+ * @returns {string|null}
+ * @exports
+ * @ai.hint pure
+ */
+export function houseModelRef(role, config = null) {
+    const key = String(role ?? '').trim().toLowerCase();
+    if (!key) return null;
+    const models = config?.house?.models;
+    if (isRecord(models) && Object.hasOwn(models, key)) {
+        // The config knows the role: an empty name means that the role has no model of the
+        // house and answers on the model of the run.
+        const value = models[key];
+        return typeof value === 'string' && value.trim() ? value.trim() : null;
+    }
+    return HOUSE_MODELS[key] ?? null;
+}
+
+/**
  * The model of the house for a role, or null when the role has none of its own.
  *
  * The name of the model may be a family of models (`family:gpt`): the role then answers
@@ -51,16 +75,7 @@ export const HOUSE_MODELS = Object.freeze({ ...defaults.house.models });
 export function houseModel(role, config = null, { effort = null, context = null, rank = null } = {}) {
     const key = String(role ?? '').trim().toLowerCase();
     if (!key) return null;
-    const models = config?.house?.models;
-    let ref = null;
-    if (isRecord(models) && Object.hasOwn(models, key)) {
-        // The config knows the role: an empty name means that the role has no model of the
-        // house and answers on the model of the run.
-        const value = models[key];
-        ref = typeof value === 'string' && value.trim() ? value.trim() : null;
-    } else {
-        ref = HOUSE_MODELS[key] ?? null;
-    }
+    const ref = houseModelRef(role, config);
     // The place of the family the role answers on: the path of the role, unless the caller
     // names the place itself.
     const place = rank ?? rankPath(config?.house?.ranks?.roles?.[key])?.[0] ?? null;

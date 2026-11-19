@@ -124,9 +124,12 @@ export function delegationNote(names = []) {
  * The work goes to a new session of the named role. Expected output paths are scoped to that
  * session and checked on disk before the hand-over is reported as complete.
  * @param {{ run: Function, config?: object, root: string, env?: object, notify?: Function,
- *   runContext?: object|null, role?: string|null, depth?: number, resolveRole?: Function|null }} options
+ *   runContext?: object|null, role?: string|null, stage?: string|null, depth?: number,
+ *   resolveRole?: Function|null }} options
  *   `run` starts a session of a role: it is the runner of the roles, called with the role, the
  *   task and the options of the session. `resolveRole` gives the tools and the budget of a role.
+ *   `stage` is the stage of the caller: the delegated work belongs to it, so the delegated
+ *   role is resolved in the same context and answers with the same model of the house.
  * @returns {(args: object) => Promise<string>}
  * @exports
  * @ai.hint io
@@ -139,6 +142,7 @@ export function createDelegator({
     notify = () => {},
     runContext = null,
     role = null,
+    stage = null,
     depth = 0,
     resolveRole = null,
     parts = [],
@@ -226,6 +230,9 @@ export function createDelegator({
             env,
             notify,
             runContext,
+            // The stage of the caller: the delegated work is the work of this stage, so the
+            // delegated role answers with the model of the house for this stage.
+            stage,
             // Leave room for runRole's final schema answer: at most seven tool turns plus
             // one final request, rather than eight turns followed by an uncounted extra call.
             maxTurns: Math.min(spec.maxTurns ?? 7, 7),

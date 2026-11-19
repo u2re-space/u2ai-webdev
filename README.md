@@ -458,6 +458,17 @@ The command finds the reference of the design the way a run finds it, shoots the
 project, gives the picture and the words of the page to the styler and writes the styles it
 fixed. The files of the project that are not styles are not touched.
 
+The reference is the target when it is there. When it is not, the task of the operator is the
+target: the picture of the page and the words of the task are enough to fix the styles, so the
+command runs without a picture of the design.
+
+```bash
+ai-webdev sight "сделай заголовок крупнее, а колонки уже"
+```
+
+The styler answers with the model of the house for the styles — the head of its ladder — so the
+fix of the styles is the work of the best model of the family, not of the model of the run.
+
 The run that was interrupted is continued by its id: `ai-webdev run --resume <id>`. The stages
 that are done are skipped, and the stage that fell is done again.
 
@@ -750,15 +761,18 @@ reference in pixels travels to the roles that look at it (`readReferences` reads
 the file; `src/inputs/assets.js` keeps the helper, and `src/generate/references.js` re-exports
 it).
 
-- The body is the container of the page: `container-type: size;` on the `body`, with
-  `min-block-size: 100dvh;` — a body with the size containment has no height of its own.
+- The body is the container of the width of the page: `container-type: inline-size;` on the
+  `body`, with `min-block-size: 100dvh;`. The body is not a scroller of its own — the document
+  scrolls, and the scrollbar of the window is the only scrollbar of the page. A `body` with
+  `overflow-y: auto;` inside the scrolling document gives the page two scrollbars.
 - The canvas of the page is the element with the class `page` inside the body:
   `container-type: inline-size;` and `inline-size: var(--real-page-width, 1024px);`. The
   content of the page is laid out in the width of the design, not in the width of the window.
 - The canvas is scaled into the window: `--zoom: calc(100cqi / var(--real-page-width, 1024px));`
   in the theme layer, and `zoom: var(--zoom, 1);` on the canvas. The `100cqi` is the inline
-  size of the body — the nearest container of the canvas — so the canvas takes the whole width
-  of the window, and the proportions of the design are kept.
+  size of the body — the nearest container of the canvas — and it is already free of the
+  scrollbar of the window, so the canvas takes the whole width of the window without a
+  horizontal scrollbar, and the proportions of the design are kept.
 - `--real-page-width` is the width the design really has, in CSS pixels, and it is a token of
   the theme layer. The architect decides it: the width of the picture is not that width — the
   same design comes at 1152 pixels and at 2304 pixels. The width comes from the text: the body
@@ -771,7 +785,9 @@ it).
 
 The markup writes the canvas and the class, the styles give it the width and the scale, and
 `src/roles/page-frame.js` holds the rules of both. The background of the page belongs to the
-canvas: the body is as tall as the viewport, and the canvas is as tall as the content.
+canvas: the body is at least as tall as the viewport, and the canvas is as tall as the content.
+The scrollbars are not hidden on the picture of the page: a second scrollbar of the page is a
+defect the roles have to see, and a hidden scrollbar cannot be seen.
 
 ## The inputs of a run
 
@@ -1023,20 +1039,25 @@ and the Terra for the polishing of them:
   "house": {
     "models": { "styler": "family:gpt" },
     "ranks": {
-      "roles": { "styler": [1, 0] },
-      "stages": { "styling": [1, 0], "sight": [0], "repair": [0] }
+      "roles": { "styler": [1, 0] }
     }
   }
 }
 ```
 
-`roles` is the path of a role, `stages` the path of the stages that only polish: the stage
-`sight` and the repair of the review answer on the head of the family, the cheaper model. The
-stage wins over the role.
+The ladder belongs to the role. A stage of the house never lowers the model of the work on its
+own: the stage of the styles and the stage that fixes the styles answer with the same model of
+the house.
 
-The step down happens twice: inside the call of the role, when the files are on the disk — the
-Sol writes the styles, the Terra polishes them — and on the stages that follow, which answer on
-the head of the family from the start.
+The step down is a phase of the work, not a one-way road:
+
+- the role works with the head of the ladder — it thinks with the model of the house;
+- when its files are on the disk, the polish of them goes with the tail of the ladder;
+- when it has to write again, the head answers again.
+
+The model of a turn is recomputed every time, so an earlier call never takes the model of the
+house away for good. The delegation follows the same rule: the work of the delegated role is
+the work of the caller, so the delegated role answers with the model of the same stage.
 
 ### The groups of small models
 

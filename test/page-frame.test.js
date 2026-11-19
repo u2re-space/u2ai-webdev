@@ -59,17 +59,17 @@ test('the styles give the canvas the width of the design and the scale', () => {
     const text = flat(ROLES.styler.instructions({}));
 
     assert.match(text, /The canvas of the page and the scale/);
-    assert.match(text, /container-type: size;/);
+    // The body is the container of the width, not a scroller of its own.
     assert.match(text, /container-type: inline-size;/);
     assert.ok(text.includes(`inline-size: var(${PAGE_WIDTH_TOKEN}, ${DEFAULT_PAGE_WIDTH});`), 'no width');
-    // The scale takes the scrollbar of the body away: the canvas has to fit the window
-    // without the bar, or the page is wider than the window it is shown in.
+    // The scale takes the width the body has without the scrollbar of the window: the canvas
+    // has to fit the window, or the page is wider than the window it is shown in.
     assert.ok(
-        text.includes(`${ZOOM_TOKEN}: calc(calc(100cqi - var(--body-scrollbar-size, 0.5rem)) / var(${PAGE_WIDTH_TOKEN}, ${DEFAULT_PAGE_WIDTH}));`),
+        text.includes(`${ZOOM_TOKEN}: calc(100cqi / var(${PAGE_WIDTH_TOKEN}, ${DEFAULT_PAGE_WIDTH}));`),
         'no scale',
     );
     assert.ok(text.includes(`zoom: var(${ZOOM_TOKEN}, 1);`), 'no zoom');
-    // The body with the size containment has no height of its own.
+    // The body is at least as tall as the viewport.
     assert.match(text, /min-block-size: 100dvh;/);
     assert.match(text, /The background of the page belongs to the canvas/);
     assert.ok(text.includes('scrollbar-width: thin;'), 'scrollbar width is not explicit');
@@ -78,6 +78,12 @@ test('the styles give the canvas the width of the design and the scale', () => {
         'scrollbar thumb and track colors are missing or reversed',
     );
     assert.ok(text.includes('@supports not (scrollbar-color: auto)'), 'scrollbar fallback is missing');
+    // The page has one scrollbar: the document scrolls, the body does not.
+    assert.match(text, /The page has one scrollbar/);
+    assert.match(text, /Never put/);
+    // The CSS of the frame does not make the page a scroller of its own.
+    const css = pageFrameRules().split('```css')[1]?.split('```')[0] ?? '';
+    assert.doesNotMatch(css, /overflow[^:]*:\s*(auto|scroll|hidden)/, 'the frame gives the body a scroller of its own');
     // The narrow screen is not scaled.
     assert.match(text, /inline-size: 100%; zoom: 1;/);
 });

@@ -44,8 +44,7 @@ import { createDelegator } from '../agent/delegation.js';
 import { effortFor } from '../agent/pace.js';
 import { getModelProfile, maxOutputFor, snapEffort } from '../model/profiles.js';
 import { familyOf, rankPath, resolveModelRef } from '../model/refs.js';
-import { houseModel } from '../model/trust.js';
-import { stageForRole } from '../stages/roles.js';
+import { houseModelRef } from '../model/trust.js';
 import { pageFrameContractFor } from './page-frame.js';
 
 import * as untrusted from './untrusted.js';
@@ -283,7 +282,7 @@ export function roleSchema(role) {
  * @exports
  * @ai.hint pure
  */
-export function resolveRole(role, config = {}, { stage = null } = {}) {
+export function resolveRole(role, config = {}, { stage = null, phase = 'work' } = {}) {
     const key = String(role ?? '').trim().toLowerCase();
     const base = ROLES[key];
     if (!base) return null;
@@ -316,20 +315,19 @@ export function resolveRole(role, config = {}, { stage = null } = {}) {
     const ownModel = own.model !== null && own.model !== undefined ? own.model : null;
     const fallbackModel = fallback.model !== null && fallback.model !== undefined ? fallback.model : null;
     const context = pick('context', null);
-    // The path of the ranks of the role in its family: the stage that only polishes walks
-    // its own path, the role of the house keeps the path of the house.
-    const path = rankPathFor(config, key, stage);
-    const rank = path?.[0] ?? null;
-    const model = resolveModelRef(ownModel, config, { effort: asked, context, rank })
-        ?? houseModel(key, config, { effort: asked, context, rank })
-        ?? resolveModelRef(fallbackModel, config, { effort: asked, context, rank })
-        ?? resolveModelRef(config?.model ?? null, config, { effort: asked, context, rank });
+    // The ladder of the ranks of the role in its family: the stage may walk its own ladder,
+    // the role of the house keeps the ladder of the house.
+    const path = rankPathFor(config, key);
+    // The reference of the model: the place in the house, not the model itself. The model is
+    // resolved again for every phase of the work — see `runRole`.
+    const ref = ownModel ?? houseModelRef(key, config) ?? fallbackModel ?? (config?.model ?? null);
+    const model = resolveModelRef(ref, config, { effort: asked, context, rank: rankFor(path, phase) });
 
     // The effort is pulled down to what the model really takes: a model with a lower ceiling
     // refuses the level above it. The Kimi, for one, has no levels above `medium`.
     const effort = snapEffort(asked, getModelProfile(model, config)) ?? asked;
 
-    // The family the model came from: the role may step down to the next rank of its path
+    // The family the model came from: the role may step down to the next rank of its ladder
     // when its work is done.
     const family = familyOf(config, model);
 
@@ -342,8 +340,10 @@ export function resolveRole(role, config = {}, { stage = null } = {}) {
         model,
         effort,
         asked,
+        ref,
         family,
         path,
+        context,
         summary: pick('summary', config?.reasoning?.summary ?? null),
         temperature: pick('temperature', config?.temperature ?? null),
         maxOutputTokens: pick('maxOutputTokens', config?.maxOutputTokens ?? null),
@@ -352,29 +352,38 @@ export function resolveRole(role, config = {}, { stage = null } = {}) {
 }
 
 /**
- * The path of the ranks of a role in its family of models.
+ * The rank of the family that serves a phase of the work.
  *
- * The path is a list of the places of the family: the role answers on the first place and
- * steps down to the next one when its work is done. A stage that only polishes walks its own
- * path — the stage wins over the role.
+ * The head of the ladder is the model of the work: the role thinks with it. The tail is the
+ * model of the polish: the role tidies what is already on the disk with it.
+ * @param {number[]|null} path the ladder of the ranks
+ * @param {string} phase the phase of the work: `work` or `polish`
+ * @returns {number|null}
+ * @exports
+ * @ai.hint pure
+ */
+export function rankFor(path, phase = 'work') {
+    if (!Array.isArray(path) || !path.length) return null;
+    if (phase === 'polish' && path.length > 1) return path[path.length - 1];
+    return path[0];
+}
+
+/**
+ * The ladder of the ranks of a role in its family of models.
+ *
+ * The ladder belongs to the role: the stage inherits it, so a stage of the house never
+ * lowers the model of the work on its own. The role answers on the head of the ladder and
+ * steps down to the tail when its work is done.
  * @param {object|null} config
  * @param {string} role the name of the role
- * @param {string|null} stage the name of the stage
  * @returns {number[]|null}
  * @exports
  * @ai.hint pure
  */
-export function rankPathFor(config, role, stage = null) {
+export function rankPathFor(config, role) {
     const ranks = config?.house?.ranks;
     if (!ranks || typeof ranks !== 'object') return null;
     const key = String(role ?? '').trim().toLowerCase();
-    const stageName = String(stage ?? '').trim().toLowerCase();
-    // The stage of the call, then the stage of the pipeline the role works in.
-    for (const name of [stageName, stageForRole(key)]) {
-        if (!name) continue;
-        const path = rankPath(ranks.stages?.[name]);
-        if (path) return path;
-    }
     return rankPath(ranks.roles?.[key]);
 }
 
@@ -543,20 +552,24 @@ export async function runRole({
     const roleStage = stage ?? key;
     const definition = resolveRole(key, config, { stage: roleStage });
     if (!definition) throw new Error(`Неизвестная роль: ${role}`);
-    // The model of the role and the model that answers the next turn: a role that works on
-    // a family of models steps down to the next rank of its path when its work is done.
+    // The model of the turn. The role works on the head of its ladder — the model of the
+    // house for this kind of work — and polishes what is already on the disk with the tail
+    // of the ladder. The phase is recomputed for every turn: a role that has to write again
+    // goes back to the head, so the model of the house is never lost for good.
+    let phase = 'work';
     let currentModel = definition.model;
     let currentEffort = definition.effort;
-    let pathIndex = 0;
-    const stepDown = () => {
-        const rank = definition.path?.[pathIndex + 1];
-        if (rank === undefined) return false;
-        const next = definition.family?.[rank];
-        if (!next) return false;
-        pathIndex += 1;
-        currentModel = next;
-        currentEffort = snapEffort(definition.asked, getModelProfile(next, config)) ?? currentEffort;
-        return true;
+    const modelFor = (want) => {
+        const rank = rankFor(definition.path, want);
+        const model = resolveModelRef(definition.ref, config, {
+            effort: definition.asked,
+            context: definition.context,
+            rank,
+        });
+        if (!model) return null;
+        currentModel = model;
+        currentEffort = snapEffort(definition.asked, getModelProfile(model, config)) ?? definition.effort;
+        return model;
     };
     inputChannel?.setLocation?.({
         stage: roleStage,
@@ -656,8 +669,12 @@ export async function runRole({
         notify,
         runContext,
         role: key,
+        // The stage of the caller: the delegated work belongs to it.
+        stage: roleStage,
         depth,
-        resolveRole: (name) => resolveRole(name, config),
+        // The delegated role is resolved in the context of the caller: the work of the
+        // delegated role is the work of the caller, so the model of the work is the same.
+        resolveRole: (name) => resolveRole(name, config, { stage: roleStage }),
         // The delegated role sees the same picture of the reference and the same context of
         // the step: it continues the work, not the conversation.
         parts,
@@ -720,6 +737,10 @@ export async function runRole({
                 ? null
                 : definition.outputMode,
         }));
+        // The model of this request: the head of the ladder while the role works, the tail
+        // while it polishes what is on the disk. The last request of the role — the answer
+        // alone — is a polish too.
+        modelFor(phase);
         const raw = await client.responses.create({
             model: currentModel,
             instructions,
@@ -762,8 +783,6 @@ export async function runRole({
 
     // The writes that really wrote a file.
     const writes = [];
-    // Whether the role has already stepped down to the next member of its family.
-    let steppedDown = false;
 
     let deferredSteering = [];
     const appendSteering = () => {
@@ -777,12 +796,15 @@ export async function runRole({
     while (turns < limit) {
         turns += 1;
         appendSteering();
+        // The model of this turn: the head of the ladder while the role works, the tail
+        // while it polishes what is on the disk.
+        modelFor(phase);
         inputChannel?.setLocation?.({
             stage: roleStage,
             role: key,
             step: context?.step?.id ?? null,
-            model: definition.model,
-            effort: definition.effort,
+            model: currentModel,
+            effort: currentEffort,
             mode: forcedChannel ?? 'interactive',
         });
         const { parsed, work, schemaUsed, prematureSchemaAnswer } = await ask();
@@ -820,6 +842,8 @@ export async function runRole({
                 if (withoutWork && turns < limit && workCorrections < 2) {
                     const list = wantedFiles.length ? ` The step names: ${wantedFiles.join(', ')}.` : '';
                     workCorrections += 1;
+                    // The role has to write again: the head of the ladder answers this turn.
+                    phase = 'work';
                     items.push({ role: 'user', content: [textPart(workCorrections === 1
                         ? `${WORK_CORRECTION}${list}`
                         : `${WORK_ORDER}${list}`)] });
@@ -836,6 +860,8 @@ export async function runRole({
             if (hasActionTools && wantsFiles && workCorrections > 0 && !writeReady && turns < limit && !answer.data
                 && !items.some((item) => item.type === 'function_call_output' && item.output === 'Write-ready. The next turn has the full output budget and the remaining tools.')) {
                 const list = wantedFiles.length ? ` The step names: ${wantedFiles.join(', ')}.` : '';
+                // The role has to write again: the head of the ladder answers this turn.
+                phase = 'work';
                 items.push({ role: 'user', content: [textPart(`${WORK_CORRECTION}${list}`)] });
                 schemaChannel = 'tool';
                 continue;
@@ -846,6 +872,8 @@ export async function runRole({
                 if (wantsFiles && writes.length === 0 && turns < limit && workCorrections < 2) {
                     const list = wantedFiles.length ? ` The step names: ${wantedFiles.join(', ')}.` : '';
                     workCorrections += 1;
+                    // The role has to write again: the head of the ladder answers this turn.
+                    phase = 'work';
                     if (workCorrections === 1) {
                         correctedWork = true;
                         items.push({ role: 'user', content: [textPart(`${WORK_CORRECTION}${list}`)] });
@@ -1041,12 +1069,18 @@ export async function runRole({
                 + 'Preserve all explicit task requirements over generic style advice. Do not run Python, shell commands, scripts, or delegate.',
             )] });
         }
-        // The work of the role is done: the files are on the disk. A role that works on a
-        // family of models steps down to the next rank of its path — the styles are written,
-        // the polishing of them is a cheaper work.
-        if (writes.length && !steppedDown && stepDown()) {
-            steppedDown = true;
-            notify({ type: 'role.model', role: key, model: currentModel, rank: definition.path?.[pathIndex] ?? null });
+        // The work of the role is done: the files are on the disk. The next turns are the
+        // polish of what is written — the tail of the ladder of the role. A role that has
+        // to write again goes back to the head: the model of the house is not lost for good.
+        if (writes.length && phase === 'work') {
+            phase = 'polish';
+            notify({
+                type: 'role.model',
+                role: key,
+                model: currentModel,
+                phase,
+                rank: rankFor(definition.path, phase),
+            });
         }
 
         if (turns >= limit) {

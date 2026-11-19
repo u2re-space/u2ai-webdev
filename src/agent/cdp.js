@@ -79,7 +79,9 @@ async function startDebuggableBrowser({ executable, width = 1440, height = 900, 
     const child = spawn(executable, [
         '--headless=new', '--disable-gpu', '--no-sandbox', '--no-first-run', '--no-default-browser-check',
         '--disable-background-networking', '--disable-extensions', '--disable-sync', '--disable-component-update',
-        '--hide-scrollbars', '--remote-debugging-port=0', `--user-data-dir=${profile}`,
+        // The scrollbars stay on the picture: a second scrollbar of the page is a defect the
+        // role has to see, and a hidden scrollbar cannot be seen.
+        '--remote-debugging-port=0', `--user-data-dir=${profile}`,
         `--window-size=${Math.round(width)},${Math.round(height)}`,
         'about:blank',
     ], { cwd, env, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });

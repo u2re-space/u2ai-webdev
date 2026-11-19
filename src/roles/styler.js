@@ -108,12 +108,19 @@ ${devToolsNote({
   - <https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Selectors/Nesting_selector>
   - <https://sass-lang.com/documentation/style-rules/>
 - Use CSS \`white-space\` and \`text-wrap\` properties where is it suitable.
-- The body scrolls: set \`scrollbar-width: thin;\` and
+- The page has one scrollbar: the document scrolls, the body does not. Never put
+  \`overflow-y: auto;\` (or \`overflow: auto;\`) on the \`body\` while the document scrolls — a
+  scroller inside a scroller gives the page two scrollbars, and a \`body\` with a fixed
+  \`block-size\` gives it a horizontal one as well. The scrollbar belongs to the scrolling
+  root: set \`scrollbar-width: thin;\` and
   \`scrollbar-color: contrast-color(var(--background-color)) var(--background-color);\` on it.
   \`--background-color\` is the page surface and scrollbar track; the contrasting first color
   is the thumb. Preserve at least 3:1 contrast, with a stronger
   \`prefers-contrast: more\` override. If adding \`::-webkit-scrollbar\` fallbacks, scope them
   to \`@supports not (scrollbar-color: auto)\` and reset \`scrollbar-width: auto\` inside.
+- The width of the page is the width of the window: the canvas is scaled by \`--zoom\`, and the
+  scale is computed from the width the body has without the scrollbar — a canvas wider than
+  the window gives the page a horizontal scrollbar.
 - For scrollable content, use additionally CSS scroll snap features.
 - The layout is grid for the page and for the areas, flex for the rows. 
   A row of cards is \`repeat(auto-fit, minmax(240px, 1fr))\`, not a fixed width with a margin.

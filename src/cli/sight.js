@@ -28,6 +28,22 @@ import { runId as makeRunId } from '../stages/workspace.js';
 import { UsageError } from './errors.js';
 
 /**
+ * Whether the command has something to work on.
+ *
+ * The reference of the design is the target when it is there: the page is compared with the
+ * picture of the design. Without it the task of the operator is the target: the picture of the
+ * page and the words of the task are enough to fix the styles.
+ * @param {{ references?: object[], task?: string }} request
+ * @returns {boolean}
+ * @exports
+ * @ai.hint pure
+ */
+export function canRunSight({ references = [], task = '' } = {}) {
+    if (Array.isArray(references) && references.length) return true;
+    return Boolean(String(task ?? '').trim());
+}
+
+/**
  * Look at the page of the project and fix the styles.
  *
  * @param {{ config: object, cwd: string, args?: string[], flags?: object, renderer?: object,
@@ -47,11 +63,19 @@ export async function sightCommand(ctx) {
         config,
         task: task || 'the design of the project',
     });
-    if (!references.length) {
-        throw new UsageError('Референс дизайна не найден: положите картинку в проект или назовите её флагом --image.');
+    // Without a reference there is nothing to compare with, but the operator may still say
+    // what has to change: the picture of the page and the task are enough for that.
+    if (!canRunSight({ references, task })) {
+        throw new UsageError('Скажите, что исправить: `ai-webdev sight "сделай заголовок крупнее"`, '
+            + 'или положите картинку референса в проект и назовите её флагом --image.');
     }
 
     const notify = (event) => renderer?.event?.(event);
+    // The operator asked for the styles to be fixed: the page is shot even without a
+    // reference of the design.
+    const vision = references.length
+        ? config
+        : { ...config, browser: { ...(config?.browser ?? {}), stylingVision: 'always' } };
     const client = await createClient({ config, env, root: cwd, onEvent: notify });
     try {
         const run = makeRunId();
@@ -60,7 +84,7 @@ export async function sightCommand(ctx) {
         const architecture = await readArchitecture(cwd, config, run).catch(() => null);
         const result = await sightStage({
             client,
-            config,
+            config: vision,
             root: cwd,
             task: task || 'Make the page look like the reference.',
             architecture,
@@ -69,6 +93,9 @@ export async function sightCommand(ctx) {
             notify,
             env,
         });
+        if (!references.length) {
+            renderer?.warning?.('Референса дизайна нет: стили сверяются с задачей, а не с картинкой.');
+        }
         for (const warning of result.warnings ?? []) renderer?.warning?.(warning);
         const shots = Array.isArray(result.shots) ? result.shots : [];
         for (const shot of shots) renderer?.note?.(`Снимок страницы: ${shot}`);

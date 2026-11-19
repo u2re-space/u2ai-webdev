@@ -120,22 +120,22 @@ export const defaults = {
     models: {
       // The styles are the work of the best model of the family: the Sol writes them, the
       // Terra polishes them afterwards.
-      //styler: 'family:gpt',
+      styler: 'family:gpt',
     },
     /**
-     * The paths of the ranks of the models of the house in their families.
+     * The ladders of the ranks of the models of the house in their families.
      *
-     * A path is a list of the places of the family: the role answers on the first place and
-     * steps down to the next one when its work is done. The styler walks the family of the
-     * GPT from the end to its head — the Sol writes the styles, the Terra polishes them.
+     * A ladder is a list of the places of the family: the role works with the head of it
+     * and polishes what is already on the disk with the tail. The head of the ladder is
+     * never lost for good: a stage that comes later starts at the head again, so the styles
+     * can always be fixed with the model of the house.
      *
-     * `roles` is the path of a role, `stages` the path of the stages that only polish: the
-     * stage `sight` and the repair of the review answer on the head of the family, the
-     * cheaper model.
+     * The ladder belongs to the role. A stage of the house never lowers the model of the
+     * work on its own: the stage of the styles and the stage that fixes the styles answer
+     * with the same model of the house.
      */
     ranks: {
       roles: { styler: [1, 0] },
-      stages: { styling: [1, 0], sight: [0], repair: [0] },
     },
   },
   /**
