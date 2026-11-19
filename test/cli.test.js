@@ -453,6 +453,7 @@ test('the interactive status is updated from the active role and model settings'
     assert.match(text, /example\/model/);
     assert.match(text, /reasoning medium/);
     assert.match(text, /style/);
+    assert.ok(text.includes('\x1b[s'), 'status update saves the cursor while redrawing its own row');
     channel.close();
 });
 

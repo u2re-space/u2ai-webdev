@@ -240,7 +240,6 @@ export async function runPipeline({
         cache: config?.context?.cache !== false,
         maxBriefChars: config?.context?.maxBriefChars,
     });
-    runContext.input = input;
     // The map of the run: the files of the working directory with their lines and their
     // symbols. The searches and the reads of the files the map knows do not touch the disk.
     const map = await openRunMap({
@@ -256,7 +255,6 @@ export async function runPipeline({
     // The map hangs on the context: the tools of a role need both, and the role runner gets
     // the context alone.
     runContext.map = map;
-    runContext.input = input;
 
     // The context of the run: every stage reads it and puts its result into it.
     const ctx = {

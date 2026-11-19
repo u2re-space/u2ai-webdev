@@ -89,6 +89,7 @@ export function createRenderer({
     const input = inputEnabled
         ? createInputChannel({ stdin, output: stderr, interactive: mode === 'tty' })
         : null;
+    const terminalWrite = (text) => input ? input.log(text) : stderr.write(text);
 
     /**
      * Write one line on stdout.
@@ -107,7 +108,7 @@ export function createRenderer({
      */
     const err = (text) => {
         if (quiet) return;
-        stderr.write(`${sanitizeText(text)}\n`);
+        terminalWrite(`${sanitizeText(text)}\n`);
     };
 
     /**
@@ -381,7 +382,7 @@ export function createRenderer({
          */
         error(text) {
             if (json) { emit('error', { text: String(text ?? '') }); return; }
-            stderr.write(`ai-webdev: ${sanitizeText(text)}\n`);
+            terminalWrite(`ai-webdev: ${sanitizeText(text)}\n`);
         },
 
         /**

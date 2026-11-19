@@ -8,7 +8,7 @@
  * @ai.hint io
  */
 
-import { createInterface } from 'node:readline';
+import { clearLine, createInterface, cursorTo, moveCursor } from 'node:readline';
 import { sanitizeText } from './stdio.js';
 
 const STAGE_TITLES = Object.freeze({
@@ -81,7 +81,43 @@ export function createInputChannel({ stdin = process.stdin, output = process.std
     interactive = Boolean(stdin?.isTTY), getLocation = () => null } = {}) {
     if (!interactive || !stdin?.isTTY) return null;
 
+    let statusText = 'ai-webdev · ready';
+    output.write(`${statusText}\n`);
     const readline = createInterface({ input: stdin, output, terminal: true });
+    // Keep readline's prompt single-line: it redraws the prompt after every input event.
+    // The status itself is maintained in the terminal row above the prompt.
+    const mainPrompt = () => 'ai-webdev › ';
+    const statusLine = () => {
+        const columns = Number.isSafeInteger(output.columns) && output.columns > 1 ? output.columns : 120;
+        return sanitizeText(statusText).slice(0, columns - 1);
+    };
+    const redrawMainPrompt = () => {
+        if (questions.length || closed || quit) return;
+        readline.setPrompt(mainPrompt());
+        readline.prompt(true);
+    };
+    const writeLog = (text) => {
+        if (questions.length) return output.write(text);
+        readline.pause();
+        const lines = String(text ?? '').replace(/\r\n?/g, '\n').split('\n');
+        if (lines.at(-1) === '') lines.pop();
+        if (!lines.length) lines.push('');
+        cursorTo(output, 0);
+        output.write(`\x1b[${lines.length}L`);
+        output.write(`${lines.map((line) => sanitizeText(line)).join('\r\n')}\r\n`);
+        moveCursor(output, 0, 1);
+        cursorTo(output, 0);
+        readline.resume();
+        readline.setPrompt(mainPrompt());
+        readline.prompt(true);
+    };
+    output.write(`${statusLine()}\n`);
+    readline.setPrompt(mainPrompt());
+    readline.prompt();
+    readline.on('SIGCONT', () => {
+        readline.setPrompt(mainPrompt());
+        readline.prompt();
+    });
     const steering = [];
     const skips = [];
     const stepSkips = new Set();
@@ -89,41 +125,32 @@ export function createInputChannel({ stdin = process.stdin, output = process.std
     let closed = false;
     let quit = false;
     let location = null;
-    let statusText = '';
-    let statusWidth = 0;
-    let statusDirty = true;
     let waitResolver = null;
 
     const drawStatus = () => {
-        if (!statusDirty || closed) return;
-        statusDirty = false;
-        const text = statusText || 'ai-webdev · ready';
-        const width = Math.max(statusWidth, text.length);
-        statusWidth = width;
-        readline.setPrompt(`${sanitizeText(text)}${' '.repeat(Math.max(0, width - text.length))}\nai-webdev › `);
-        readline.prompt();
+        if (closed) return;
+        output.write('\x1b[s');
+        moveCursor(output, 0, -1);
+        cursorTo(output, 0);
+        clearLine(output, 0);
+        output.write(statusLine());
+        output.write('\x1b[u');
     };
 
     const askLine = (prompt) => new Promise((resolve) => {
-        readline.setPrompt(`${statusText || 'ai-webdev · waiting for input'}\n${sanitizeText(prompt)}\n> `);
+        readline.setPrompt(`${sanitizeText(prompt)}> `);
         questions.push(resolve);
         readline.prompt();
     });
-
-    const redrawStatus = () => {
-        if (!statusText || closed || questions.length) return;
-        readline.setPrompt(`${sanitizeText(statusText)}\n> `);
-        readline.prompt();
-    };
-
-    drawStatus();
 
     readline.on('line', (raw) => {
         const line = sanitizeText(raw).trim();
         const answer = questions.shift();
         if (answer) {
             answer(line);
-            drawStatus();
+            output.write(`${statusLine()}\r\n`);
+            readline.setPrompt(mainPrompt());
+            readline.prompt(true);
             return;
         }
         if (quit) return;
@@ -137,16 +164,14 @@ export function createInputChannel({ stdin = process.stdin, output = process.std
                 return;
             }
         }
-        if (!line) return;
+        if (!line) { redrawMainPrompt(); return; }
         if (line === '/help') {
-            statusText = 'Controls: /skip [stage-or-step], /help, /quit';
-            statusDirty = true;
-            drawStatus();
+            writeLog('Controls: /skip [stage-or-step], /help, /quit. Other text steers the next role turn.\n');
             return;
         }
         if (line === '/quit') {
             quit = true;
-            output.write('Run will pause after the current safe operation.\n');
+            writeLog('Run will pause after the current safe operation.\n');
             waitResolver?.();
             return;
         }
@@ -154,10 +179,12 @@ export function createInputChannel({ stdin = process.stdin, output = process.std
             const target = line === '/skip-stage' ? null : (line === '/skip' ? null : line.slice(6).trim().toLowerCase() || null);
             const where = location ?? getLocation();
             if (target || where?.stage || where?.step) skips.push({ target, location: where });
-            else { output.write('No active stage to skip yet.\n'); readline.prompt(); }
+            else writeLog('No active stage to skip yet.\n');
+            redrawMainPrompt();
             return;
         }
         steering.push(line);
+        redrawMainPrompt();
     });
 
     readline.on('close', () => {
@@ -195,15 +222,16 @@ export function createInputChannel({ stdin = process.stdin, output = process.std
                     ...(model ? [model] : []),
                 ];
                 statusText = parts.join(' · ');
-                statusDirty = true;
                 drawStatus();
+                readline.setPrompt(mainPrompt());
             }
         },
         setStatus(text) {
             statusText = String(text ?? '').replace(/\s+/g, ' ').trim();
-            statusDirty = true;
             drawStatus();
+            readline.setPrompt(mainPrompt());
         },
+        log(text) { writeLog(String(text ?? '')); },
         takeSkip({ stage = '', step = '' } = {}) {
             const stageName = String(stage).toLowerCase();
             const stepName = String(step).toLowerCase();
