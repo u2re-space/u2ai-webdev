@@ -107,7 +107,7 @@ export function createTuiApp({
         renderTimer = setTimeout(() => {
             renderTimer = null;
             draw();
-        }, 400);
+        }, 200);
         renderTimer.unref?.();
     }
 
