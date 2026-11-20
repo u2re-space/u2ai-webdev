@@ -651,6 +651,17 @@ Five of them take the steps of the plan: `markup`, `coder`, `styler`, `editor` a
 `iconifier`. The other seven work once for the whole run, and a step of the plan may not name
 them.
 
+The roles keep out of each other's work. The environment — the manifest, the lock file, the
+config of the bundler and the installed dependencies — belongs to the `installer` and to the
+stage `setup`, which writes it before the markup; a plan step that names only those files is
+dropped from the plan, whoever the role is. The stylesheets belong to the `styler`: the coder
+neither reads them nor changes them, and the class names are a contract between the two roles.
+The production build belongs to the stage `build`, which runs after the styles are written, so
+the coder does not chase a build that fails because the styles are not there yet. The hand-over
+knows the same boundaries: the markup may not hand the work to the coder, the styler or the
+editor before their stages have started, and the coder may not hand the work to the styler or
+the iconifier before the styles are written.
+
 The three roles that write the frontend — `markup`, `coder` and `styler` — also get the standard
 of the frontend work (`src/roles/web-development.js`): the rules that hold for every file, the
 rules of the markup and the rules of the styles. The standard is the one of the platform of

@@ -85,6 +85,9 @@ export const DELEGATE_NAMES = Object.freeze(Object.keys(DELEGATES));
  * `editor` is in the list of the closed targets as well: the vector graphics are the work
  * of the role `editor`, and the markup may not reach them around the corner.
  *
+ * The coder has a gate of its own: the styles and the icons belong to the stages that come
+ * after it, and a hand-over from the code to them writes their work before they start.
+ *
  * The names in a gate belong to two spaces at once, and the gate keeps them apart:
  * `from` and `stage` are the caller (a role and the stage it runs on), `targets` are the
  * roles the work may be handed to, and `requires` are the stages that have to start
@@ -103,6 +106,13 @@ export const DELEGATION_GATES = Object.freeze([
         targets: Object.freeze(['styler', 'coder', 'editor']),
         requires: Object.freeze(['coding', 'styling']),
         reason: 'стили и код пишут свои стадии',
+    }),
+    Object.freeze({
+        from: 'coder',
+        stage: 'coding',
+        targets: Object.freeze(['styler', 'iconifier']),
+        requires: Object.freeze(['styling']),
+        reason: 'стили и иконки пишут свои стадии',
     }),
 ]);
 

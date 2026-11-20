@@ -263,8 +263,7 @@ test('the roles of the project may hand the work over', async () => {
     }
 });
 
-test('the door of the markup stays closed until the coding and the styling stages started', () => {
-    const closed = delegationGate({ from: 'markup', stage: 'markup', to: 'styler', startedStages: [] });
+test('the door of the markup stays closed until the coding and the styling stages started', () => {    const closed = delegationGate({ from: 'markup', stage: 'markup', to: 'styler', startedStages: [] });
     assert.ok(closed);
     assert.deepEqual(closed.missing, ['coding', 'styling']);
     // The code and the vector graphics are behind the same door.
@@ -328,6 +327,44 @@ test('the delegator refuses the hand-over of the markup before the stages starte
         });
         await open({ role: 'styler', task: 'Do the work.', files: ['file.txt'] });
         assert.equal(opened, true);
+    } finally {
+        await import('node:fs/promises').then((fs) => fs.rm(root, { recursive: true, force: true }));
+    }
+});
+
+test('the coder does not hand the styles to the styler before the styles are written', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-delegate-coder-'));
+    try {
+        let started = false;
+        const delegate = createDelegator({
+            run: async () => { started = true; return { text: '', turns: 0, toolCalls: [], data: null }; },
+            root,
+            role: 'coder',
+            stage: 'coding',
+            resolveRole: () => ({ tools: [], maxTurns: 8 }),
+            startedStages: new Set(['markup', 'coding']),
+        });
+        await assert.rejects(
+            () => delegate({ role: 'styler', task: 'Fix the styles.', files: ['src/styles/main.scss'] }),
+            /не может передать работу роли styler/,
+        );
+        await assert.rejects(
+            () => delegate({ role: 'iconifier', task: 'Pick the icons.', files: ['src/assets/icons/'] }),
+            /не может передать работу роли iconifier/,
+        );
+        assert.equal(started, false);
+
+        // The styles are written: the hand-over opens.
+        const open = createDelegator({
+            run: async () => { started = true; return { text: '', turns: 0, toolCalls: [], data: null }; },
+            root,
+            role: 'coder',
+            stage: 'coding',
+            resolveRole: () => ({ tools: [], maxTurns: 8 }),
+            startedStages: new Set(['markup', 'coding', 'styling']),
+        });
+        await open({ role: 'styler', task: 'Fix the styles.', files: ['src/styles/main.scss'] });
+        assert.equal(started, true);
     } finally {
         await import('node:fs/promises').then((fs) => fs.rm(root, { recursive: true, force: true }));
     }

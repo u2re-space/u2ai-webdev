@@ -134,6 +134,10 @@ export function roleForFiles(files = []) {
 /**
  * Роль шага: та, что названа, или та, что угадывается по файлам.
  *
+ * Шаг, который состоит только из файлов окружения, убирается из плана, кем бы он ни был
+ * назван: окружение готовит стадия `setup` для всего прогона, и шаг кодера с манифестом
+ * уводит роль в чужую работу — установку зависимостей и правку lock-файла.
+ *
  * @param {string} role роль, которую назвал планировщик
  * @param {string[]} files файлы шага
  * @returns {{ role: string|null, dropped: boolean, warning: string|null }}
@@ -147,6 +151,16 @@ export function planRole(role = '', files = []) {
         .filter(Boolean);
     const who = named ? `роль "${named}"` : 'роль не названа';
 
+    const environment = list.filter((file) => ENVIRONMENT_FILES.test(path.posix.basename(file)));
+    if (list.length && environment.length === list.length) {
+        return {
+            role: null,
+            dropped: true,
+            warning: `шаг состоит только из файлов окружения (${environment.join(', ')}) — их готовит `
+                + 'стадия setup, шаг убран из плана.',
+        };
+    }
+
     const live = liveRole(named);
     if (live) return { role: live, dropped: false, warning: null };
 
@@ -159,7 +173,6 @@ export function planRole(role = '', files = []) {
         };
     }
 
-    const environment = list.filter((file) => ENVIRONMENT_FILES.test(path.posix.basename(file)));
     const reason = environment.length
         ? `а её файлы (${environment.join(', ')}) готовит стадия setup`
         : `и по файлам шага её угадать нельзя (${list.join(', ') || 'файлы не названы'})`;

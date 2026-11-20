@@ -311,6 +311,25 @@ test('the planner does not plan a drawn copy of a picture of the reference', () 
     assert.doesNotMatch(text, /\["design"/);
 });
 
+test('the planner does not plan a step of the environment', () => {
+    const text = ROLES.planner.instructions({});
+    assert.match(text, /is not a step: the stage `setup` writes them/);
+    assert.match(text, /before the markup/);
+});
+
+test('the coder keeps out of the environment and out of the styles', () => {
+    const text = ROLES.coder.instructions({});
+    // The environment is the work of the stage `setup`.
+    assert.match(text, /The environment is the work of another stage/);
+    assert.match(text, /install the dependencies, do not change/);
+    // The stylesheets belong to the styler.
+    assert.match(text, /The stylesheets belong to the styler/);
+    assert.match(text, /do not read them and do not change them/);
+    // The production build belongs to the stage `build`, which runs after the styles.
+    assert.match(text, /production build of the project is the work of the stage `build`/);
+    assert.match(text, /do not start a loop of build-and-fix/);
+});
+
 test('the planner names the roles that the stages of the run execute', () => {
     const text = ROLES.planner.instructions({});
     for (const role of LIVE_ROLE_NAMES) {

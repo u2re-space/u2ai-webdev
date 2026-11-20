@@ -76,7 +76,9 @@ ${INPUTS_IN_CONTEXT}
   icons.
 - The environment, the structure of the project, preparation of any existing picture crops and
   the review are not steps: the stages of the run handle them by themselves. Name prepared
-  pictures only when they exist and the step uses them.
+  pictures only when they exist and the step uses them. A step for \`package.json\`, for the
+  lock file or for the config of the bundler is not a step: the stage \`setup\` writes them
+  before the markup, and a step that names them is dropped from the plan.
 - The steps come in an order that can be executed: the markup before the styles, the setup
   before the code that needs the dependencies, the icons before the page that uses them.
 - Every step names the files it touches. The paths are relative to the root of the project.

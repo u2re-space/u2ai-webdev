@@ -155,8 +155,31 @@ test('a step of a role that no stage executes leaves the plan when the role cann
     assert.ok(plan.warnings.some((item) => /Шаг c:/.test(item) && /unknown-role/.test(item)));
 });
 
-test('the live roles are the roles of the stages that take the steps', () => {
-    assert.deepEqual(
+test('a step of the environment leaves the plan, whoever the role is', () => {
+    const plan = normalizePlan({
+        summary: 'A landing.',
+        steps: [
+            { id: 'env', title: 'Manifest', role: 'coder', files: ['package.json', 'package-lock.json'] },
+            { id: 'code', title: 'Code', role: 'coder', files: ['src/main.js'] },
+        ],
+    });
+    // The stage `setup` writes the manifest and installs the dependencies before the markup:
+    // a step of the environment is the environment work of another stage.
+    assert.deepEqual(plan.steps.map((step) => step.id), ['code']);
+    assert.ok(plan.warnings.some((item) => /Шаг env:/.test(item) && /стадия setup/.test(item)));
+});
+
+test('a step that touches the environment and the code stays in the plan', () => {
+    const plan = normalizePlan({
+        summary: 'A landing.',
+        steps: [
+            { id: 'dep', title: 'A dependency', role: 'coder', files: ['package.json', 'src/main.js'] },
+        ],
+    });
+    assert.deepEqual(plan.steps.map((step) => step.id), ['dep']);
+});
+
+test('the live roles are the roles of the stages that take the steps', () => {    assert.deepEqual(
         Object.keys(LIVE_ROLES).sort(),
         Object.values(modules).map((module) => module.role).sort(),
     );
