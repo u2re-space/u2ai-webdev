@@ -226,6 +226,35 @@ test('the pipeline runs the stages in order and writes the progress', async () =
     assert.equal(progress.stages[0].status, 'completed');
 });
 
+test('the pipeline tells the stages which stages have started', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-pipeline-stages-'));
+    const seen = [];
+    const stage = (name, dependsOn) => ({
+        name,
+        title: name,
+        dependsOn,
+        run: async ({ runContext }) => {
+            seen.push([...runContext.startedStages]);
+            return { ok: true };
+        },
+    });
+    const stages = [stage('markup', []), stage('coding', ['markup']), stage('styling', ['coding'])];
+
+    const result = await runPipeline({
+        client: { responses: { create: async () => ({ output: [] }) } },
+        config: CONFIG,
+        root,
+        task: 'Make a landing.',
+        runId: 'run-stages',
+        stages,
+    });
+
+    assert.equal(result.status, 'completed');
+    assert.deepEqual(seen[0], ['markup']);
+    assert.deepEqual(seen[1], ['markup', 'coding']);
+    assert.deepEqual(seen[2], ['markup', 'coding', 'styling']);
+});
+
 test('the live project URL is attached to the browser MCP before coding roles run', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-browser-url-'));
     await writeFile(path.join(root, 'package.json'), JSON.stringify({ scripts: {} }));

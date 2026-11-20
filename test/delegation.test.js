@@ -18,6 +18,8 @@ import {
     DELEGATES,
     delegateToolNames,
     delegationNote,
+    delegationGate,
+    delegationGateNote,
     createDelegator,
 } from '../src/agent/delegation.js';
 import { runRole } from '../src/roles/index.js';
@@ -171,8 +173,9 @@ test('a role may not hand work over before writing the files of its own step', a
         const delegate = createDelegator({
             run: async () => { started = true; return {}; },
             root,
-            role: 'markup',
-            context: { step: { id: 'markup-1', files: ['index.html'], criteria: [] } },
+            role: 'styler',
+            stage: 'styling',
+            context: { step: { id: 'styles-1', files: ['index.html'], criteria: [] } },
             resolveRole: () => ({ tools: [], maxTurns: 10 }),
         });
         await assert.rejects(
@@ -257,6 +260,139 @@ test('the roles of the project may hand the work over', async () => {
     // The roles of the whole run do not hand work over: they work once.
     for (const name of ['planner', 'architect', 'reviewer']) {
         assert.ok(!ROLES[name].tools.includes('delegate_role'), name);
+    }
+});
+
+test('the door of the markup stays closed until the coding and the styling stages started', () => {
+    const closed = delegationGate({ from: 'markup', stage: 'markup', to: 'styler', startedStages: [] });
+    assert.ok(closed);
+    assert.deepEqual(closed.missing, ['coding', 'styling']);
+    // The code and the vector graphics are behind the same door.
+    assert.ok(delegationGate({ from: 'markup', stage: 'markup', to: 'coder', startedStages: ['coding'] }));
+    assert.ok(delegationGate({ from: 'markup', stage: 'markup', to: 'editor', startedStages: ['styling'] }));
+    // The icons are not behind it.
+    assert.equal(delegationGate({ from: 'markup', stage: 'markup', to: 'iconifier', startedStages: [] }), null);
+    // The other roles are not behind it.
+    assert.equal(delegationGate({ from: 'styler', stage: 'styling', to: 'coder', startedStages: [] }), null);
+    // The door opens when both stages started.
+    assert.equal(delegationGate({
+        from: 'markup',
+        stage: 'markup',
+        to: 'styler',
+        startedStages: ['coding', 'styling'],
+    }), null);
+});
+
+test('the markup is told that the hand-over is closed', () => {
+    const note = delegationGateNote({ from: 'markup', stage: 'markup', startedStages: [] });
+    assert.match(note, /closed for now/);
+    assert.match(note, /styler, coder, editor/);
+    assert.match(note, /coding and styling/);
+    assert.equal(delegationGateNote({
+        from: 'markup',
+        stage: 'markup',
+        startedStages: ['coding', 'styling'],
+    }), '');
+    assert.equal(delegationGateNote({ from: 'styler', stage: 'styling', startedStages: [] }), '');
+});
+
+test('the delegator refuses the hand-over of the markup before the stages started', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-delegate-gate-'));
+    try {
+        let started = false;
+        const delegate = createDelegator({
+            run: async () => { started = true; return { text: '', turns: 0, toolCalls: [], data: null }; },
+            root,
+            role: 'markup',
+            stage: 'markup',
+            resolveRole: () => ({ tools: [], maxTurns: 8 }),
+            startedStages: new Set(['markup']),
+        });
+        for (const target of ['styler', 'coder', 'editor']) {
+            await assert.rejects(
+                () => delegate({ role: target, task: 'Do the work.', files: ['file.txt'] }),
+                /не может передать работу роли/,
+            );
+        }
+        assert.equal(started, false);
+
+        // The door opens with the stages that it waits for.
+        let opened = false;
+        const open = createDelegator({
+            run: async () => { opened = true; return { text: 'done', turns: 1, toolCalls: [], data: null }; },
+            root,
+            role: 'markup',
+            stage: 'markup',
+            resolveRole: () => ({ tools: [], maxTurns: 8 }),
+            startedStages: new Set(['markup', 'coding', 'styling']),
+        });
+        await open({ role: 'styler', task: 'Do the work.', files: ['file.txt'] });
+        assert.equal(opened, true);
+    } finally {
+        await import('node:fs/promises').then((fs) => fs.rm(root, { recursive: true, force: true }));
+    }
+});
+
+test('the role of the markup gets the closed door in its instructions', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-delegate-note-'));
+    try {
+        const requests = [];
+        const client = {
+            responses: {
+                async create(body) {
+                    requests.push(body);
+                    return schemaAnswer('markup', {
+                        summary: 'The markup is written.',
+                        files: [],
+                        landmarks: [],
+                        accessibility: [],
+                        notes: '',
+                    });
+                },
+            },
+        };
+        const config = structuredClone(defaults);
+        config.model = 'test-model';
+
+        await runRole({
+            client,
+            config,
+            role: 'markup',
+            input: 'Write the markup of the page.',
+            root,
+            stage: 'markup',
+            runContext: { startedStages: new Set(['markup']) },
+        });
+        assert.match(requests[0].instructions, /hand-over is closed for now/);
+
+        // The door is open: the note is gone.
+        const open = [];
+        const openClient = {
+            responses: {
+                async create(body) {
+                    open.push(body);
+                    return schemaAnswer('markup', {
+                        summary: 'The markup is written.',
+                        files: [],
+                        landmarks: [],
+                        accessibility: [],
+                        notes: '',
+                    });
+                },
+            },
+        };
+        await runRole({
+            client: openClient,
+            config,
+            role: 'markup',
+            input: 'Write the markup of the page.',
+            root,
+            stage: 'markup',
+            runContext: { startedStages: new Set(['markup', 'coding', 'styling']) },
+        });
+        assert.doesNotMatch(open[0].instructions, /hand-over is closed for now/);
+    } finally {
+        await import('node:fs/promises').then((fs) => fs.rm(root, { recursive: true, force: true }));
     }
 });
 

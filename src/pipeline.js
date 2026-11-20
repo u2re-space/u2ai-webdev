@@ -255,6 +255,10 @@ export async function runPipeline({
     // The map hangs on the context: the tools of a role need both, and the role runner gets
     // the context alone.
     runContext.map = map;
+    // The stages the run has started: a gate of the delegation looks at them, and a hand-over
+    // that belongs to a stage that has not started stays closed.
+    const startedStages = new Set();
+    runContext.startedStages = startedStages;
 
     // The context of the run: every stage reads it and puts its result into it.
     const ctx = {
@@ -319,7 +323,12 @@ export async function runPipeline({
         const stored = await readProgress(root, config, run);
         if (stored) {
             progress = stored;
-            for (const stage of progress.stages ?? []) done.set(stage.name, stage);
+            for (const stage of progress.stages ?? []) {
+                done.set(stage.name, stage);
+                // The stages of the earlier run that really ran: a stage that was skipped by
+                // the operator never started.
+                if (['completed', 'partial', 'failed'].includes(stage.status)) startedStages.add(stage.name);
+            }
         }
         // The task of the run belongs to the run: a continuation without a task of its own
         // works on the task of the earlier run.
@@ -497,6 +506,8 @@ export async function runPipeline({
 
         notify({ type: 'stage.start', stage: stage.name, title: stage.title });
         input?.setLocation?.({ stage: stage.name });
+        // The stage starts now: the gates of the delegation look at this list.
+        startedStages.add(stage.name);
         let result = null;
         try {
             const args = typeof stage.args === 'function' ? { ...ctx, ...stage.args(ctx) } : ctx;

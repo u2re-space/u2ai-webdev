@@ -199,6 +199,8 @@ test('a delegated role answers with the model of the same stage', async () => {
         role: 'markup',
         input: 'Write the page.',
         root,
+        // The door of the markup is open: the stages of the code and of the styles started.
+        runContext: { startedStages: new Set(['markup', 'coding', 'styling']) },
     });
 
     assert.ok(requests.length >= 2, `requests: ${requests.length}`);

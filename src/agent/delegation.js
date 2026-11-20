@@ -19,10 +19,12 @@
  *
  * @depends node:fs/promises, agent/fs-tools, agent/paths
  * @usedBy roles/index, agent/tool-specs
- * @exports DELEGATES, DELEGATE_NAMES, delegateToolNames, createDelegator, delegationNote
+ * @exports DELEGATES, DELEGATE_NAMES, delegateToolNames, createDelegator, delegationNote,
+ *          DELEGATION_GATES, delegationGate, delegationGateNote
  * @ai.tags roles, delegation, sessions
  * @ai.hint keep
  * @changed 2026-11-16 Делегирование между ролями: отдельная сессия для другой роли.
+ * @changed 2026-11-20 Разметка не передаёт работу стилям и коду, пока те стадии не начались.
  */
 
 import { stat } from 'node:fs/promises';
@@ -70,6 +72,93 @@ export const DELEGATES = Object.freeze({
 
 /** The names of the roles that may be handed work. */
 export const DELEGATE_NAMES = Object.freeze(Object.keys(DELEGATES));
+
+/**
+ * The gates of the delegation: a hand-over that is closed until the run reaches a stage.
+ *
+ * The markup is the first role of the chain of the steps: the styles and the scripts are
+ * written by their own stages, and a hand-over from the markup to them would write the
+ * work of a stage that has not started yet — twice, and in the wrong order. The gate opens
+ * when the stages it names have started: then the work they own exists, and the markup may
+ * hand a piece of it over.
+ *
+ * `editor` is in the list of the closed targets as well: the vector graphics are the work
+ * of the stage `vector`, and the markup may not reach them around the corner.
+ *
+ * @type {ReadonlyArray<Readonly<{ from: string, stage: string, targets: readonly string[],
+ *   requires: readonly string[], reason: string }>>}
+ * @exports
+ */
+export const DELEGATION_GATES = Object.freeze([
+    Object.freeze({
+        from: 'markup',
+        stage: 'markup',
+        targets: Object.freeze(['styler', 'coder', 'editor']),
+        requires: Object.freeze(['coding', 'styling']),
+        reason: 'стили и код пишут свои стадии',
+    }),
+]);
+
+/**
+ * The names of the stages that have started.
+ * @param {Set<string>|string[]|null|undefined} started
+ * @returns {Set<string>}
+ * @ai.hint pure
+ */
+function startedSet(started) {
+    if (started instanceof Set) return started;
+    return new Set(Array.isArray(started) ? started.map((item) => String(item ?? '').trim()) : []);
+}
+
+/**
+ * Whether a hand-over is closed by a gate.
+ * @param {{ from?: string|null, stage?: string|null, to?: string|null,
+ *   startedStages?: Set<string>|string[]|null }} request
+ * @returns {{ from: string, to: string, missing: string[], reason: string }|null}
+ * @exports
+ * @ai.hint pure
+ */
+export function delegationGate({ from = null, stage = null, to = null, startedStages = null } = {}) {
+    const source = String(from ?? '').trim().toLowerCase();
+    const target = String(to ?? '').trim().toLowerCase();
+    const where = String(stage ?? '').trim().toLowerCase();
+    if (!source || !target) return null;
+    const started = startedSet(startedStages);
+    for (const gate of DELEGATION_GATES) {
+        if (gate.from !== source) continue;
+        if (gate.stage && where && gate.stage !== where) continue;
+        if (!gate.targets.includes(target)) continue;
+        const missing = gate.requires.filter((name) => !started.has(name));
+        if (!missing.length) return null;
+        return { from: source, to: target, missing, reason: gate.reason };
+    }
+    return null;
+}
+
+/**
+ * The note that tells a role that its hand-over is closed right now.
+ * @param {{ from?: string|null, stage?: string|null, startedStages?: Set<string>|string[]|null }} request
+ * @returns {string}
+ * @exports
+ * @ai.hint pure
+ */
+export function delegationGateNote({ from = null, stage = null, startedStages = null } = {}) {
+    const source = String(from ?? '').trim().toLowerCase();
+    const where = String(stage ?? '').trim().toLowerCase();
+    const started = startedSet(startedStages);
+    for (const gate of DELEGATION_GATES) {
+        if (gate.from !== source) continue;
+        if (gate.stage && where && gate.stage !== where) continue;
+        const missing = gate.requires.filter((name) => !started.has(name));
+        if (!missing.length) continue;
+        return [
+            '## The hand-over is closed for now',
+            `Do not delegate to ${gate.targets.join(', ')}: the ${missing.join(' and ')} ${missing.length > 1 ? 'stages have' : 'stage has'} not started yet, and ${gate.reason}.`,
+            'Write the files of your own step yourself and leave the rest to the stages that own them.',
+        ].join('\n');
+    }
+    return '';
+}
 
 /**
  * The tools a delegated role may call.
@@ -125,11 +214,13 @@ export function delegationNote(names = []) {
  * session and checked on disk before the hand-over is reported as complete.
  * @param {{ run: Function, config?: object, root: string, env?: object, notify?: Function,
  *   runContext?: object|null, role?: string|null, stage?: string|null, depth?: number,
- *   resolveRole?: Function|null }} options
+ *   resolveRole?: Function|null, startedStages?: Set<string>|string[]|null }} options
  *   `run` starts a session of a role: it is the runner of the roles, called with the role, the
  *   task and the options of the session. `resolveRole` gives the tools and the budget of a role.
  *   `stage` is the stage of the caller: the delegated work belongs to it, so the delegated
  *   role is resolved in the same context and answers with the same model of the house.
+ *   `startedStages` are the stages the run has started: a gate of the delegation stays closed
+ *   until the stages it names are among them.
  * @returns {(args: object) => Promise<string>}
  * @exports
  * @ai.hint io
@@ -145,6 +236,7 @@ export function createDelegator({
     stage = null,
     depth = 0,
     resolveRole = null,
+    startedStages = null,
     parts = [],
     context = {},
 } = {}) {
@@ -194,6 +286,15 @@ export function createDelegator({
         if (missingOwn.length) {
             throw new Error(`delegate_role: сначала напишите файлы своего шага (${missingOwn.join(', ')}) — `
                 + 'передавать работу можно только после этого.');
+        }
+        // The gate of the delegation: some hand-overs stay closed until the run reaches a
+        // stage. The markup may not hand the work of the styles and of the code over before
+        // those stages have started.
+        const gate = delegationGate({ from: role, stage, to: name, startedStages });
+        if (gate) {
+            throw new Error(`delegate_role: роль ${gate.from} на стадии ${stage ?? gate.from} не может `
+                + `передать работу роли ${gate.to}: стадии ${gate.missing.join(' и ')} ещё не начались, `
+                + `а ${gate.reason}.`);
         }
 
         const baseline = new Map();

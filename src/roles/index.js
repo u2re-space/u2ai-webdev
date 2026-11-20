@@ -40,7 +40,7 @@ import { documentationForRole } from '../agent/docs.js';
 import { sourcesBlock } from '../agent/sources.js';
 import { createToolset } from '../agent/tools.js';
 import { toolSpecs as buildToolSpecs } from '../agent/tool-specs.js';
-import { createDelegator } from '../agent/delegation.js';
+import { createDelegator, delegationGateNote } from '../agent/delegation.js';
 import { effortFor } from '../agent/pace.js';
 import { getModelProfile, maxOutputFor, snapEffort } from '../model/profiles.js';
 import { familyOf, rankPath, resolveModelRef } from '../model/refs.js';
@@ -615,6 +615,13 @@ export async function runRole({
             ] : []),
         ].filter(Boolean).join('\n');
     }
+    // The hand-over may be closed right now: the role is told before she spends a turn on it.
+    const gateNote = delegationGateNote({
+        from: key,
+        stage: roleStage,
+        startedStages: runContext?.startedStages ?? null,
+    });
+    if (gateNote) instructions += `\n\n${gateNote}`;
     // The toolset of a role reads through the map of the run and remembers its answers in
     // the context of the run.
     const tools = toolset ?? createToolset({
@@ -676,6 +683,9 @@ export async function runRole({
         // The stage of the caller: the delegated work belongs to it.
         stage: roleStage,
         depth,
+        // The stages the run has started: a gate of the delegation stays closed until the
+        // stages it names are among them.
+        startedStages: runContext?.startedStages ?? null,
         // The delegated role is resolved in the context of the caller: the work of the
         // delegated role is the work of the caller, so the model of the work is the same.
         resolveRole: (name) => resolveRole(name, config, { stage: roleStage }),

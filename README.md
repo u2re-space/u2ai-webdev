@@ -493,6 +493,13 @@ they work once for the whole run, and a step does not send them a piece of work.
 The hand-over is one level deep: a delegated role never gets the delegation tool itself, so
 there is no chain of sessions that nobody reads. A role may not hand work to itself.
 
+The markup is the one role with a closed door: on the stage `markup` it may not hand the work
+to `styler`, `coder` or `editor` — not even around the corner through another role. The styles
+and the scripts are the work of their own stages, and those stages have not started yet. The
+door opens when the stages `coding` and `styling` have started: then the markup may hand a
+piece of their work over. The role is told about the closed door in its instructions, so it
+does not spend a turn on a hand-over that is refused.
+
 ```json
 {
   "tools": { "delegate": true }
