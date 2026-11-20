@@ -16,7 +16,7 @@
  */
 
 import { createTuiState, reduceTuiState } from './state.js';
-import { renderTui } from './render.js';
+import { prepareTuiFrame, renderTui } from './render.js';
 import { createWorkerClient } from './worker-client.js';
 
 /**
@@ -44,6 +44,30 @@ export function createTuiApp({
     let renderTimer = null;
     let stopped = false;
     let resultCode = null;
+    // The rows of the last frame: the next frame is drawn by the difference, and a
+    // row that did not change is not written at all.
+    let frame = null;
+    // The frame that is prepared for the next draw: the rows are built before the
+    // terminal is touched, so the drawing itself only writes what changed.
+    let prepared = null;
+
+    /**
+     * Prepare the frame of the dashboard.
+     *
+     * The rows are built while the run goes on, and the frame is kept until the state
+     * moves: a draw that finds the state where it was leaves the frame alone.
+     * @returns {void}
+     */
+    function prepare() {
+        const width = Number(term?.width) > 0 ? Number(term.width) : 100;
+        const height = Number(term?.height) > 0 ? Number(term.height) : 30;
+        prepared = {
+            state,
+            input,
+            logOffset,
+            frame: prepareTuiFrame(state, { width, height, input, ascii, logOffset }),
+        };
+    }
 
     /**
      * Apply one action to the state.
@@ -52,6 +76,8 @@ export function createTuiApp({
      */
     const dispatch = (action) => {
         state = reduceTuiState(state, action);
+        // The frame is prepared right away: the draw that follows only writes.
+        prepare();
         requestRender();
     };
 
@@ -60,11 +86,20 @@ export function createTuiApp({
      * @returns {void}
      */
     const draw = () => {
-        renderTui(term, state, { input, ascii, logOffset });
+        // The frame is prepared before it is drawn, and it is reused when the state did
+        // not move since the preparation.
+        if (!prepared || prepared.state !== state || prepared.input !== input || prepared.logOffset !== logOffset) {
+            prepare();
+        }
+        frame = renderTui(term, state, { input, ascii, logOffset, previous: frame, layout: prepared.frame });
     };
 
     /**
      * Draw soon, but not once for every tiny event.
+     *
+     * The stream of the model paints the frame many times a second. The frame is drawn
+     * at most every few hundred milliseconds: the eye reads a thought that changes a few
+     * times a second, and a frame that changes ten times a second is only noise.
      * @returns {void}
      */
     function requestRender() {
@@ -72,8 +107,18 @@ export function createTuiApp({
         renderTimer = setTimeout(() => {
             renderTimer = null;
             draw();
-        }, 30);
+        }, 400);
         renderTimer.unref?.();
+    }
+
+    /**
+     * Draw the frame at once: the operator typed something and waits for the letter.
+     * @returns {void}
+     */
+    function drawNow() {
+        if (renderTimer) { clearTimeout(renderTimer); renderTimer = null; }
+        prepare();
+        draw();
     }
 
     /**
@@ -92,49 +137,49 @@ export function createTuiApp({
             const chars = Array.from(input);
             chars.pop();
             input = chars.join('');
-            requestRender();
+            drawNow();
             return;
         }
         if (name === 'ESCAPE') {
             input = '';
-            requestRender();
+            drawNow();
             return;
         }
         if (name === 'CTRL_C') {
             client?.command('abort');
             state = { ...state, notice: 'Stopping after the current safe operation…' };
-            requestRender();
+            drawNow();
             return;
         }
         if (name === 'PAGE_UP') {
             logOffset += 10;
-            requestRender();
+            drawNow();
             return;
         }
         if (name === 'PAGE_DOWN') {
             logOffset = Math.max(0, logOffset - 10);
-            requestRender();
+            drawNow();
             return;
         }
         if (name === 'UP') {
             logOffset += 1;
-            requestRender();
+            drawNow();
             return;
         }
         if (name === 'DOWN') {
             logOffset = Math.max(0, logOffset - 1);
-            requestRender();
+            drawNow();
             return;
         }
         if (data?.isCharacter && Number.isInteger(data.codepoint)) {
             const char = String.fromCodePoint(data.codepoint);
             if (input.length < 4000) input += char;
-            requestRender();
+            drawNow();
             return;
         }
         if (typeof name === 'string' && Array.from(name).length === 1 && !matches.includes('CTRL')) {
             if (input.length < 4000) input += name;
-            requestRender();
+            drawNow();
         }
     };
 
@@ -178,7 +223,7 @@ export function createTuiApp({
         requestRender();
     }
 
-    const onResize = () => requestRender();
+    const onResize = () => drawNow();
 
     /**
      * Leave the terminal in a clean state.
@@ -218,6 +263,9 @@ export function createTuiApp({
             term.grabInput({ focus: true });
             term.on('key', onKey);
             term.on('resize', onResize);
+            // The screen is cleared once, at the start: every frame after this one is
+            // drawn by the difference, and a clear on every frame makes the terminal blink.
+            term.clear();
 
             client = createWorkerClient({
                 args,

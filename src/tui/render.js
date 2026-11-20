@@ -46,6 +46,53 @@ function symbols(ascii) {
 }
 
 /**
+ * The rows of the thought of the model.
+ *
+ * The thought of a model is longer than the screen, and the operator reads what the
+ * model thinks now, not what it thought first. The thought is wrapped into the rows of
+ * the dashboard at the width of the screen: a line that does not fit wraps in the
+ * terminal and pushes the rows of the dashboard down. The first row that was cut away
+ * is marked with an ellipsis.
+ *
+ * @param {unknown} text
+ * @param {string} kind `thinking` or `answer`
+ * @param {number} cols the width of the screen
+ * @param {number} [rows] how many rows the thought takes
+ * @returns {string[]}
+ * @exports
+ * @ai.hint pure
+ */
+export function wrapThought(text, kind = 'thinking', cols = 100, rows = 2) {
+    const count = Math.max(1, Math.floor(Number(rows) || 1));
+    const body = String(text ?? '').replace(/\s+/g, ' ').trim();
+    if (!body) return Array.from({ length: count }, () => '');
+    const label = kind === 'answer' ? '▸ answer: ' : '▸ thinking: ';
+    // Every row is wrapped at the width of the narrowest one: the first row carries the
+    // label and the ellipsis, and the next ones carry the indent. A row that does not
+    // fit wraps in the terminal and pushes the rows of the dashboard down.
+    const width = Math.max(16, cols - label.length - 2);
+    const lines = [];
+    let current = '';
+    for (const word of body.split(' ')) {
+        if (!word) continue;
+        const candidate = current ? `${current} ${word}` : word;
+        if (candidate.length <= width) { current = candidate; continue; }
+        if (current) lines.push(current);
+        current = word.length <= width ? word : `${word.slice(0, width - 1)}…`;
+    }
+    if (current) lines.push(current);
+    // The newest words are the ones that stay: the thought is read from its end.
+    const kept = lines.slice(-count);
+    const cut = lines.length > kept.length;
+    const out = kept.map((line, index) => {
+        const body = cut && index === 0 ? `… ${line}` : line;
+        return index === 0 ? `${label}${body}` : `  ${body}`;
+    });
+    while (out.length < count) out.push('');
+    return out;
+}
+
+/**
  * The mark of one stage.
  * @param {object} stage
  * @param {object} marks
@@ -159,7 +206,7 @@ export function createTuiLayout(state, {
     push(truncate(state?.task || 'Preparing the run…', cols), 'dim');
     push(marks.rule.repeat(cols), 'dim');
 
-    const footerRows = 9;
+    const footerRows = 10;
     const headerRows = lines.length;
     const mainRows = Math.max(3, rows - headerRows - footerRows - 1);
     const leftWidth = Math.max(24, Math.min(44, Math.floor(cols * 0.38)));
@@ -188,13 +235,11 @@ export function createTuiLayout(state, {
 
     push(marks.rule.repeat(cols), 'dim');
     // The stream of the model: the thought while it thinks, the answer while it writes.
-    // One line, redrawn on every frame: the stream is not a wall of lines in the log.
+    // Two rows, wrapped at the width of the screen: a line that does not fit pushes the
+    // rows of the dashboard down.
     const stream = state?.stream ?? {};
-    const streamText = String(stream.text ?? '').replace(/\s+/g, ' ').trim();
     const streamKind = String(stream.kind ?? '') === 'answer' ? 'answer' : 'thinking';
-    const streamWidth = Math.max(8, cols - 12);
-    const streamTail = streamText.length > streamWidth ? streamText.slice(streamText.length - streamWidth) : streamText;
-    push(streamText ? truncate(`▸ ${streamKind}: ${streamTail}`, cols) : '', 'dim');
+    for (const row of wrapThought(stream.text, streamKind, cols, 2)) push(row, 'dim');
     const progressText = total > 0 ? `${bar} ${done}/${total}` : `${bar} 0/0`;
     const notice = String(state?.notice ?? '');
     const progressRow = lines.length;
@@ -211,31 +256,82 @@ export function createTuiLayout(state, {
 }
 
 /**
+ * Prepare the frame of the dashboard.
+ *
+ * The frame is prepared before it is drawn: the rows are built while the run goes on,
+ * and the drawing itself only writes the rows that changed. The prepared frame is kept
+ * by the shell and reused when nothing moved.
+ *
+ * @param {object} state
+ * @param {{ width?: number, height?: number, input?: string, ascii?: boolean,
+ *   logOffset?: number }} [options]
+ * @returns {object} the frame: the rows and the place of the input
+ * @exports
+ * @ai.hint pure
+ */
+export function prepareTuiFrame(state, {
+    width = 100,
+    height = 30,
+    input = '',
+    ascii = false,
+    logOffset = 0,
+} = {}) {
+    const measuredWidth = Math.floor(Number(width));
+    const measuredHeight = Math.floor(Number(height));
+    const cols = Number.isFinite(measuredWidth) && measuredWidth > 0 ? measuredWidth : 100;
+    const rows = Number.isFinite(measuredHeight) && measuredHeight > 0 ? measuredHeight : 30;
+    return createTuiLayout(state, { width: cols, height: rows, input, ascii, logOffset });
+}
+
+/**
  * Draw the dashboard in a terminal.
+ *
+ * The dashboard is redrawn by the difference: only the rows that changed are written.
+ * The whole screen is never cleared — a clear on every frame makes the terminal blink,
+ * and the stream of the model paints the frame many times a second.
+ *
  * @param {object} term a terminal-kit terminal
  * @param {object} state
- * @param {{ input?: string, ascii?: boolean, logOffset?: number }} [options]
- * @returns {void}
+ * @param {{ input?: string, ascii?: boolean, logOffset?: number, previous?: object[],
+ *   layout?: object }} [options]
+ * @returns {object[]} the rows of the frame
  * @exports
  * @ai.hint io
  */
-export function renderTui(term, state, { input = '', ascii = false, logOffset = 0 } = {}) {
+export function renderTui(term, state, {
+    input = '',
+    ascii = false,
+    logOffset = 0,
+    previous = null,
+    layout = null,
+} = {}) {
     const measuredWidth = Math.floor(Number(term?.width));
     const measuredHeight = Math.floor(Number(term?.height));
     const width = Number.isFinite(measuredWidth) && measuredWidth > 0 ? measuredWidth : 100;
     const height = Number.isFinite(measuredHeight) && measuredHeight > 0 ? measuredHeight : 30;
-    const layout = createTuiLayout(state, { width, height, input, ascii, logOffset });
-    term.clear();
+    const frame = layout ?? prepareTuiFrame(state, { width, height, input, ascii, logOffset });
+    const lines = frame?.lines ?? [];
     const styleNames = { title: 'bold', good: 'green', bad: 'red', warn: 'yellow', dim: 'dim' };
-    layout.lines.forEach((line, index) => {
+    lines.forEach((line, index) => {
+        const old = Array.isArray(previous) ? previous[index] : null;
+        // A row that did not change is left alone: the terminal keeps it, and the eye
+        // does not see it blink.
+        if (old && old.text === line.text && old.style === line.style) return;
         term.moveTo(1, index + 1);
         term.eraseLineAfter();
         const styleName = styleNames[line.style] ?? 'normal';
         const style = typeof term?.[styleName] === 'function' ? term[styleName] : term;
         style(line.text);
     });
+    // The rows that the last frame had and this one does not are erased.
+    const oldLines = Array.isArray(previous) ? previous : [];
+    for (let index = lines.length; index < oldLines.length; index += 1) {
+        term.moveTo(1, index + 1);
+        term.eraseLineAfter();
+    }
     const inputCells = Array.from(String(input ?? '')).length;
     const cursorColumn = Math.min(width, 3 + inputCells);
-    term.moveTo(cursorColumn, layout.inputRow + 2);
+    term.moveTo(cursorColumn, (frame?.inputRow ?? lines.length - 1) + 2);
     term.hideCursor(false);
+    return lines;
 }

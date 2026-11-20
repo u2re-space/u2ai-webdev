@@ -51,8 +51,9 @@ same as `ai-webdev run "make a landing"`.
 - `ai-webdev` is the graphical shell. In a terminal it opens a full-screen dashboard with the
   stages and the live worker log. The lower block above the operator input contains the progress
   bar and the status row with the current model, stage, role, effort, mode, plan step and state.
-  The row above them holds the stream of the model: the tail of its thinking while it thinks and
-  the tail of its answer while it writes. It is one row that is redrawn, not a line per token.
+  The rows above them hold the stream of the model: the tail of its thinking while it thinks and
+  the tail of its answer while it writes. The thought is wrapped at the width of the screen, so
+  no row outgrows the terminal and the rows of the dashboard never shift.
   Every current command is available through this shell.
 - `ai-webdev-worker` is the internal worker. It owns the CLI, the pipeline and the ordinary
   stdout/stderr. A versioned IPC protocol carries the pipeline events, the questions of the
@@ -1239,11 +1240,14 @@ a shorter timeout does not make the model faster, it throws the whole reasoning 
 the same question again. A host that says nothing is not asked again — the next host of the
 chain answers, and the budget of the stage ends the stage if none of them does.
 
-The stream is one line, not a wall of lines. The pieces of the thinking are gathered and written
-as a block (`· thinking: …`), and the graphical shell shows the tail of the stream in one row
-that is redrawn on every frame — the live log keeps the events of the run, not every token of
-the model. The heartbeat belongs to the silence: while the model streams, the run says so with
-the stream itself, and `· thinking (60s)` appears only when the host says nothing at all.
+The stream is a couple of rows, not a wall of lines. The pieces of the thinking are gathered and
+written as a block (`· thinking: …`), and the graphical shell shows the tail of the stream in two
+rows that are wrapped at the width of the screen — the live log keeps the events of the run, not
+every token of the model. The shell redraws its frame by the difference: it writes only the rows
+that changed and never clears the screen, and it repaints a few times a second, not ten — a frame
+that changes faster than the eye reads it is only noise. The heartbeat belongs to the silence:
+while the model streams, the run says so with the stream itself, and `· thinking (60s)` appears
+only when the host says nothing at all.
 
 The channel of the schema says how the answer of a role reaches the code: `tool` makes the
 schema a function the model calls, `format` pins the text of the answer to it, `auto` picks

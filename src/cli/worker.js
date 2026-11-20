@@ -215,7 +215,6 @@ export function createWorkerInput({ send = () => {}, stderr = process.stderr, on
  * shell wants one line, not a thousand. The pieces are gathered and sent as one event
  * every few hundred milliseconds — the shell shows the tail of the stream, and the
  * frame rate of the shell stays the frame rate of a human.
- *
  * @param {object} renderer
  * @param {(frame: object) => void} send
  * @returns {object}
@@ -252,7 +251,7 @@ export function createWorkerRenderer(renderer, send) {
                         if (pending?.type === type) pending.text += text;
                         else { flushStream(); pending = { type, text }; }
                         if (!timer) {
-                            timer = setTimeout(flushStream, 120);
+                            timer = setTimeout(flushStream, 500);
                             timer.unref?.();
                         }
                     } else {

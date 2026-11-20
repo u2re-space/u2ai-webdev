@@ -10,7 +10,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createFrame, FRAME } from '../src/cli/protocol.js';
 import { createTuiState, reduceTuiState, stageProgress } from '../src/tui/state.js';
-import { createTuiLayout, formatStatusRow, renderTui, truncate } from '../src/tui/render.js';
+import { createTuiLayout, formatStatusRow, renderTui, truncate, wrapThought } from '../src/tui/render.js';
 import { createTuiApp } from '../src/tui/app.js';
 
 test('the state of the shell follows the stages, the progress and the result', () => {
@@ -180,6 +180,65 @@ test('the cursor stays after the visible input text', () => {
 
     assert.deepEqual(moves.at(-1), [8, layout.inputRow + 2]);
     assert.equal(cursor.at(-1), false);
+});
+
+test('the thought of the model is wrapped, so no row outgrows the screen', () => {
+    const long = 'The opening paragraph is separated by 32px from the divider, and the closing '
+        + 'paragraph aligns with a slight offset for visual balance across the whole layout.';
+    const rows = wrapThought(long, 'thinking', 100, 2);
+    assert.equal(rows.length, 2);
+    for (const row of rows) assert.ok(row.length <= 100, `the row does not fit: ${row.length}`);
+    assert.match(rows[0], /^▸ thinking: /);
+    assert.match(rows[1], /^ {2}/);
+});
+
+test('the thought that is cut is marked with an ellipsis', () => {
+    const rows = wrapThought('one two three four five six seven eight nine ten', 'thinking', 30, 1);
+    assert.equal(rows.length, 1);
+    assert.match(rows[0], /…/);
+});
+
+test('no row of the thought outgrows the screen, whatever the screen is', () => {
+    const long = Array.from({ length: 60 }, (_, index) => `word${index}`).join(' ');
+    for (const cols of [56, 80, 100, 200]) {
+        for (const rows of wrapThought(long, 'thinking', cols, 2)) {
+            assert.ok(rows.length <= cols, `the row does not fit at ${cols}: ${rows.length}`);
+        }
+        for (const rows of wrapThought('x'.repeat(300), 'thinking', cols, 2)) {
+            assert.ok(rows.length <= cols, `the long word does not fit at ${cols}: ${rows.length}`);
+        }
+    }
+});
+
+test('the frame is drawn by the difference: a row that did not change is not written', () => {
+    const moves = [];
+    const term = Object.assign(function () {}, {
+        width: 100,
+        height: 30,
+        clear() {},
+        moveTo(x, y) { moves.push([x, y]); },
+        eraseLineAfter() {},
+        hideCursor() {},
+        bold(text) { return text; },
+        dim(text) { return text; },
+        green(text) { return text; },
+        red(text) { return text; },
+        yellow(text) { return text; },
+    });
+    // The rows of the dashboard are written in the first column; the cursor of the
+    // operator line moves in another one.
+    const writes = () => moves.filter(([x]) => x === 1).length;
+    const state = createTuiState({ command: 'run', task: 'make a landing' });
+    const first = renderTui(term, state, { input: '' });
+    const before = writes();
+    // The same state, the same frame: nothing is written at all.
+    renderTui(term, state, { input: '', previous: first });
+    assert.equal(writes(), before, 'the frame was written again without a change');
+    // A changed state writes only the rows that changed.
+    const changed = { ...state, notice: 'the notice' };
+    renderTui(term, changed, { input: '', previous: first });
+    assert.ok(writes() > before, 'the changed frame was not written');
+    assert.ok(writes() < before + first.length, 'the whole frame was written again');
 });
 
 test('the application runs the worker and shows typed text in the input row', async () => {
