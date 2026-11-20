@@ -373,6 +373,24 @@ test('the coder keeps out of the environment and out of the styles', () => {
     assert.match(text, /do not start a loop of build-and-fix/);
 });
 
+test('the roles that touch the styles are given the one name of the stylesheet', () => {
+    const styles = { source: 'src/styles.scss', link: 'src/styles.css', language: 'scss', from: 'plan' };
+    const markup = ROLES.markup.instructions({ styles });
+    const coder = ROLES.coder.instructions({ styles });
+    const styler = ROLES.styler.instructions({ styles, style: 'scss' });
+
+    // The markup links the compiled css of that stylesheet, and it does not invent a name.
+    assert.match(markup, /src\/styles\.scss/);
+    assert.match(markup, /src\/styles\.css/);
+    assert.match(markup, /Do not write `styles\.css`/);
+    // The code imports the stylesheet itself.
+    assert.match(coder, /src\/styles\.scss/);
+    assert.match(coder, /imports that stylesheet/);
+    // The styler writes the stylesheet.
+    assert.match(styler, /src\/styles\.scss/);
+    assert.match(styler, /write that file/);
+});
+
 test('the planner names the roles that the stages of the run execute', () => {
     const text = ROLES.planner.instructions({});
     for (const role of LIVE_ROLE_NAMES) {

@@ -17,6 +17,7 @@
  */
 
 import { architectureText } from './architect.js';
+import { stylesOf } from './style-entry.js';
 import { runStepStage } from './step.js';
 
 /** Роль, чьи шаги исполняет эта стадия. */
@@ -48,6 +49,7 @@ export async function codingStage({
     runContext = null,
 } = {}) {
     const brief = architecture ? architectureText(architecture) : '';
+    const styles = stylesOf({ plan, architecture, config });
     return await runStepStage({
         client,
         config,
@@ -65,6 +67,7 @@ export async function codingStage({
         runContext,
         context: {
             stack: config?.stack ?? {},
+            styles,
         },
     });
 }

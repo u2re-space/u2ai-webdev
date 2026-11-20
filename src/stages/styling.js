@@ -22,6 +22,7 @@
  */
 
 import { architectureText } from './architect.js';
+import { stylesOf } from './style-entry.js';
 import { projectFiles } from './project-files.js';
 import { checkMarkupStyles } from '../agent/markup-styles.js';
 import { runStepStage } from './step.js';
@@ -76,6 +77,7 @@ export async function stylingStage({
     runContext = null,
 } = {}) {
     const brief = architecture ? architectureText(architecture) : '';
+    const styles = stylesOf({ plan, architecture, config });
     const tokens = architecture?.tokens ?? [];
     const conflicts = inputs?.conflicts ?? [];
 
@@ -95,7 +97,8 @@ export async function stylingStage({
         input,
         runContext,
         context: {
-            style: architecture?.stack?.style ?? config?.stack?.styleLanguage ?? 'scss',
+            style: styles.language,
+            styles,
             tokens,
             conflicts,
         },

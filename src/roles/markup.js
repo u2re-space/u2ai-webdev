@@ -54,6 +54,9 @@ export function instructions(context = {}) {
     const design = context.design && !vectorOnly
         ? 'The design direction and any prepared assets are in the task context. The attached reference image is a visual source of truth; measurements are optional. Match its regions, proportions, hierarchy and names of the parts.'
         : '';
+    const styles = context.styles?.link
+        ? `The styles of the project: the stylesheet is \`${context.styles.source}\` (${context.styles.language}), and the page loads \`${context.styles.link}\`. The page loads that exact path: do not write \`styles.css\` because that is what a page usually has, and do not name a compiled css that no build has produced yet. The stylesheet has one name and the roles use it.`
+        : '';
     const reference = vectorOnly ? '' : referenceNote(context);
     const width = vectorOnly ? '' : pageWidthNote(context);
     const repair = Array.isArray(context.issues) && context.issues.length
@@ -72,6 +75,7 @@ ${step}
 ${brief}
 ${markup}
 ${design}
+${styles}
 ${reference}
 ${width}
 ${repair}
@@ -108,9 +112,13 @@ ${economyNote()}
   work: leave the hooks they need (\`id\`, \`data-*\`, the class names), do not write their rules.
 - The page is wired: the head carries the \`<link rel="stylesheet">\` of the stylesheet of the
   project, and the body carries the \`<script type="module">\` of the script of the project. A
-  page without them opens unstyled.
+  page without them opens unstyled. The stylesheet has the name and the path the context gives:
+  use that exact path. Do not write \`styles.css\` because that is what a page usually has, and
+  do not name a compiled css that no build has produced yet.
 - Every path the page points at has to be on the disk: find it with \`list_files\` and
   \`search_files\` before you link it. A path you have not seen is a path that does not exist.
+  The stylesheet of the project and the script of the project are the two exceptions: other
+  roles write them after you, and the context names them, so link them as they are named there.
 - The markup is valid: the tags are closed, the attributes are quoted, the boolean attributes
   have no value.
 

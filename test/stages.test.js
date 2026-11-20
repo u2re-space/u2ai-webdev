@@ -591,6 +591,57 @@ test('the architecture is normalized against the enums of the config', () => {
     assert.match(architectureText(architecture), /--color-text: #101828/);
 });
 
+test('the styles of the project have one name, and the plan decides it', () => {
+    // The plan names the stylesheet: `src/styles.scss`. The architect calls the language
+    // `css`. The file wins, and the house says so out loud.
+    const architecture = normalizeArchitecture({
+        summary: 'A simple page.',
+        stack: { framework: 'vanilla', markup: 'html', style: 'css', script: 'javascript', iconSet: 'auto' },
+        modules: [{ name: 'styles', path: 'src/styles.scss', purpose: 'The look.', exports: [], dependsOn: [] }],
+        tokens: [],
+        notes: '',
+    }, { stack: { styleLanguage: 'scss' } }, {
+        steps: [{ id: 'styles', title: 'Styles', role: 'styler', files: ['src/styles.scss'] }],
+    });
+
+    assert.equal(architecture.styles.source, 'src/styles.scss');
+    assert.equal(architecture.styles.language, 'scss');
+    assert.equal(architecture.styles.link, 'src/styles.css');
+    assert.equal(architecture.styles.from, 'plan');
+    assert.equal(architecture.stack.style, 'scss');
+    assert.ok(architecture.warnings.some((item) => /css/.test(item) && /src\/styles\.scss/.test(item)));
+});
+
+test('the brief of the architecture names the stylesheet for every role', () => {
+    const architecture = normalizeArchitecture({
+        summary: 'A page.',
+        stack: { framework: 'vanilla', markup: 'html', style: 'scss', script: 'javascript', iconSet: 'auto' },
+        modules: [{ name: 'styles', path: 'src/styles.scss', purpose: 'The look.', exports: [], dependsOn: [] }],
+        tokens: [],
+        notes: '',
+    }, { stack: { styleLanguage: 'scss' } }, {
+        steps: [{ id: 'styles', title: 'Styles', role: 'styler', files: ['src/styles.scss'] }],
+    });
+
+    const brief = architectureText(architecture);
+    assert.match(brief, /## The styles of the project/);
+    assert.match(brief, /src\/styles\.scss/);
+    assert.match(brief, /src\/styles\.css/);
+});
+
+test('the styles of a project without a plan keep the name of the house', () => {
+    const architecture = normalizeArchitecture({
+        summary: 'A page.',
+        stack: { framework: 'vanilla', markup: 'html', style: 'scss', script: 'javascript', iconSet: 'auto' },
+        modules: [],
+        tokens: [],
+        notes: '',
+    }, { stack: { styleLanguage: 'scss' } }, null);
+
+    assert.equal(architecture.styles.source, 'src/styles.scss');
+    assert.equal(architecture.styles.from, 'house');
+});
+
 test('the stage of the architecture asks the architect and writes the file', async () => {
     const root = await makeProject();
     const client = fakeClient([schemaAnswer('architecture', {

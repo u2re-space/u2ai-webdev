@@ -222,6 +222,16 @@ without styles. The stage names the missing file (`Стиль не найден:
 (scss/tokens.scss)`) and the run fails — the same check runs in the stage of the step, so the
 role is told about the missing file and writes it.
 
+The styles of a project have one name, and the house names it. The plan names the file that
+the styler writes (`src/styles.scss`); the architecture keeps that name, and its brief tells
+every role that touches the styles: the stylesheet of the project, the CSS the page loads, and
+the rule that the compiled CSS is the artifact of the build and nobody writes it by hand. When
+the architecture names a language that does not match the file of the plan, the file wins and
+the run says so. Without that one name, the roles each invented their own: the markup wrote
+`styles.css` into the page while the styler wrote `src/styles.scss`, and the build had to
+clean up the disagreement afterwards. The language of the house is SCSS, and the scaffold of a
+new project writes `src/styles.scss` — the name of the plan follows it.
+
 `--route <stages>` chooses the stages the run goes through (the stages they need are added
 automatically), `--stop-after <stage>` (or `--stop-after=<stage>`) pauses the run on the
 border of a stage, and `--resume <id>` continues it later. The name of the stage of the pause

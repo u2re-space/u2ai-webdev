@@ -18,6 +18,7 @@
  */
 
 import { architectureText } from './architect.js';
+import { stylesOf } from './style-entry.js';
 import { runStepStage } from './step.js';
 
 /** Роль, чьи шаги исполняет эта стадия. */
@@ -49,6 +50,7 @@ export async function markupStage({
     runContext = null,
 } = {}) {
     const brief = architecture ? architectureText(architecture) : '';
+    const styles = stylesOf({ plan, architecture, config });
     return await runStepStage({
         client,
         config,
@@ -66,6 +68,7 @@ export async function markupStage({
         runContext,
         context: {
             markup: architecture?.stack?.markup ?? config?.stack?.markupLanguage ?? 'html',
+            styles,
         },
     });
 }

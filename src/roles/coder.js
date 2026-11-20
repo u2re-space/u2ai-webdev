@@ -50,6 +50,9 @@ export function instructions(context = {}) {
     const stack = context.stack
         ? `The stack: ${context.stack.frontendFramework ?? 'vanilla'}, ${context.stack.markupLanguage ?? 'html'}, ${context.stack.styleLanguage ?? 'scss'}, ${context.stack.scriptLanguage ?? 'javascript'}.`
         : '';
+    const styles = context.styles?.source
+        ? `The styles of the project: the stylesheet is \`${context.styles.source}\` (${context.styles.language}), and the page loads \`${context.styles.link}\`. The script of the project imports that stylesheet, and the import names the file relative to the script (\`./styles.scss\` from \`src/main.js\`). Do not name another stylesheet: the styles have one name.`
+        : '';
     const design = context.design
         ? `The design direction, palette and any existing measurements are in the task context. Measurements are optional; use DESIGN.md and the attached reference image directly.`
         : '';
@@ -67,6 +70,7 @@ ${task}
 ${step}
 ${stack}
 ${design}
+${styles}
 ${reference}
 ${repair}
 

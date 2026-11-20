@@ -53,6 +53,9 @@ export function instructions(context = {}) {
     const style = context.style
         ? `The style language of the project: ${context.style}.`
         : 'The style language of the project: scss.';
+    const styles = context.styles?.source
+        ? `The stylesheet of the project: \`${context.styles.source}\`. That is the only stylesheet and that is its exact name: write that file, and never name another one.`
+        : '';
     const design = context.design
         ? 'The design direction, palette and any existing measurements are in the task context. Follow DESIGN.md as the style source of truth; measurements are optional. When absent, infer colours, type scale, spacing and block proportions from the attached reference image.'
         : '';
@@ -70,6 +73,7 @@ ${task}
 ${step}
 ${brief}
 ${style}
+${styles}
 ${design}
 ${reference}
 ${width}

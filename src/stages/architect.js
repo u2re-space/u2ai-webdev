@@ -25,6 +25,7 @@ import { inputContext } from '../inputs/index.js';
 import { readReferences } from '../inputs/references.js';
 import { ENUMS } from '../config/constants.js';
 import { planText } from './plan.js';
+import { styleEntryOf } from './style-entry.js';
 import { readScan, scanText } from './scan.js';
 import { runId, runFile, writeJsonFile, readJsonFile } from './workspace.js';
 
@@ -53,12 +54,13 @@ function allowed(value, allowedValues, fallback, where, warnings) {
  * Normalize the architecture of the model into the shape the stages read.
  * @param {object} data
  * @param {object} [config] the config, for the stack of the project
+ * @param {object|null} [plan] the plan of the run: it names the stylesheet
  * @returns {{ summary: string, stack: object, modules: object[], tokens: object[], notes: string,
  *   warnings: string[] }}
  * @exports
  * @ai.hint pure
  */
-export function normalizeArchitecture(data = {}, config = {}) {
+export function normalizeArchitecture(data = {}, config = {}, plan = null) {
     const warnings = [];
     const stack = config?.stack ?? {};
     const source = data && typeof data === 'object' ? data : {};
@@ -87,6 +89,15 @@ export function normalizeArchitecture(data = {}, config = {}) {
         };
     }).filter((module) => module.name);
 
+    // The styles of the project: the plan names the file, and the language follows the file.
+    // The architect does not rename what the plan named.
+    const styles = styleEntryOf({ plan, architecture: { modules, stack: normalizedStack }, config });
+    if (normalizedStack.style !== styles.language) {
+        warnings.push(`Стек: стили: архитектура называет "${normalizedStack.style}", а стили пишут `
+            + `${styles.source} — взято "${styles.language}".`);
+        normalizedStack.style = styles.language;
+    }
+
     const tokens = (Array.isArray(source.tokens) ? source.tokens : []).map((token) => {
         const item = token && typeof token === 'object' ? token : {};
         const name = String(item.name ?? '').trim().replace(/^--/, '');
@@ -104,12 +115,17 @@ export function normalizeArchitecture(data = {}, config = {}) {
         modules,
         tokens,
         notes: String(source.notes ?? '').trim(),
+        styles,
         warnings,
     };
 }
 
 /**
  * The architecture as the brief the roles read.
+ *
+ * The brief names the stylesheet of the project: one file, one language. The roles that
+ * touch the styles — the styler, the markup, the code — read the same name from here
+ * instead of guessing one each.
  * @param {object} architecture
  * @returns {string}
  * @exports
@@ -127,6 +143,19 @@ export function architectureText(architecture = {}) {
     out.push(`- scripts: ${stack.script}`);
     out.push(`- icons: ${stack.iconSet}`);
     out.push('');
+
+    const styles = architecture.styles ?? null;
+    if (styles?.source) {
+        out.push('## The styles of the project');
+        out.push(`- the stylesheet of the project: \`${styles.source}\` (${styles.language})`);
+        if (styles.link && styles.link !== styles.source) {
+            out.push(`- the page loads \`${styles.link}\`: the compiled css of that stylesheet. It is the`
+                + ' artifact of the build, not a file of the project, and nobody writes it by hand');
+        }
+        out.push('- one stylesheet, one name: the roles that touch the styles use these paths, and'
+            + ' nobody names another one');
+        out.push('');
+    }
 
     if (architecture.modules?.length) {
         out.push('## The modules');
@@ -268,7 +297,7 @@ export async function architectStage({
         };
     }
 
-    const architecture = normalizeArchitecture(result.data, config);
+    const architecture = normalizeArchitecture(result.data, config, plan);
     const file = await writeArchitecture(root, config, run, architecture);
     // The answer that does not fit the schema is kept, but it is reported.
     const schemaWarnings = (result.schemaProblems ?? []).map((problem) => `Структура не по схеме: ${problem}.`);
