@@ -343,10 +343,11 @@ test('the stages that do the steps of the plan go in the order of the plan', asy
         stages,
     });
 
-    // The plan says that the icons are picked before the styles are written.
+    // The plan says that the icons are picked before the styles are written; the icons are
+    // put into the markup of the finished page, so the stage stands after the styles.
     assert.equal(result.status, 'completed');
-    assert.deepEqual(order, ['markup', 'iconify', 'styling']);
-    assert.ok(result.warnings.some((item) => /Порядок стадий задан планом/.test(item)));
+    assert.deepEqual(order, ['markup', 'styling', 'iconify']);
+    assert.ok(result.warnings.some((item) => /Стадия иконок перенесена после стилиста/.test(item)));
 });
 
 test('the pipeline pauses on the border of a stage and may continue', async () => {

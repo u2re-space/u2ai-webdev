@@ -83,7 +83,14 @@ export const DELEGATE_NAMES = Object.freeze(Object.keys(DELEGATES));
  * hand a piece of it over.
  *
  * `editor` is in the list of the closed targets as well: the vector graphics are the work
- * of the stage `vector`, and the markup may not reach them around the corner.
+ * of the role `editor`, and the markup may not reach them around the corner.
+ *
+ * The names in a gate belong to two spaces at once, and the gate keeps them apart:
+ * `from` and `stage` are the caller (a role and the stage it runs on), `targets` are the
+ * roles the work may be handed to, and `requires` are the stages that have to start
+ * before the hand-over opens. The stage of the role `editor` is called `vector`, and the
+ * role of the stage `iconify` is `iconifier` — the names of the roles and the names of
+ * the stages do not always match.
  *
  * @type {ReadonlyArray<Readonly<{ from: string, stage: string, targets: readonly string[],
  *   requires: readonly string[], reason: string }>>}

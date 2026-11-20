@@ -123,6 +123,16 @@ export const STAGES = Object.freeze([
         apply: (ctx, result) => { ctx.setup = result?.setup ?? null; },
     },
     {
+        name: 'vector',
+        title: 'Draw the vector graphics',
+        // The graphics are drawn before the markup: the page links the files of the editor,
+        // and a markup that waits for a picture nobody draws yet is a stage that never ends.
+        dependsOn: ['setup'],
+        run: vectorStage,
+        args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
+        apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
+    },
+    {
         name: 'markup',
         title: 'Write the markup',
         dependsOn: ['setup'],
@@ -150,6 +160,17 @@ export const STAGES = Object.freeze([
         apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
     },
     {
+        name: 'iconify',
+        title: 'Choose the icons',
+        // The icons are put into the markup of the page, and the styles of the page are
+        // written before them: the stage stands after the styler and before the build, so
+        // the icons and the markup that uses them reach the bundle.
+        dependsOn: ['styling'],
+        run: iconifyStage,
+        args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
+        apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
+    },
+    {
         name: 'build',
         title: 'Connect the styles',
         dependsOn: ['styling'],
@@ -172,22 +193,6 @@ export const STAGES = Object.freeze([
             ctx.pageLogs = [...(ctx.pageLogs ?? []), ...(result?.logs ?? [])];
             ctx.reports.push(...(result?.steps ?? []));
         },
-    },
-    {
-        name: 'vector',
-        title: 'Draw the vector graphics',
-        dependsOn: ['coding'],
-        run: vectorStage,
-        args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
-        apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
-    },
-    {
-        name: 'iconify',
-        title: 'Choose the icons',
-        dependsOn: ['markup'],
-        run: iconifyStage,
-        args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
-        apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
     },
     {
         name: 'review',

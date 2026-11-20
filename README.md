@@ -93,13 +93,13 @@ report into the directory of the run and hands the result to the next one.
 | `pictures` | Prepare the crops of the reference that are pictures: the chess piece, the board, the badge. |
 | `architect` | Decide the structure of the project: the files, the modules and the order. |
 | `setup` | Prepare the environment: the scaffold, the dependencies and the entry points. |
+| `vector` | Draw the vector graphics as code: the SVG of the ornaments and the illustrations. |
 | `markup` | Write the markup of the pages. |
 | `coding` | Write the code: the scripts, the modules, the data. |
 | `styling` | Write the styles: the tokens, the layout, the states. |
+| `iconify` | Choose the icons of the interface and check that every one of them is on the disk. |
 | `build` | Connect the styles: the entry point, the compilation, the links of the markup. |
 | `sight` | Open the page in a browser, shoot it, and let the styler compare the picture with the reference and fix the styles. |
-| `vector` | Draw the vector graphics as code: the SVG of the ornaments and the illustrations. |
-| `iconify` | Choose the icons of the interface and check that every one of them is on the disk. |
 | `review` | Review the result: the markup, the code, the styles and the accessibility — and repair what it finds. |
 | `audit` | Audit the project: the dead code, the duplicates, the unused assets. |
 | `learn` | Write the lessons of the run into the permanent memory. |
@@ -127,11 +127,26 @@ a model that listens names them from the start.
 The plan decides the order of the stages that do its steps. The registry has an order of its own
 (markup, coding, styling), but the plan knows more: a step that depends on another step is done
 after it. The harness reads the dependencies of the plan and moves the stages of the steps
-accordingly — the icons are picked before the styles are written when the plan says so, and the
-scripts come after both. The order of the registry breaks the tie, so a plan that says nothing
-about the order of two stages changes nothing, and a plan with a circle in it keeps the order of
-the registry and says so in the warnings of the run. The stages that do not work on the steps of
+accordingly — the scripts come after the styles when the plan says so. The order of the registry
+breaks the tie, so a plan that says nothing about the order of two stages changes nothing. A
+circle in the graph of the stages is broken by the order of the registry, and the run says so in
+its warnings: the rest of the plan keeps its order. The stages that do not work on the steps of
 the plan keep their place: the build is after the styles, the review is after everything.
+
+Two stages have a floor of their own. The stage of the vector graphics stands before the markup:
+the page links the files of the editor, and a markup that waits for a picture nobody has drawn
+yet is a stage that never ends. The plan may put the vector somewhere else, but never in the
+middle — between the markup and the build the graphics would wait for the page and the page would
+wait for the graphics. The vector stands either before the markup or at the very end of the
+chain, after the build and the sight of the page. When the markup is already done and the run
+continues, the vector stands before the build: the build carries `public/` into the bundle, and
+an asset drawn after it never reaches the distribution.
+
+The stage of the icons stands after the styler. The icons are put into the markup of the
+finished page, so the styles of the page are written first: when the icons are picked before
+the styles, the markup changes under rules that do not exist yet. The floor wins over the plan —
+a plan that asks for the icons before the styles is told that the stage moved, and the icons
+still reach the bundle, because the stage stands before the build.
 
 A step writes its own files. The plan divides the work of the project between the steps, and
 every step owns its files: a role that picks the icons does not rewrite the styles of the
