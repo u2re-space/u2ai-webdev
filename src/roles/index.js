@@ -48,6 +48,7 @@ import { houseModelRef } from '../model/trust.js';
 import { pageFrameContractFor } from './page-frame.js';
 
 import * as untrusted from './untrusted.js';
+import * as scanner from './scanner.js';
 import * as planner from './planner.js';
 import * as architect from './architect.js';
 import * as director from './director.js';
@@ -66,6 +67,7 @@ import * as learner from './learner.js';
  * @type {Readonly<Record<string, object>>}
  */
 export const ROLES = Object.freeze({
+    scanner,
     planner,
     architect,
     director,

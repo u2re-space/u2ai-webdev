@@ -24,6 +24,7 @@
  */
 
 import { collectStage } from './collect.js';
+import { scanStage } from './scan.js';
 import { picturesStage } from './pictures.js';
 import { planStage } from './plan.js';
 import { architectStage } from './architect.js';
@@ -75,6 +76,16 @@ export const STAGES = Object.freeze([
         run: collectStage,
         args: (ctx) => ({ memory: ctx.memory ?? null }),
         apply: (ctx, result) => { ctx.inputs = result?.inputs ?? null; },
+    },
+    {
+        name: 'scan',
+        title: 'Scan the project',
+        // The project is read before the plan: the planner starts from what is on the disk,
+        // not from what it assumes about it.
+        dependsOn: ['collect'],
+        run: scanStage,
+        args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
+        apply: (ctx, result) => { ctx.scan = result?.scan ?? null; },
     },
     {
         name: 'plan',

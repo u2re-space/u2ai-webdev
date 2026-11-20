@@ -559,7 +559,7 @@ export async function planCommand(ctx) {
             config,
             root: cwd,
             task,
-            stageNames: ['collect', 'plan'],
+            stageNames: ['collect', 'scan', 'plan'],
             notify,
             env,
         });

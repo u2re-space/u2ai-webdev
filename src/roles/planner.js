@@ -43,6 +43,7 @@ export function instructions(context = {}) {
         ? `The stack of the project: ${context.stack.frontendFramework ?? 'vanilla'}, ${context.stack.markupLanguage ?? 'html'}, ${context.stack.styleLanguage ?? 'scss'}, ${context.stack.scriptLanguage ?? 'javascript'}.`
         : '';
     const design = context.design ? `The design direction is in the task context. Treat it as the source of truth for the look.` : '';
+    const survey = context.survey ? 'The survey of the project is in the task context: the scanner read the files before you.' : '';
     const reference = referenceNote(context);
     return `You are the planner of a web project. You do not write the code — you decide what
 has to be done, in which order, and how one knows that each step is done.
@@ -51,6 +52,7 @@ ${task}
 ${kind}
 ${stack}
 ${design}
+${survey}
 ${reference}
 
 Rules:
@@ -61,6 +63,8 @@ ${INPUTS_IN_CONTEXT}
 - The plan has at least two steps. If the task needs one step, it is still a plan — say what the
   step is and how it is checked.
 - Read the project first: the files that already exist decide what the plan may assume.
+  The survey of the scanner is that reading: the files it names are on the disk, and a step
+  that names a file the survey does not know is a step that starts from nothing.
 - A reference picture is a visual source of truth even when no measurement sheet exists. Use
   the attached screenshot and \`DESIGN.md\` directly; infer the hierarchy, proportions, palette,
   typography and spacing visually. Never require or call a measurer.

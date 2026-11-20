@@ -33,6 +33,7 @@ import { runId as makeRunId } from './stages/workspace.js';
 import { enabledStages } from './stages/index.js';
 import { planOrder } from './stages/plan-order.js';
 import { readPlan } from './stages/plan.js';
+import { readScan } from './stages/scan.js';
 import { readArchitecture } from './stages/architect.js';
 import { readSetup } from './stages/setup.js';
 import { readReview } from './stages/review.js';
@@ -293,6 +294,7 @@ export async function runPipeline({
         memoryText: '',
         apply: filesAllowed(config),
         plan: null,
+        scan: null,
         architecture: null,
         setup: null,
         build: null,
@@ -354,6 +356,7 @@ export async function runPipeline({
         // The artifacts of the finished stages are read back, so the run continues with
         // the same plan and the same structure.
         ctx.plan = await readPlan(root, config, run);
+        ctx.scan = await readScan(root, config, run);
         ctx.architecture = await readArchitecture(root, config, run);
         ctx.setup = await readSetup(root, config, run);
         // The collected inputs and the prepared pictures too: the stages that are skipped

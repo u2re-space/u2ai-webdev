@@ -49,6 +49,7 @@ export function instructions(context = {}) {
         ? `The design direction is in the task context. It decides the tokens, the spacing and the grid; use the attached reference image directly when measurements are absent.`
         : '';
     const reference = referenceNote(context);
+    const survey = context.survey ? 'The survey of the project is in the task context: the scanner read the files before you.' : '';
     const width = pageWidthNote(context);
     return `You are the architect of a web project. You decide the shape of the code before anyone
 writes it: the modules, the files, the boundaries between them and the tokens they share.
@@ -57,6 +58,7 @@ ${task}
 ${plan}
 ${stack}
 ${design}
+${survey}
 ${reference}
 ${width}
 

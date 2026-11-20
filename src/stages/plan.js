@@ -24,6 +24,7 @@ import { runRole, roleReason } from '../roles/index.js';
 import { inputContext } from '../inputs/index.js';
 import { readReferences } from '../inputs/references.js';
 import { runId, runFile, writeJsonFile, readJsonFile } from './workspace.js';
+import { readScan, scanText } from './scan.js';
 import { planRole } from './roles.js';
 
 /**
@@ -283,7 +284,10 @@ export async function planStage({
 
     const run = id ?? runId();
     const context = inputs ? inputContext(inputs) : '';
-    const prompt = [String(task ?? '').trim(), context].filter(Boolean).join('\n\n');
+    // The survey of the project: the planner starts from what the scanner found on the disk.
+    const scan = await readScan(root, config, run);
+    const survey = scan ? scanText(scan) : '';
+    const prompt = [String(task ?? '').trim(), context, survey].filter(Boolean).join('\n\n');
     const reference = await readReferences(root, inputs?.references ?? []);
     const stack = config?.stack ?? {};
 
@@ -299,6 +303,7 @@ export async function planStage({
             stack,
             design: Boolean(context),
             project: root,
+            survey,
             reference: reference.names,
             referenceSizes: reference.sizes,
         },

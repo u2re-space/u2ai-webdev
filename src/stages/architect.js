@@ -25,6 +25,7 @@ import { inputContext } from '../inputs/index.js';
 import { readReferences } from '../inputs/references.js';
 import { ENUMS } from '../config/constants.js';
 import { planText } from './plan.js';
+import { readScan, scanText } from './scan.js';
 import { runId, runFile, writeJsonFile, readJsonFile } from './workspace.js';
 
 /** The name of the file of the architecture inside the directory of the run. */
@@ -222,6 +223,10 @@ export async function architectStage({
     if (planBlock) blocks.push(planBlock);
     const inputBlock = inputs ? inputContext(inputs) : '';
     if (inputBlock) blocks.push(inputBlock);
+    // The survey of the project: the architect structures what is on the disk.
+    const scan = await readScan(root, config, run);
+    const survey = scan ? scanText(scan) : '';
+    if (survey) blocks.push(survey);
     // The reference of the design: the architect sees the picture it has to structure.
     const reference = await readReferences(root, inputs?.references ?? []);
 
@@ -235,6 +240,7 @@ export async function architectStage({
             plan,
             stack: config?.stack ?? {},
             design: Boolean(inputBlock),
+            survey,
             reference: reference.names,
             referenceSizes: reference.sizes,
         },

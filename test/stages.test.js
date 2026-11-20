@@ -16,6 +16,7 @@ import path from 'node:path';
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 
 import { normalizePlan, orderSteps, planText, planStage, writePlan, readPlan } from '../src/stages/plan.js';
+import { normalizeScan, scanText, scanStage, writeScan, readScan } from '../src/stages/scan.js';
 import { collectStage, collectText, componentCards, readInputs } from '../src/stages/collect.js';
 import { collectInputs } from '../src/inputs/index.js';
 import { normalizeArchitecture, architectureText, architectStage } from '../src/stages/architect.js';
@@ -28,6 +29,7 @@ import { role as stylingRole } from '../src/stages/styling.js';
 import { role as vectorRole } from '../src/stages/vector.js';
 import { role as iconifyRole } from '../src/stages/iconify.js';
 import { openRegistry } from '../src/registry.js';
+import { ROLES } from '../src/roles/index.js';
 
 /** Стадии, которые берут шаги плана, и роль каждой из них. */
 const modules = {
@@ -219,8 +221,97 @@ test('the plan of a run is written to the file of the run and read back', async 
     assert.equal(await readPlan(root, config, 'run-2'), null);
 });
 
-test('the stage of the plan asks the planner and writes the plan', async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-plan2-'));
+test('the survey is normalized: the files and the roles of the files', () => {
+    const scan = normalizeScan({
+        summary: 'A small landing.',
+        project: 'A static landing with Vite.',
+        stack: { framework: 'vite', markup: 'html', style: 'scss', script: 'javascript' },
+        files: [
+            { path: 'index.html', role: 'edit', reason: 'the page of the landing' },
+            { path: 'src/main.js', role: 'read', reason: 'the script of the page' },
+            { path: 'src/styles/main.scss', role: 'keep', reason: 'the styles are not touched' },
+            { path: 'nowhere.js', role: 'write', reason: 'a wrong role' },
+        ],
+        conventions: ['The naming is kebab-case.'],
+        risks: ['The manifest is missing.'],
+        questions: [],
+        notes: 'The project is small.',
+    });
+    assert.equal(scan.files.length, 4);
+    assert.equal(scan.files[3].role, 'read');
+    assert.ok(scan.warnings.some((item) => /nowhere\.js/.test(item)));
+    const text = scanText(scan);
+    assert.match(text, /# The survey of the project/);
+    assert.match(text, /index\.html \(edit\)/);
+    assert.match(text, /The naming is kebab-case/);
+});
+
+test('the stage of the scan asks the scanner and writes the survey', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-scan-'));
+    const client = fakeClient([schemaAnswer('scan', {
+        summary: 'A small landing.',
+        project: 'A static landing with Vite.',
+        stack: { framework: 'vite', markup: 'html', style: 'scss', script: 'javascript' },
+        files: [{ path: 'index.html', role: 'edit', reason: 'the page of the landing' }],
+        conventions: ['The naming is kebab-case.'],
+        risks: [],
+        questions: [],
+        notes: '',
+    })]);
+
+    const result = await scanStage({
+        client,
+        config: { output: { work: './.tmp' } },
+        root,
+        task: 'Make a landing.',
+        runId: 'run-scan',
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.scan.files[0].path, 'index.html');
+    assert.match(result.file, /scan\.json$/);
+    const saved = JSON.parse(await readFile(result.file, 'utf8'));
+    assert.equal(saved.project, 'A static landing with Vite.');
+    // The scanner reads and does not write.
+    assert.ok(!ROLES.scanner.tools.some((name) => ['write_file', 'replace_text', 'run_command'].includes(name)));
+});
+
+test('the planner reads the survey of the project', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-scan-plan-'));
+    const config = { output: { work: './.tmp' } };
+    await writeScan(root, config, 'run-1', normalizeScan({
+        summary: 'A small landing.',
+        project: 'A static landing with Vite.',
+        stack: {},
+        files: [{ path: 'index.html', role: 'edit', reason: 'the page of the landing' }],
+        conventions: [],
+        risks: [],
+        questions: [],
+        notes: '',
+    }));
+
+    const client = fakeClient([schemaAnswer('plan', {
+        summary: 'A landing page.',
+        steps: [{ id: 'a', title: 'Markup', role: 'markup', dependsOn: [], files: ['index.html'], criteria: ['opens'] }],
+        risks: [],
+        questions: [],
+    })]);
+    await planStage({
+        client,
+        config,
+        root,
+        task: 'Make a landing.',
+        runId: 'run-1',
+    });
+
+    // The survey travels with the request of the planner.
+    assert.match(JSON.stringify(client.requests[0].input), /The survey of the project/);
+    assert.match(JSON.stringify(client.requests[0].input), /index\.html \(edit\)/);
+    // The survey is read back from the disk when the run continues.
+    assert.equal((await readScan(root, config, 'run-1')).project, 'A static landing with Vite.');
+});
+
+test('the stage of the plan asks the planner and writes the plan', async () => {    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-plan2-'));
     const client = fakeClient([schemaAnswer('plan', {
         summary: 'A landing page.',
         steps: [{ id: 'a', title: 'Markup', role: 'markup', dependsOn: [], files: ['index.html'], criteria: ['opens'] }],

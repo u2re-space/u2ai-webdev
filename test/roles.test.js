@@ -124,7 +124,7 @@ function codeData() {
 
 test('every built-in role is in the registry', () => {
     for (const name of [
-        'planner', 'architect', 'director', 'coder', 'markup', 'styler',
+        'scanner', 'planner', 'architect', 'director', 'coder', 'markup', 'styler',
         'iconifier', 'installer', 'editor', 'reviewer', 'auditor', 'learner',
     ]) {
         assert.ok(ROLES[name], `the role ${name} is missing`);
@@ -132,7 +132,18 @@ test('every built-in role is in the registry', () => {
         assert.ok(Array.isArray(ROLES[name].tools));
         assert.ok(Number.isInteger(ROLES[name].maxTurns));
     }
-    assert.equal(ROLE_NAMES.length, 12);
+    assert.equal(ROLE_NAMES.length, 13);
+});
+
+test('the scanner reads the project and does not plan', () => {
+    const text = ROLES.scanner.instructions({ task: 'Make a landing.' });
+    assert.match(text, /You are the scanner of a web project/);
+    assert.match(text, /Report only what is on the disk/);
+    assert.match(text, /Do not plan the work/);
+    // The scanner only reads: it writes nothing and runs nothing.
+    for (const name of ['write_file', 'replace_text', 'run_command', 'run_script']) {
+        assert.ok(!ROLES.scanner.tools.includes(name), `the scanner has ${name}`);
+    }
 });
 
 test('a role is resolved from the config', () => {

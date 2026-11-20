@@ -89,6 +89,7 @@ report into the directory of the run and hands the result to the next one.
 | Stage | What it does |
 |---|---|
 | `collect` | Read the inputs of the project, the map of the project, the registry of the components, the skill packs and the memory. |
+| `scan` | Read the project itself: what it is, which files matter, its conventions and its risks. |
 | `plan` | Break the task into steps, each with its role, its files and its check. |
 | `pictures` | Prepare the crops of the reference that are pictures: the chess piece, the board, the badge. |
 | `architect` | Decide the structure of the project: the files, the modules and the order. |
@@ -640,6 +641,7 @@ turns.
 
 | Role | What it does |
 |---|---|
+| `scanner` | Read the project before the plan and report what is there. |
 | `planner` | Break the task into steps. |
 | `architect` | Design the structure of the project. |
 | `director` | Lead the steps of the plan and keep the whole in one state. |
@@ -671,6 +673,29 @@ the iconifier before the styles are written.
 The vector editor has no shell: the graphics are text, and the stage itself parses and tidies
 every SVG the editor writes. A command line there would only let the role hunt for a validator
 it does not need — and wait for it.
+
+## The survey of the project
+
+The stage `scan` runs right after the collection of the inputs and before the plan. The role
+`scanner` reads the project — the listing, the manifest, the entry points, the rules of the
+project and the files the task names — and answers with a survey:
+
+- what the project is and what state it is in;
+- the stack the project uses now, read from the disk and not from the wishes of the house;
+- the files that matter for the task: `edit` for the files the task has to change, `read` for
+  the files it has to read, `keep` for the files it leaves alone;
+- the conventions of the project and where each rule comes from;
+- the risks: a missing file, a broken config, a dependency that is not installed;
+- the questions the project cannot answer by itself.
+
+The scanner only reads: it writes nothing and runs nothing. Its report is written to the
+directory of the run (`scan.json`) and goes into the context of the run, so the planner and the
+architect start from what is on the disk and not from what they assume about it. A plan that
+names a file the survey does not know starts from nothing.
+
+The scanner works on the model of the run at `medium`: it reads and reports, it does not
+decide. The decisions belong to the architect, which answers with the senior model of the
+house.
 
 The three roles that write the frontend — `markup`, `coder` and `styler` — also get the standard
 of the frontend work (`src/roles/web-development.js`): the rules that hold for every file, the

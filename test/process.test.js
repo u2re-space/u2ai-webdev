@@ -164,6 +164,13 @@ test('the registry of the stages knows the order and the dependencies', () => {
     assert.deepEqual(stageDependencies('pictures'), ['plan']);
     assert.ok(order.stages.findIndex((stage) => stage.name === 'plan')
         < order.stages.findIndex((stage) => stage.name === 'pictures'));
+
+    // The survey comes before the plan: the project is read before it is planned.
+    assert.deepEqual(stageDependencies('scan'), ['collect']);
+    assert.ok(order.stages.findIndex((stage) => stage.name === 'collect')
+        < order.stages.findIndex((stage) => stage.name === 'scan'));
+    assert.ok(order.stages.findIndex((stage) => stage.name === 'scan')
+        < order.stages.findIndex((stage) => stage.name === 'plan'));
 });
 
 test('a stage that is switched off is not in the list', () => {

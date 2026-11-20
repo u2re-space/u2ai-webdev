@@ -24,7 +24,7 @@ export const ENUMS = Object.freeze({
   backendRoutes: Object.freeze(['responses', 'chat']),
   /** Pipeline stages in execution order. */
   stages: Object.freeze([
-    'collect', 'pictures', 'plan', 'architect', 'setup',
+    'collect', 'scan', 'pictures', 'plan', 'architect', 'setup',
     'markup', 'coding', 'styling', 'build', 'sight',
     'vector', 'iconify',
     'review', 'audit', 'learn',
@@ -61,7 +61,7 @@ export const ENUMS = Object.freeze({
 
 /** The roles that always exist; user roles are validated against the schema only. */
 export const BUILTIN_ROLE_NAMES = Object.freeze([
-  'planner', 'architect', 'director', 'coder', 'markup', 'styler',
+  'scanner', 'planner', 'architect', 'director', 'coder', 'markup', 'styler',
   'iconifier', 'installer', 'editor', 'reviewer', 'auditor', 'learner',
 ]);
 

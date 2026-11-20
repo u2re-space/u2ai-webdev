@@ -14,12 +14,14 @@ import { ENUMS } from './constants.js';
  * The effort of every role of the run, by the stage it works in.
  *
  * The markup and the styles carry the look of the reference: they get the deepest
- * reasoning (`xhigh`). Every other stage works on `high`: the code, the icons, the
- * setup, the review and the audit answer on a model that thinks long enough to be
- * right, and the stages that only decide — the plan, the architecture — pay for the
- * seconds of the thinking on a plan that may be thrown away.
+ * reasoning (`xhigh`). The scanner reads the project and reports it: it works on
+ * `medium`, because the files answer faster than the plans do. Every other stage works on
+ * `high`: the code, the icons, the setup, the review and the audit answer on a model that
+ * thinks long enough to be right, and the stages that only decide — the plan, the
+ * architecture — pay for the seconds of the thinking on a plan that may be thrown away.
  */
 export const STAGE_EFFORT = Object.freeze({
+    scanner: 'medium',
     planner: 'high',
     architect: 'high',
     director: 'high',
@@ -373,6 +375,7 @@ export const defaults = {
   stages: {
     plan: { enabled: true, maxTurns: 12, timeoutMs: null },
     collect: { enabled: true, maxTurns: 8, timeoutMs: null },
+    scan: { enabled: true, maxTurns: 10, timeoutMs: null },
     pictures: { enabled: true, maxTurns: 4, timeoutMs: null },
     architect: { enabled: true, maxTurns: 16, timeoutMs: null },
     setup: { enabled: true, maxTurns: 8, timeoutMs: null },
@@ -692,6 +695,7 @@ export const defaults = {
    */
   roles: {
     default: { model: null, effort: null, summary: null, maxEffort: null, context: null, temperature: null, maxOutputTokens: null, instructions: null, tools: null },
+    scanner: {},
     planner: {},
     architect: {},
     director: {},

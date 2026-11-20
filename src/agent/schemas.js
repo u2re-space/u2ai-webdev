@@ -96,6 +96,26 @@ const issueSchema = strictObject({
  * @type {Readonly<Record<string, object>>}
  */
 export const SCHEMAS = Object.freeze({
+    scan: strictObject({
+        summary: str('What the project is and what state it is in, in two or three sentences.'),
+        project: str('The kind of the project: what it is and what it is made of.'),
+        stack: strictObject({
+            framework: str('The framework the project uses now, or an empty string.'),
+            markup: str('The markup language the project uses now, or an empty string.'),
+            style: str('The style language the project uses now, or an empty string.'),
+            script: str('The script language the project uses now, or an empty string.'),
+        }),
+        files: arr(strictObject({
+            path: str('The path of the file, relative to the root of the project.'),
+            role: str('What the task does with the file: edit, read or keep.'),
+            reason: str('Why the file matters for the task.'),
+        }), 'The files that matter for the task.'),
+        conventions: arr(str('A rule of the project and where it comes from.'), 'The conventions of the project.'),
+        risks: arr(str('A fact that may break the work, and what to do about it.'), 'The risks of the work.'),
+        questions: arr(str('A question the project cannot answer by itself.'), 'The questions for the user.'),
+        notes: str('What the reader of the survey needs to know and the rest of the report does not say.'),
+    }),
+
     plan: strictObject({
         summary: str('What the task is, in two or three sentences.'),
         steps: arr(strictObject({

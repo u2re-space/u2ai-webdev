@@ -45,6 +45,7 @@ export * from './stages/workspace.js';
 export * from './stages/publish.js';
 export * from './stages/plan.js';
 export * from './stages/collect.js';
+export * from './stages/scan.js';
 export * from './stages/architect.js';
 export * from './stages/setup.js';
 export * from './stages/step.js';

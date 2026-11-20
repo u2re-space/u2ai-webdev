@@ -2241,6 +2241,32 @@ CLI `ai-webdev` (`@u2ai/webdev`) с собственным конфигом `~/.
       пин роли перебивает модель дома
 - [x] README (EN) — модели дома и лестницы рангов
 - [x] Проверка: `npm test`, `npm run check`, `git diff --check`
+
+### step-102 — Роль `scanner` и стадия `scan`
+
+- [x] Повод: план составлялся по догадкам о проекте — сканера, который читает проект до
+      плана, у пакета не было, а план без знания файлов начинается с нуля
+- [x] `src/roles/scanner.js` — новая роль: читает проект (список файлов, манифест, точки
+      входа, правила проекта, файлы задачи) и отвечает отчётом. Только чтение: ни одного
+      инструмента записи и ни оболочки
+- [x] `src/agent/schemas.js` — схема `scan`: что за проект, стек на диске, файлы с ролями
+      (`edit`, `read`, `keep`), правила проекта, риски, вопросы, заметки
+- [x] `src/stages/scan.js` — стадия: `normalizeScan()`, `scanText()`, запись `scan.json` в
+      каталог прогона и отчёт в контекст прогона
+- [x] `src/stages/index.js` — стадия `scan` между `collect` и `plan`: проект читается до
+      плана
+- [x] `src/stages/plan.js`, `src/stages/architect.js`, `src/roles/planner.js`,
+      `src/roles/architect.js` — план и архитектура читают отчёт сканирования
+- [x] `src/pipeline.js` — при продолжении прогона отчёт читается с диска
+- [x] `src/config/constants.js`, `src/config/defaults.js` — стадия и роль в реестре, усилие
+      `medium` (сканер читает, а не решает), `stages.scan` в конфигурации
+- [x] `src/cli/run.js`, `src/cli/input.js` — команда `ai-webdev plan` проходит через
+      сканирование, панель знает новую стадию
+- [x] `test/stages.test.js`, `test/roles.test.js`, `test/process.test.js` — тесты: отчёт
+      нормализуется и пишется, планировщик читает отчёт, сканер только читает, стадия идёт
+      до плана
+- [x] README (EN) — стадия сканирования и роль сканера
+- [x] Проверка: `npm test`, `npm run check`, `git diff --check`
 - [x] Проверка: `npm test`, `npm run check`, `git diff --check`
 
 ---
