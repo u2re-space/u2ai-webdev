@@ -364,9 +364,10 @@ test('the coder keeps out of the environment and out of the styles', () => {
     // The environment is the work of the stage `setup`.
     assert.match(text, /The environment is the work of another stage/);
     assert.match(text, /install the dependencies, do not change/);
-    // The stylesheets belong to the styler.
-    assert.match(text, /The stylesheets belong to the styler/);
-    assert.match(text, /do not read them and do not change them/);
+    // The stylesheets belong to the styler, and the code is written against them.
+    assert.match(text, /The stylesheets are written before your code/);
+    assert.match(text, /Read the stylesheets of the project/);
+    assert.match(text, /Do not change the stylesheets/);
     // The production build belongs to the stage `build`, which runs after the styles.
     assert.match(text, /production build of the project is the work of the stage `build`/);
     assert.match(text, /do not start a loop of build-and-fix/);

@@ -67,15 +67,30 @@ test('the plan decides the order of the stages that do its steps', () => {
     assert.ok(names.indexOf('build') < names.indexOf('review'));
     assert.equal(names[0], 'collect');
     assert.equal(names[names.length - 1], 'learn');
-    assert.ok(warnings.some((item) => /Порядок стадий задан планом/.test(item)));
+    assert.ok(warnings.some((item) => /Стадия иконок перенесена после кода/.test(item)));
 });
 
-test('the icons are picked after the styles, even when the plan says the opposite', () => {
+test('the styles are written before the code, even when the plan says the opposite', () => {
+    const plan = {
+        steps: [
+            { id: 'code-1', title: 'Code', role: 'coder', dependsOn: [], files: ['src/main.js'] },
+            { id: 'style-1', title: 'Styles', role: 'styler', dependsOn: ['code-1'], files: ['src/styles/main.css'] },
+        ],
+    };
+    const { stages, warnings } = planOrder([...STAGES], plan);
+    const names = stages.map((stage) => stage.name);
+    // The plan asked for the code before the styles; the floor of the stage wins.
+    assert.ok(names.indexOf('styling') < names.indexOf('coding'), names.join(' → '));
+    assert.ok(warnings.some((item) => /Стадия кода перенесена после стилиста/.test(item)));
+});
+
+test('the icons are picked after the code, even when the plan says the opposite', () => {
     const { stages, warnings } = planOrder([...STAGES], PLAN);
     const names = stages.map((stage) => stage.name);
     // The plan asked for the icons before the styles; the floor of the stage wins.
     assert.ok(names.indexOf('iconify') > names.indexOf('styling'), names.join(' → '));
-    assert.ok(warnings.some((item) => /Стадия иконок перенесена после стилиста/.test(item)));
+    assert.ok(names.indexOf('iconify') > names.indexOf('coding'), names.join(' → '));
+    assert.ok(warnings.some((item) => /Стадия иконок перенесена после кода/.test(item)));
 });
 
 test('the iconify stage never stands before the styler', () => {
@@ -89,6 +104,12 @@ test('the iconify stage never stands before the styler', () => {
     const kept = placeIconifyStage(['markup', 'coding', 'styling', 'iconify', 'build', 'sight']);
     assert.equal(kept.moved, false);
     assert.deepEqual(kept.names, ['markup', 'coding', 'styling', 'iconify', 'build', 'sight']);
+
+    // The icons before the code go after it: the code is written against the styles.
+    const afterCode = placeIconifyStage(['markup', 'styling', 'iconify', 'coding', 'build', 'sight']);
+    assert.equal(afterCode.moved, true);
+    assert.ok(afterCode.names.indexOf('iconify') > afterCode.names.indexOf('coding'));
+    assert.ok(afterCode.names.indexOf('iconify') < afterCode.names.indexOf('build'));
 });
 
 test('a plan without dependencies keeps the order of the registry', () => {
@@ -106,8 +127,8 @@ test('the plan moves only the stages it says something about', () => {
     };
     const { stages } = planOrder([...STAGES], plan);
     const names = stages.map((stage) => stage.name);
-    // The registry order says the same thing here: the code is before the styles.
-    assert.ok(names.indexOf('coding') < names.indexOf('styling'));
+    // The floor of the styles wins here too: the styles are the contract the code follows.
+    assert.ok(names.indexOf('styling') < names.indexOf('coding'));
 });
 
 test('a circle in the plan is broken by the registry and says so', () => {
@@ -123,7 +144,8 @@ test('a circle in the plan is broken by the registry and says so', () => {
     // every stage is still there exactly once.
     assert.equal(names.length, STAGES.length);
     assert.equal(new Set(names).size, STAGES.length);
-    assert.ok(names.indexOf('coding') < names.indexOf('styling'));
+    // The registry puts the styles before the code, and the floor of the styles keeps it.
+    assert.ok(names.indexOf('styling') < names.indexOf('coding'), names.join(' → '));
     assert.ok(warnings.some((item) => /круг зависимостей/.test(item)));
 });
 

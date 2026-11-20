@@ -83,8 +83,10 @@ ${INPUTS_IN_CONTEXT}
   pictures only when they exist and the step uses them. A step for \`package.json\`, for the
   lock file or for the config of the bundler is not a step: the stage \`setup\` writes them
   before the markup, and a step that names them is dropped from the plan.
-- The steps come in an order that can be executed: the markup before the styles, the setup
-  before the code that needs the dependencies, the icons before the page that uses them.
+- The steps come in an order that can be executed: the markup before the styles, the styles
+  before the code — the styles name the classes and the tokens the code uses, so the code is
+  written against them —, the setup before the code that needs the dependencies, the icons
+  before the page that uses them.
 - Every step names the files it touches. The paths are relative to the root of the project.
 - Every step has criteria that can be checked without asking a human: "the page opens and the
   menu works" is a criterion, "the code is good" is not.

@@ -193,7 +193,7 @@ test('the registry of the stages knows the order and the dependencies', () => {
     assert.ok(STAGE_NAMES.includes('learn'));
     assert.equal(stageByName('plan').name, 'plan');
     assert.equal(stageByName('nowhere'), null);
-    assert.deepEqual(stageDependencies('coding'), ['markup']);
+    assert.deepEqual(stageDependencies('coding'), ['styling']);
     assert.deepEqual(stageDependencies('nowhere'), []);
 
     const order = stageOrder([...STAGES]);
@@ -395,7 +395,7 @@ test('the stages that do the steps of the plan go in the order of the plan', asy
     // put into the markup of the finished page, so the stage stands after the styles.
     assert.equal(result.status, 'completed');
     assert.deepEqual(order, ['markup', 'styling', 'iconify']);
-    assert.ok(result.warnings.some((item) => /Стадия иконок перенесена после стилиста/.test(item)));
+    assert.ok(result.warnings.some((item) => /Стадия иконок перенесена после кода/.test(item)));
 });
 
 test('the pipeline pauses on the border of a stage and may continue', async () => {

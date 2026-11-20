@@ -19,13 +19,14 @@
  *
  * @depends stages/roles
  * @usedBy pipeline
- * @exports PLAN_STAGES, planEdges, planOrder, placeVectorStage, placeIconifyStage
+ * @exports PLAN_STAGES, planEdges, planOrder, placeVectorStage, placeIconifyStage, placeStylesBeforeCode
  * @ai.tags stages, plan, order
  * @ai.hint pure
  * @changed 2026-11-15 Порядок стадий, которые делают шаги плана, задаёт сам план.
  * @changed 2026-11-20 Круг зависимостей рвётся порядком реестра, а не отменяет план.
  * @changed 2026-11-20 Стадия вектора не стоит в середине: до разметки или в самом конце.
  * @changed 2026-11-20 Стадия иконок стоит после стилиста.
+ * @changed 2026-11-20 Стадия кода стоит после стилиста: стили задают контракт страницы.
  */
 
 import { LIVE_ROLES, stageForRole } from './roles.js';
@@ -97,6 +98,34 @@ const VECTOR_AFTER = 'sight';
 const VECTOR_BEFORE_BUILD = 'build';
 const ICONIFY_STAGE = 'iconify';
 const ICONIFY_AFTER = 'styling';
+const STYLING_STAGE = 'styling';
+const CODING_STAGE = 'coding';
+
+/**
+ * Поставить стадию кода после стилиста.
+ *
+ * Стили задают контракт страницы: имена классов и токены. Код пишется по этому
+ * контракту, а не по своему представлению о нём, поэтому стили идут раньше кода.
+ * План может попросить наоборот — код написан, а стили дописываются по нему; такой
+ * порядок ломает пол, и прогон говорит об этом.
+ *
+ * @param {string[]} names имена стадий в порядке прогона
+ * @returns {{ names: string[], moved: boolean }}
+ * @exports
+ * @ai.hint pure
+ */
+export function placeStylesBeforeCode(names = []) {
+    const list = Array.isArray(names) ? [...names] : [];
+    const styling = list.indexOf(STYLING_STAGE);
+    const coding = list.indexOf(CODING_STAGE);
+    if (styling < 0 || coding < 0) return { names: list, moved: false };
+    if (coding > styling) return { names: list, moved: false };
+    // Код раньше стилей: код встаёт прямо после стилиста.
+    list.splice(coding, 1);
+    const target = list.indexOf(STYLING_STAGE);
+    list.splice(target < 0 ? list.length : target + 1, 0, CODING_STAGE);
+    return { names: list, moved: true };
+}
 
 /**
  * Поставить стадию вектора на её место: до разметки, до сборки или в конец цепочки.
@@ -144,11 +173,15 @@ export function placeVectorStage(names = []) {
 }
 
 /**
- * Поставить стадию иконок после стилиста.
+ * Поставить стадию иконок после кода и после стилей.
  *
- * Иконки ложатся в разметку готовой страницы, и стили страницы пишутся раньше них: когда
- * иконки выбираются до стилей, разметка меняется под правилами, которых для неё ещё нет.
- * Стадия иконок не встаёт раньше стилиста, даже если план этого просит.
+ * Иконки ложатся в разметку готовой страницы, и страница готова, когда написаны и стили,
+ * и код: пока стили не написаны, разметка меняется под правил, которых для неё ещё нет;
+ * пока не написан код, страница не делает ничего. Стадия иконок не встаёт раньше них,
+ * даже если план этого просит.
+ *
+ * Якорь — та из двух стадий, что идёт позже: код стоит после стилей, и иконки встают
+ * после кода. Когда кода в прогоне нет (стадия выключена), якорем остаются стили.
  *
  * @param {string[]} names имена стадий в порядке прогона
  * @returns {{ names: string[], moved: boolean }}
@@ -158,11 +191,17 @@ export function placeVectorStage(names = []) {
 export function placeIconifyStage(names = []) {
     const list = Array.isArray(names) ? [...names] : [];
     const iconify = list.indexOf(ICONIFY_STAGE);
+    if (iconify < 0) return { names: list, moved: false };
     const styling = list.indexOf(ICONIFY_AFTER);
-    if (iconify < 0 || styling < 0) return { names: list, moved: false };
-    if (iconify > styling) return { names: list, moved: false };
+    const coding = list.indexOf(CODING_STAGE);
+    // Якорь — поздняя из двух стадий.
+    let anchor = ICONIFY_AFTER;
+    if (coding >= 0 && (styling < 0 || coding > styling)) anchor = CODING_STAGE;
+    const at = list.indexOf(anchor);
+    if (at < 0) return { names: list, moved: false };
+    if (iconify > at) return { names: list, moved: false };
     list.splice(iconify, 1);
-    const target = list.indexOf(ICONIFY_AFTER);
+    const target = list.indexOf(anchor);
     list.splice(target < 0 ? list.length : target + 1, 0, ICONIFY_STAGE);
     return { names: list, moved: true };
 }
@@ -253,11 +292,18 @@ export function planOrder(stages = [], plan = null) {
                 + 'сама себя — разметка ждёт ассеты, которых ещё нет.');
     }
 
-    // Стадия иконок: не раньше стилиста.
-    const withIcons = placeIconifyStage(placed.names);
+    // Стадия кода: после стилиста.
+    const withStyles = placeStylesBeforeCode(placed.names);
+    if (withStyles.moved) {
+        warnings.push('Стадия кода перенесена после стилиста: стили задают контракт страницы — '
+            + 'имена классов и токены, — и код пишется по этому контракту.');
+    }
+
+    // Стадия иконок: не раньше кода и не раньше стилей.
+    const withIcons = placeIconifyStage(withStyles.names);
     if (withIcons.moved) {
-        warnings.push('Стадия иконок перенесена после стилиста: иконки ложатся в разметку '
-            + 'готовой страницы, и стили страницы пишутся раньше них.');
+        warnings.push('Стадия иконок перенесена после кода: иконки ложатся в разметку готовой '
+            + 'страницы, а страница готова, когда написаны и стили, и код.');
     }
 
     const byName = new Map(list.map((stage) => [stage.name, stage]));

@@ -144,6 +144,9 @@ ${devToolsNote({
   A \`@use\` of a file that was never written breaks the build of the project — the page stays without styles.
 - The SCSS has an entry point: a file whose name does not start with an underscore and that \`@use\`s the other files of the styles. A file that nobody uses renders nothing.
 - The styles answer to the class names of the markup. Do not invent a second naming.
+- The code is written after the styles, against the names you give: the class names and the
+  tokens of your stylesheet are the contract of the code that comes next. Name them well —
+  a name that changes later breaks the page.
 - The build stage checks the styles with the project's compiler after this step. The styler has no shell-command tool: write the stylesheet files of the step and let the build stage report compilation errors.
 
 ${pageScale}

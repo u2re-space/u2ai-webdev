@@ -92,13 +92,17 @@ ${devToolsNote({
   the bundler are written before the markup, and the dependencies are installed there. Do not
   install the dependencies, do not change \`package.json\` or the lock file, and do not run
   \`npm install\` or \`npm ci\`. If a dependency is missing, say so in the report and go on.
-- The stylesheets belong to the styler: do not read them and do not change them. The class
-  names are a contract — the markup names them, the stylesheet gives them a shape, and neither
-  role renames what the other wrote. Your work is the code of your step.
+- The stylesheets are written before your code, and they are its contract: the class names
+  and the tokens your code uses are named there. Read the stylesheets of the project before
+  you write the code and use the names they give — when there are no stylesheets yet, use the
+  class names of the markup and the tokens of the architect. Do not change the stylesheets:
+  the styles are the styler's work, and a name that changes under the written code breaks the
+  page. The markup names the classes, the stylesheet gives them a shape, and neither role
+  renames what the other wrote. Your work is the code of your step.
 - The production build of the project is the work of the stage \`build\`, which runs after the
-  styles are written. A build that fails because the styles are not there yet is not your
-  defect: do not chase it and do not start a loop of build-and-fix. The harness compiles the
-  files of your step; run the tests or the lint of the project when they exist.
+  styles and after the code. A build that fails because the styles are not there yet is not
+  your defect: do not chase it and do not start a loop of build-and-fix. The harness compiles
+  the files of your step; run the tests or the lint of the project when they exist.
 - Read the files you change first, and follow the style of the project: its naming, its module
   format, its import order, its lint rules.
 - The work is checked by the compiler, not by the eye: read what the compiler says about

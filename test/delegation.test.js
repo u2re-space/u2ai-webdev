@@ -263,7 +263,8 @@ test('the roles of the project may hand the work over', async () => {
     }
 });
 
-test('the door of the markup stays closed until the coding and the styling stages started', () => {    const closed = delegationGate({ from: 'markup', stage: 'markup', to: 'styler', startedStages: [] });
+test('the door of the markup stays closed until the coding and the styling stages started', () => {
+    const closed = delegationGate({ from: 'markup', stage: 'markup', to: 'styler', startedStages: [] });
     assert.ok(closed);
     assert.deepEqual(closed.missing, ['coding', 'styling']);
     // The code and the vector graphics are behind the same door.
@@ -279,6 +280,22 @@ test('the door of the markup stays closed until the coding and the styling stage
         stage: 'markup',
         to: 'styler',
         startedStages: ['coding', 'styling'],
+    }), null);
+});
+
+test('the door of the coder stays closed until the stage after the code started', () => {
+    // The styles are the contract the code is written against, and the icons belong to the
+    // stage that comes after the code.
+    const closed = delegationGate({ from: 'coder', stage: 'coding', to: 'styler', startedStages: ['styling', 'coding'] });
+    assert.ok(closed);
+    assert.deepEqual(closed.missing, ['iconify']);
+    assert.ok(delegationGate({ from: 'coder', stage: 'coding', to: 'iconifier', startedStages: ['coding'] }));
+    // The door opens when the stage after the code has started.
+    assert.equal(delegationGate({
+        from: 'coder',
+        stage: 'coding',
+        to: 'styler',
+        startedStages: ['styling', 'coding', 'iconify'],
     }), null);
 });
 
@@ -332,7 +349,7 @@ test('the delegator refuses the hand-over of the markup before the stages starte
     }
 });
 
-test('the coder does not hand the styles to the styler before the styles are written', async () => {
+test('the coder does not hand the styles to the styler while the code is written', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-delegate-coder-'));
     try {
         let started = false;
@@ -342,8 +359,10 @@ test('the coder does not hand the styles to the styler before the styles are wri
             role: 'coder',
             stage: 'coding',
             resolveRole: () => ({ tools: [], maxTurns: 8 }),
-            startedStages: new Set(['markup', 'coding']),
+            startedStages: new Set(['markup', 'styling', 'coding']),
         });
+        // The styles are the contract the code is written against: their repair under the
+        // written code breaks the page, and the icons belong to the stage that comes next.
         await assert.rejects(
             () => delegate({ role: 'styler', task: 'Fix the styles.', files: ['src/styles/main.scss'] }),
             /не может передать работу роли styler/,
@@ -354,14 +373,14 @@ test('the coder does not hand the styles to the styler before the styles are wri
         );
         assert.equal(started, false);
 
-        // The styles are written: the hand-over opens.
+        // The stage after the code has started: the hand-over opens.
         const open = createDelegator({
             run: async () => { started = true; return { text: '', turns: 0, toolCalls: [], data: null }; },
             root,
             role: 'coder',
             stage: 'coding',
             resolveRole: () => ({ tools: [], maxTurns: 8 }),
-            startedStages: new Set(['markup', 'coding', 'styling']),
+            startedStages: new Set(['markup', 'styling', 'coding', 'iconify']),
         });
         await open({ role: 'styler', task: 'Fix the styles.', files: ['src/styles/main.scss'] });
         assert.equal(started, true);

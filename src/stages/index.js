@@ -153,30 +153,34 @@ export const STAGES = Object.freeze([
         apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
     },
     {
-        name: 'coding',
-        title: 'Write the code',
-        dependsOn: ['markup'],
-        run: codingStage,
-        args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
-        verify: workOnDisk('coder'),
-        apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
-    },
-    {
         name: 'styling',
         title: 'Write the styles',
-        dependsOn: ['coding'],
+        // The styles stand before the code: the class names and the tokens are the
+        // contract of the page, and the code is written against them.
+        dependsOn: ['markup'],
         run: stylingStage,
         args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
         verify: workOnDisk('styler'),
         apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
     },
     {
+        name: 'coding',
+        title: 'Write the code',
+        // The code stands after the styles: the scripts use the class names and the
+        // tokens that the stylesheet has already written.
+        dependsOn: ['styling'],
+        run: codingStage,
+        args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
+        verify: workOnDisk('coder'),
+        apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
+    },
+    {
         name: 'iconify',
         title: 'Choose the icons',
-        // The icons are put into the markup of the page, and the styles of the page are
-        // written before them: the stage stands after the styler and before the build, so
-        // the icons and the markup that uses them reach the bundle.
-        dependsOn: ['styling'],
+        // The icons are put into the markup of the page, and the page is finished when the
+        // styles and the code are written: the stage stands after both of them and before the
+        // build, so the icons and the markup that uses them reach the bundle.
+        dependsOn: ['styling', 'coding'],
         run: iconifyStage,
         args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
         apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
@@ -184,7 +188,8 @@ export const STAGES = Object.freeze([
     {
         name: 'build',
         title: 'Connect the styles',
-        dependsOn: ['styling'],
+        // The bundle carries the code and the styles: the build waits for both.
+        dependsOn: ['coding', 'styling'],
         run: buildStage,
         args: (ctx) => ({ apply: ctx.apply !== false }),
         apply: (ctx, result) => { ctx.build = result?.build ?? null; },

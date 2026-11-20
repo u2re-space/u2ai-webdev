@@ -99,8 +99,8 @@ report into the directory of the run and hands the result to the next one.
 | `setup` | Prepare the environment: the scaffold, the dependencies and the entry points. |
 | `vector` | Draw the vector graphics as code: the SVG of the ornaments and the illustrations. |
 | `markup` | Write the markup of the pages. |
-| `coding` | Write the code: the scripts, the modules, the data. |
 | `styling` | Write the styles: the tokens, the layout, the states. |
+| `coding` | Write the code: the scripts, the modules, the data. |
 | `iconify` | Choose the icons of the interface and check that every one of them is on the disk. |
 | `build` | Connect the styles: the entry point, the compilation, the links of the markup. |
 | `sight` | Open the page in a browser, shoot it, and let the styler compare the picture with the reference and fix the styles. |
@@ -129,15 +129,16 @@ The planner is told the five roles in its prompt and in the schema of its answer
 a model that listens names them from the start.
 
 The plan decides the order of the stages that do its steps. The registry has an order of its own
-(markup, coding, styling), but the plan knows more: a step that depends on another step is done
+(markup, styling, coding), but the plan knows more: a step that depends on another step is done
 after it. The harness reads the dependencies of the plan and moves the stages of the steps
 accordingly — the scripts come after the styles when the plan says so. The order of the registry
 breaks the tie, so a plan that says nothing about the order of two stages changes nothing. A
 circle in the graph of the stages is broken by the order of the registry, and the run says so in
 its warnings: the rest of the plan keeps its order. The stages that do not work on the steps of
-the plan keep their place: the build is after the styles, the review is after everything.
+the plan keep their place: the build is after the styles and after the code, the review is after
+everything.
 
-Two stages have a floor of their own. The stage of the vector graphics stands before the markup:
+Three stages have a floor of their own. The stage of the vector graphics stands before the markup:
 the page links the files of the editor, and a markup that waits for a picture nobody has drawn
 yet is a stage that never ends. The plan may put the vector somewhere else, but never in the
 middle — between the markup and the build the graphics would wait for the page and the page would
@@ -146,11 +147,16 @@ chain, after the build and the sight of the page. When the markup is already don
 continues, the vector stands before the build: the build carries `public/` into the bundle, and
 an asset drawn after it never reaches the distribution.
 
-The stage of the icons stands after the styler. The icons are put into the markup of the
-finished page, so the styles of the page are written first: when the icons are picked before
-the styles, the markup changes under rules that do not exist yet. The floor wins over the plan —
-a plan that asks for the icons before the styles is told that the stage moved, and the icons
-still reach the bundle, because the stage stands before the build.
+The stage of the code stands after the styler. The styles are the contract of the page: they name
+the classes and the tokens, and the code is written against them. A plan that asks for the code
+before the styles is told that the stage moved, and the code is written against a stylesheet
+that exists.
+
+The stage of the icons stands after the code. The icons are put into the markup of the
+finished page, and the page is finished when both the styles and the code are written: when
+the icons are picked before them, the markup changes under rules that do not exist yet. The
+floor wins over the plan — a plan that asks for the icons before the styles is told that the
+stage moved, and the icons still reach the bundle, because the stage stands before the build.
 
 A step writes its own files. The plan divides the work of the project between the steps, and
 every step owns its files: a role that picks the icons does not rewrite the styles of the
@@ -525,6 +531,12 @@ door opens when the stages `coding` and `styling` have started: then the markup 
 piece of their work over. The role is told about the closed door in its instructions, so it
 does not spend a turn on a hand-over that is refused.
 
+The coder has a door of its own. The styles are written before the code, and the code is written
+against them: the class names and the tokens are the contract of the page, so the coder may not
+hand the work to the styler or to the iconifier while the code is written — the repair of the
+styles under the written code belongs to the review. The door opens when the stage after the
+code has started.
+
 ```json
 {
   "tools": { "delegate": true }
@@ -666,12 +678,12 @@ The roles keep out of each other's work. The environment — the manifest, the l
 config of the bundler and the installed dependencies — belongs to the `installer` and to the
 stage `setup`, which writes it before the markup; a plan step that names only those files is
 dropped from the plan, whoever the role is. The stylesheets belong to the `styler`: the coder
-neither reads them nor changes them, and the class names are a contract between the two roles.
-The production build belongs to the stage `build`, which runs after the styles are written, so
-the coder does not chase a build that fails because the styles are not there yet. The hand-over
-knows the same boundaries: the markup may not hand the work to the coder, the styler or the
-editor before their stages have started, and the coder may not hand the work to the styler or
-the iconifier before the styles are written.
+reads them and follows the names they give, but never changes them, and the class names are a
+contract between the two roles. The production build belongs to the stage `build`, which runs
+after the styles and after the code, so the coder does not chase a build that fails because the
+styles are not there yet. The hand-over knows the same boundaries: the markup may not hand the
+work to the coder, the styler or the editor before their stages have started, and the coder may
+not hand the work to the styler or the iconifier while the code is written.
 
 The vector editor has no shell: the graphics are text, and the stage itself parses and tidies
 every SVG the editor writes. A command line there would only let the role hunt for a validator
