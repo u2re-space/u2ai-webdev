@@ -343,15 +343,17 @@ test('the planner names the roles that the stages of the run execute', () => {
 });
 
 test('the roles that check their work have the tool of the command', () => {
-    for (const name of ['coder', 'editor']) {
-        assert.ok(ROLES[name].tools.includes('run_command'), `the role ${name} cannot run a command`);
-        const specs = toolSpecs(defaults.tools, { role: name });
-        assert.ok(specs.some((spec) => spec.name === 'run_command'), `the role ${name} has no command to run`);
-    }
+    assert.ok(ROLES.coder.tools.includes('run_command'), 'the role coder cannot run a command');
+    const specs = toolSpecs(defaults.tools, { role: 'coder' });
+    assert.ok(specs.some((spec) => spec.name === 'run_command'), 'the role coder has no command to run');
     assert.ok(!ROLES.styler.tools.includes('run_command'));
     assert.ok(!toolSpecs(defaults.tools, { role: 'styler' }).some((spec) => spec.name === 'run_command'));
     assert.match(ROLES.styler.instructions({}), /build stage checks the styles/);
     assert.match(ROLES.styler.instructions({}), /styler has no shell-command tool/);
+    // The vector editor writes text: the stage parses and tidies every SVG itself, so the
+    // editor has no shell to hunt for a validator with.
+    assert.ok(!ROLES.editor.tools.includes('run_command'));
+    assert.match(ROLES.editor.instructions({}), /You have no shell/);
 });
 
 test('the binding page-frame contract is present in high-priority instructions for both roles', async () => {

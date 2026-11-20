@@ -358,6 +358,7 @@ export async function repairIssues({
     runContext = null,
     parts = [],
     input = null,
+    signal = null,
 } = {}) {
     const list = Array.isArray(issues) ? issues : [];
     const repaired = [];
@@ -400,6 +401,9 @@ export async function repairIssues({
             runContext,
             stage: 'repair',
             inputChannel: input,
+            // The signal of the repair: the budget of the stage ends it, and the repair
+            // reports what it did not manage to fix.
+            signal,
             // The role that repairs the styles sees the page and the reference: a defect of
             // the layout is a picture, not a line of text.
             parts: LOOKS_AT_DESIGN.has(group.role) ? parts : [],
@@ -508,6 +512,30 @@ export async function stylePairIssues({
 }
 
 /**
+ * The signal of a round of the repair: it ends with the budget of the stage.
+ *
+ * The repair is the most expensive part of the review — it starts a session of the role
+ * that owns the file — and it must not outlive the stage. When the budget is over, the
+ * signal ends the session, and the review reports the findings it did not manage to fix.
+ *
+ * @param {number|null} deadline the moment the stage ends
+ * @returns {{ signal: AbortSignal|null, expired: boolean, stop: () => void }}
+ * @exports
+ * @ai.hint pure
+ */
+export function repairSignal(deadline = null) {
+    const empty = deadline === null || deadline === undefined || deadline === '';
+    const at = empty ? null : Number(deadline);
+    if (at === null || !Number.isFinite(at)) return { signal: null, expired: false, stop: () => {} };
+    const left = at - Date.now();
+    if (left <= 0) return { signal: null, expired: true, stop: () => {} };
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), left);
+    timer.unref?.();
+    return { signal: controller.signal, expired: false, stop: () => clearTimeout(timer) };
+}
+
+/**
  * The stage of the review.
  *
  * @param {{ client: object, config?: object, root?: string, task?: string, plan?: object|null,
@@ -535,6 +563,8 @@ export async function reviewStage({
     env = process.env,
     runContext = null,
     input = null,
+    signal = null,
+    deadline = null,
 } = {}) {
     if (!client?.responses) throw new Error('Клиент API не передан.');
     const run = id ?? runId();
@@ -682,6 +712,8 @@ export async function reviewStage({
             parts: [...reference.parts, ...shots.parts, ...comparisonParts],
             runContext,
             stage: 'review',
+            // The budget of the stage ends the judging too.
+            signal,
             // The operator sees the model that works: the reviewer of the house answers on
             // the head of its ladder, and the panel of the shell has to say so.
             inputChannel: input,
@@ -775,6 +807,15 @@ export async function reviewStage({
     }
     if (wanted) {
         for (let round = 0; round < rounds; round++) {
+            // The repair has the budget of the stage, not the whole run: a repair that runs
+            // out of time reports the findings it did not manage to fix instead of taking
+            // the stage down with it.
+            const repair = repairSignal(deadline);
+            if (repair.expired) {
+                warnings.push('Ремонт не успел в бюджет стадии: замечания, которые он не успел '
+                    + 'починить, остаются на диске.');
+                break;
+            }
             const found = reviews.flatMap((review) => review.issues);
             const issues = [...found];
             if (current) {
@@ -793,24 +834,30 @@ export async function reviewStage({
                 }
             }
             if (!issues.length) break;
-            const repair = await repairIssues({
-                client,
-                config,
-                root,
-                task,
-                plan,
-                architecture,
-                issues,
-                notify,
-                env,
-                again: round > 0,
-                runContext,
-                input,
-                // The role that repairs the styles sees the page and the reference.
-                parts: [...shots.parts, ...reference.parts, ...comparisonParts],
-            });
-            warnings.push(...repair.warnings);
-            repairs.push(repair);
+            let fixed = null;
+            try {
+                fixed = await repairIssues({
+                    client,
+                    config,
+                    root,
+                    task,
+                    plan,
+                    architecture,
+                    issues,
+                    notify,
+                    env,
+                    again: round > 0,
+                    runContext,
+                    input,
+                    signal: repair.signal,
+                    // The role that repairs the styles sees the page and the reference.
+                    parts: [...shots.parts, ...reference.parts, ...comparisonParts],
+                });
+            } finally {
+                repair.stop();
+            }
+            warnings.push(...fixed.warnings);
+            repairs.push(fixed);
             // The steps that were repaired are judged again: the verdict of the run has to
             // say what the project looks like now, not what it looked like before.
             const dirty = new Set(issues

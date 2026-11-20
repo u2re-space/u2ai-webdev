@@ -656,8 +656,49 @@ test('a stage that hangs fails with the name of the stage and the budget', async
     assert.equal(result.stages.length, 1);
 });
 
-test('a stage may ask for a budget of its own', async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-timeout-own-'));
+test('the budget of a stage stops the work of the stage', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-timeout-stop-'));
+    let aborted = false;
+    let written = false;
+    const stages = [
+        {
+            name: 'slow',
+            title: 'Slow',
+            dependsOn: [],
+            // The stage works until the budget cancels it, the way a role waits for the
+            // answer of the model.
+            run: async ({ signal }) => {
+                await new Promise((resolve, reject) => {
+                    const timer = setTimeout(resolve, 30_000);
+                    signal?.addEventListener('abort', () => {
+                        aborted = true;
+                        clearTimeout(timer);
+                        reject(new Error('работа стадии отменена'));
+                    }, { once: true });
+                });
+                written = true;
+                return { ok: true };
+            },
+        },
+    ];
+
+    const result = await runPipeline({
+        client: { responses: { create: async () => ({ output: [] }) } },
+        config: { ...CONFIG, limits: { ...CONFIG.limits, stageTimeoutMs: 50 } },
+        root,
+        task: 'Make a landing.',
+        runId: 'run-1',
+        stages,
+    });
+
+    assert.equal(result.status, 'failed');
+    assert.match(result.error, /не закончилась/);
+    // The work stopped with the budget: the stage did not finish its work afterwards.
+    assert.equal(aborted, true);
+    assert.equal(written, false);
+});
+
+test('a stage may ask for a budget of its own', async () => {    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-timeout-own-'));
     const stages = [
         {
             name: 'slow',

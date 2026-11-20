@@ -228,6 +228,12 @@ role that the last repair did not close the defect. `"repair": false` turns the 
 and the review then only reports. The findings go to the disk before the repair starts, so a
 repair that runs out of time does not take the findings with it.
 
+The repair has the budget of its stage, not the whole run. When the budget of the stage is
+over, the repair is cancelled and the review reports the findings it did not manage to fix:
+the run ends with the verdict of the review instead of a timeout. The budget of a stage stops
+the work of the stage too — the calls that are in flight are cancelled, so nothing is written
+after the failure and no tokens are spent on a stage that is already dead.
+
 The markup and the styles have to speak the same language, and the review checks it. A class
 that the markup uses and that no rule describes is an element without a shape; a class that
 the styles describe and that the markup does not use is a rule that nobody gets. The check
@@ -661,6 +667,10 @@ the coder does not chase a build that fails because the styles are not there yet
 knows the same boundaries: the markup may not hand the work to the coder, the styler or the
 editor before their stages have started, and the coder may not hand the work to the styler or
 the iconifier before the styles are written.
+
+The vector editor has no shell: the graphics are text, and the stage itself parses and tidies
+every SVG the editor writes. A command line there would only let the role hunt for a validator
+it does not need — and wait for it.
 
 The three roles that write the frontend — `markup`, `coder` and `styler` — also get the standard
 of the frontend work (`src/roles/web-development.js`): the rules that hold for every file, the

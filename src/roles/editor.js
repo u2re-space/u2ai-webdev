@@ -20,10 +20,16 @@ export const name = 'editor';
 /** The schema of the answer of the role. */
 export const schema = 'code';
 
-/** The tools the role may call. */
+/**
+ * The tools the role may call.
+ *
+ * There is no shell here: the vector graphics are text, and the stage itself parses and
+ * tidies every SVG the role writes. A command line here would only let the role hunt for a
+ * validator it does not need — and wait for it.
+ */
 export const tools = [
     'list_files', 'read_file', 'write_file', 'replace_text', 'search_files',
-    'generate_svg', 'call_ai_image', 'ai_cli', 'ai_cli_help', 'run_command', 'read_skill',
+    'generate_svg', 'call_ai_image', 'ai_cli', 'ai_cli_help', 'read_skill',
     'web_guidance', 'screenshot', 'compare_images',
     devToolsMarker(),
 ];
@@ -106,6 +112,8 @@ ${FAMILY_CLI_NOTE}
    the \`ai-image\` bridge — call it, do not fake a picture with a placeholder.
 - In the vector stage, work only on the SVG files named by the step. Do not create preview HTML,
   take browser screenshots, or inspect project pages; the stage validates SVG locally.
+- You have no shell: the SVG is text, and the stage parses and tidies every file you write.
+  Do not look for a validator and do not wait for a command that will never come.
 - A picture that was prepared from a crop of the reference is not redrawn: the prepared file
   is the asset. The vector graphics are for what the reference does not hold.
 - When an image needs editing, inspect the attached reference, \`DESIGN.md\` and the source image yourself; measurements are optional and a disabled or absent measurer is not a blocker. Before calling \`ai-image\`, state the edit as a precise contract: what to remove or change, what must remain pixel-faithful, the boundary of the edit, and any placement or style that should follow the reference. Protect neighboring objects, fragments, text, edges and transparency unless the task explicitly names them.

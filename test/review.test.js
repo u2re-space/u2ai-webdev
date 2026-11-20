@@ -619,6 +619,58 @@ test('the review repairs again what the first repair did not fix', async () => {
     assert.equal(result.repair.repaired.length, 2);
 });
 
+test('the repair does not start when the budget of the stage is over', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-repair-deadline-'));
+    await mkdir(path.join(root, 'src'), { recursive: true });
+    await writeFile(path.join(root, 'src', 'main.js'), 'export const x = 1;\n', 'utf8');
+    const one = {
+        summary: 'A landing.',
+        steps: [
+            { id: 'code-1', title: 'Code', role: 'coder', dependsOn: [], files: ['src/main.js'], criteria: ['runs'] },
+        ],
+    };
+    let repairs = 0;
+    const client = fakeClient([
+        schemaAnswer('review', {
+            verdict: 'fail',
+            scores: { fidelity: 40, completeness: 50, accessibility: 30, quality: 40 },
+            issues: [{
+                severity: 'high',
+                path: 'src/main.js',
+                message: 'The entry does not run.',
+                requestedChange: 'Fix the import.',
+            }],
+            summary: 'The code does not work.',
+            recommendations: [],
+        }),
+        () => {
+            repairs++;
+            return schemaAnswer('code', {
+                summary: 'The import is fixed.',
+                files: [{ path: 'src/main.js', content: "import './styles.scss';\n", language: 'javascript' }],
+                commands: [],
+                notes: '',
+            });
+        },
+    ]);
+
+    const result = await reviewStage({
+        client,
+        config: { output: { work: './.tmp' } },
+        root,
+        task: 'Make a landing.',
+        plan: one,
+        runId: 'run-1',
+        // The budget of the stage is over: the repair does not start, and the findings stay.
+        deadline: Date.now() - 1000,
+    });
+
+    assert.equal(repairs, 0);
+    assert.equal(result.repair, null);
+    assert.ok(result.warnings.some((item) => /Ремонт не успел в бюджет стадии/.test(item)));
+    assert.equal(result.issues.length, 1);
+});
+
 test('the repair stops when the rounds are over', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-repair-rounds-'));
     await mkdir(path.join(root, 'src'), { recursive: true });

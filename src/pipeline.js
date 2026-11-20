@@ -160,25 +160,43 @@ function reportOf(result = {}) {
  * A stage that never comes back is a silent death: the terminal waits and waits, and nothing
  * says that the run is over. The budget turns that silence into a failure with a name.
  *
+ * The budget also stops the work: the calls that are in flight are cancelled, so nothing is
+ * written after the failure and no tokens are spent on a stage that is already dead.
+ *
  * @param {{ name: string, run: Function }} stage the stage to run
  * @param {object} args the arguments of the stage
  * @param {number} timeoutMs the budget of the stage, 0 for no budget
+ * @param {AbortController|null} [controller] the controller of the stage
  * @returns {Promise<object>} the result of the stage
  * @exports
  * @ai.hint io
  */
-export async function runStage(stage, args, timeoutMs = 0) {
-    if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) {
-        return await stage.run(args);
-    }
+export async function runStage(stage, args, timeoutMs = 0, controller = null) {
+    const work = Promise.resolve().then(() => stage.run(args));
+    if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) return await work;
     let timer = null;
+    let expired = false;
     const budget = new Promise((_, reject) => {
         timer = setTimeout(() => {
+            expired = true;
+            // The work of the stage stops with its budget.
+            try { controller?.abort?.(); } catch { /* the controller is already gone */ }
             reject(new Error(`Стадия ${stage.name} не закончилась за ${Math.round(timeoutMs / 1000)} с.`));
         }, timeoutMs);
     });
     try {
-        return await Promise.race([stage.run(args), budget]);
+        return await Promise.race([work, budget]);
+    } catch (error) {
+        if (expired) {
+            // The stage is given a moment to unwind: the files it wrote while it was
+            // cancelled do not land after the failure.
+            const grace = new Promise((resolve) => {
+                const t = setTimeout(resolve, 2000);
+                t.unref?.();
+            });
+            await Promise.race([work.catch(() => {}), grace]);
+        }
+        throw error;
     } finally {
         clearTimeout(timer);
     }
@@ -508,10 +526,19 @@ export async function runPipeline({
         input?.setLocation?.({ stage: stage.name });
         // The stage starts now: the gates of the delegation look at this list.
         startedStages.add(stage.name);
+        // The stage has its own controller: the budget of the stage stops its work, and the
+        // work of the run stops with it.
+        const controller = new AbortController();
+        const onAbort = () => controller.abort();
+        if (signal?.aborted) controller.abort();
+        else signal?.addEventListener('abort', onAbort, { once: true });
+        const budget = budgetOf(stage.name);
+        ctx.signal = controller.signal;
+        ctx.deadline = budget > 0 ? Date.now() + budget : null;
         let result = null;
         try {
             const args = typeof stage.args === 'function' ? { ...ctx, ...stage.args(ctx) } : ctx;
-            result = await runStage(stage, args, budgetOf(stage.name));
+            result = await runStage(stage, args, budget, controller);
             // The result of the stage goes into the context of the next stages. A stage whose
             // result cannot be applied is a failed stage: the run says so and stops, instead
             // of dying with a message that names nothing.
@@ -540,6 +567,8 @@ export async function runPipeline({
             // happened and does not look for the answer again.
             await runContext?.stage?.(stage.name, 'failed', error);
             break;
+        } finally {
+            signal?.removeEventListener('abort', onAbort);
         }
 
         const stageWarnings = Array.isArray(result?.warnings) ? result.warnings : [];
