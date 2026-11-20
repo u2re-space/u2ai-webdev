@@ -528,6 +528,34 @@ test('the renderer of json writes the wait as json', () => {
     assert.equal(event.seconds, 20);
 });
 
+test('the thought of the model is one block, not a line per token', () => {
+    const errors = [];
+    const renderer = createRenderer({
+        mode: 'plain',
+        stdout: { write() {} },
+        stderr: { write: (text) => errors.push(text) },
+    });
+    renderer.event({ type: 'reasoning.delta', text: 'The header ' });
+    renderer.event({ type: 'reasoning.delta', text: 'must be blue.' });
+    // Nothing is written while the pieces arrive: the log of the run has no wall of lines.
+    assert.equal(errors.length, 0);
+    renderer.event({ type: 'role.tool', name: 'read_file', arguments: { path: 'index.html' } });
+    const text = errors.join('');
+    assert.match(text, /thinking: The header must be blue\./);
+    // The block is one line, not one line per token.
+    assert.equal(text.split('\n').filter((line) => line.includes('thinking:')).length, 1);
+});
+
+test('the renderer of json carries every piece of the stream', () => {
+    const lines = [];
+    const renderer = createRenderer({ mode: 'json', stdout: { write: (text) => lines.push(text) } });
+    renderer.event({ type: 'reasoning.delta', text: 'one' });
+    renderer.event({ type: 'text.delta', text: 'two' });
+    const events = lines.map((line) => JSON.parse(line));
+    assert.deepEqual(events.map((event) => event.type), ['reasoning.delta', 'text.delta']);
+    assert.deepEqual(events.map((event) => event.text), ['one', 'two']);
+});
+
 test('the mode of the renderer follows the flags', () => {
     assert.equal(detectMode({ json: true, quiet: false }), 'json');
     assert.equal(detectMode({ json: false, quiet: true }), 'quiet');

@@ -159,7 +159,7 @@ export function createTuiLayout(state, {
     push(truncate(state?.task || 'Preparing the run…', cols), 'dim');
     push(marks.rule.repeat(cols), 'dim');
 
-    const footerRows = 8;
+    const footerRows = 9;
     const headerRows = lines.length;
     const mainRows = Math.max(3, rows - headerRows - footerRows - 1);
     const leftWidth = Math.max(24, Math.min(44, Math.floor(cols * 0.38)));
@@ -187,6 +187,14 @@ export function createTuiLayout(state, {
     }
 
     push(marks.rule.repeat(cols), 'dim');
+    // The stream of the model: the thought while it thinks, the answer while it writes.
+    // One line, redrawn on every frame: the stream is not a wall of lines in the log.
+    const stream = state?.stream ?? {};
+    const streamText = String(stream.text ?? '').replace(/\s+/g, ' ').trim();
+    const streamKind = String(stream.kind ?? '') === 'answer' ? 'answer' : 'thinking';
+    const streamWidth = Math.max(8, cols - 12);
+    const streamTail = streamText.length > streamWidth ? streamText.slice(streamText.length - streamWidth) : streamText;
+    push(streamText ? truncate(`▸ ${streamKind}: ${streamTail}`, cols) : '', 'dim');
     const progressText = total > 0 ? `${bar} ${done}/${total}` : `${bar} 0/0`;
     const notice = String(state?.notice ?? '');
     const progressRow = lines.length;

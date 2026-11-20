@@ -49,6 +49,55 @@ test('a question of the worker waits for the answer of the operator', () => {
     assert.equal(state.question, null);
 });
 
+test('the stream of the model is one live line of the shell, not a wall of lines', () => {
+    let state = createTuiState({ command: 'run', task: 'make a landing' });
+    state = reduceTuiState(state, {
+        type: 'frame',
+        frame: createFrame(FRAME.event, { event: { type: 'reasoning.delta', text: 'The header ' } }),
+    });
+    state = reduceTuiState(state, {
+        type: 'frame',
+        frame: createFrame(FRAME.event, { event: { type: 'reasoning.delta', text: 'must be blue.' } }),
+    });
+    assert.equal(state.stream.kind, 'thinking');
+    assert.equal(state.stream.text, 'The header must be blue.');
+
+    const layout = createTuiLayout(state, { width: 100, height: 30, input: '' });
+    const text = layout.lines.map((line) => line.text).join('\n');
+    assert.match(text, /thinking: The header must be blue\./);
+    // The stream is one line: the log of the shell keeps no piece of it.
+    assert.equal(text.split('\n').filter((line) => line.includes('thinking:')).length, 1);
+});
+
+test('the shell keeps the tail of a long stream, not the whole of it', () => {
+    let state = createTuiState();
+    state = reduceTuiState(state, {
+        type: 'frame',
+        frame: createFrame(FRAME.event, { event: { type: 'text.delta', text: 'x'.repeat(2000) } }),
+    });
+    assert.equal(state.stream.kind, 'answer');
+    assert.ok(state.stream.text.length <= 600);
+    assert.ok(state.stream.text.endsWith('x'));
+});
+
+test('the thought of the next role does not run into the thought of the last one', () => {
+    let state = createTuiState();
+    state = reduceTuiState(state, {
+        type: 'frame',
+        frame: createFrame(FRAME.event, { event: { type: 'reasoning.delta', text: 'The header ' } }),
+    });
+    state = reduceTuiState(state, {
+        type: 'frame',
+        frame: createFrame(FRAME.event, { event: { type: 'role.done', role: 'coder', stopped: 'completed' } }),
+    });
+    // The thought of the role stays on the screen: it is the last thing the model said.
+    assert.equal(state.stream.text, 'The header ');
+    state = reduceTuiState(state, {
+        type: 'frame',
+        frame: createFrame(FRAME.event, { event: { type: 'reasoning.delta', text: 'Now the footer.' } }),
+    });
+    assert.equal(state.stream.text, 'Now the footer.');
+});
 test('the status row above the input names the current model, stage, role, effort and mode', () => {
     let state = createTuiState({ command: 'run', task: 'make a landing' });
     state = reduceTuiState(state, {

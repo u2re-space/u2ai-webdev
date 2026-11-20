@@ -51,6 +51,8 @@ same as `ai-webdev run "make a landing"`.
 - `ai-webdev` is the graphical shell. In a terminal it opens a full-screen dashboard with the
   stages and the live worker log. The lower block above the operator input contains the progress
   bar and the status row with the current model, stage, role, effort, mode, plan step and state.
+  The row above them holds the stream of the model: the tail of its thinking while it thinks and
+  the tail of its answer while it writes. It is one row that is redrawn, not a line per token.
   Every current command is available through this shell.
 - `ai-webdev-worker` is the internal worker. It owns the CLI, the pipeline and the ordinary
   stdout/stderr. A versioned IPC protocol carries the pipeline events, the questions of the
@@ -1070,6 +1072,12 @@ model: the files, the modules and the order are the most expensive thing to chan
 the architect does not answer on the model of the run — even when the run answers on a cheap
 one. A pin of the role (`--role architect=<model>`) still wins over the model of the house.
 
+The vector editor has one too. The graphics are geometry and letters: a cheap model draws a
+floppy disk well and a wordmark whose letters do not spell anything. The editor answers with
+the best model of the family, and its prompt says what a wordmark is — spelled text, either a
+`<text>` element with the font of the project or the paths of a real font, never a pixel font
+invented out of rectangles.
+
 The Kimi has no levels of the effort above `medium` — the answer of the same question costs the
 same seconds there — so a role that answers on it works on `medium` however deep the profile of
 the stages asks. The role also answers with its tools instead of a pinned JSON answer: a model
@@ -1134,6 +1142,10 @@ the house.
   }
 }
 ```
+
+The vector editor stands on the head of the family as well: the editor draws the geometry
+and the letters of the graphics, and a wordmark whose letters do not spell the name is not a
+drawing.
 
 The ladder belongs to the role. A stage of the house never lowers the model of the work on its
 own: the stage of the styles and the stage that fixes the styles answer with the same model of
@@ -1219,11 +1231,19 @@ be thrown away. A stage never works above the ceiling of the run, and the effort
 set in `roles.<role>.effort` wins over the profile. `"stageEffort": null` turns the profile
 off and leaves every role with the effort of the run.
 
-A thinking model works for minutes without a word. The run says that it waits (`· thinking (60s)`)
-and a failed request is shown, with its retry — the silence of the terminal is never a hang. The
-request itself may stay silent for `timeoutMs` (fifteen minutes by default, half an hour at the
-most): a shorter timeout does not make the model faster, it throws the whole reasoning away and
-asks the same question again.
+A thinking model works for minutes without a word. The roles ask for a stream, so the thinking
+of the model comes as it happens, and the run says that it waits (`· thinking (60s)`) — the
+silence of the terminal is never a hang. A failed request is shown, with its retry. The request
+itself may stay silent for `timeoutMs` (fifteen minutes by default, half an hour at the most):
+a shorter timeout does not make the model faster, it throws the whole reasoning away and asks
+the same question again. A host that says nothing is not asked again — the next host of the
+chain answers, and the budget of the stage ends the stage if none of them does.
+
+The stream is one line, not a wall of lines. The pieces of the thinking are gathered and written
+as a block (`· thinking: …`), and the graphical shell shows the tail of the stream in one row
+that is redrawn on every frame — the live log keeps the events of the run, not every token of
+the model. The heartbeat belongs to the silence: while the model streams, the run says so with
+the stream itself, and `· thinking (60s)` appears only when the host says nothing at all.
 
 The channel of the schema says how the answer of a role reaches the code: `tool` makes the
 schema a function the model calls, `format` pins the text of the answer to it, `auto` picks

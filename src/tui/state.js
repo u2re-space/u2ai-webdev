@@ -53,6 +53,9 @@ export function createTuiState({ command = '', task = '' } = {}) {
         plan: null,
         summary: null,
         notice: '',
+        // The live text of the model: the thought while it thinks, the answer while it
+        // writes. The shell shows it in one line that is redrawn, not in the log.
+        stream: { kind: '', text: '', fresh: true },
         startedAt: new Date().toISOString(),
         finishedAt: null,
     };
@@ -170,7 +173,30 @@ function reduceEvent(state, event) {
     if (type === 'role.done') {
         const role = String(event.role ?? 'role');
         const stopped = String(event.stopped ?? 'completed');
-        return { ...state, notice: `${role}: ${stopped}` };
+        // The thought of the role stays on the screen: it is the last thing the model
+        // said. The next role starts its own stream.
+        return { ...state, notice: `${role}: ${stopped}`, stream: { ...state.stream, fresh: true } };
+    }
+    if (type === 'role.tool' || type === 'reasoning.start' || type === 'message.start') {
+        // A new turn begins: the thought of the last one is over. It stays on the screen
+        // until the first piece of the new one comes — the row never blinks empty.
+        return { ...state, stream: { ...state.stream, fresh: true } };
+    }
+    if (type === 'reasoning.delta' || type === 'text.delta') {
+        // The stream of the model comes as pieces. The shell keeps the tail of it in one
+        // place: the dashboard redraws that line, so the stream does not become a wall
+        // of lines in the log.
+        const kind = type === 'reasoning.delta' ? 'thinking' : 'answer';
+        const text = String(event.text ?? '');
+        const current = state.stream ?? {};
+        // The answer is not the thought, and the thought of the next turn is not the
+        // thought of this one: the row starts over.
+        const fresh = current.kind !== kind || current.fresh === true;
+        const joined = fresh ? text : `${current.text ?? ''}${text}`;
+        return {
+            ...state,
+            stream: { kind, text: joined.length > 600 ? joined.slice(joined.length - 600) : joined, fresh: false },
+        };
     }
     if (type === 'request.wait') {
         const seconds = Number(event.seconds ?? Math.round(Number(event.elapsedMs ?? 0) / 1000));

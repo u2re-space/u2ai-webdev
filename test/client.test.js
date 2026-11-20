@@ -1,0 +1,61 @@
+/**
+ * @file test/client.test.js
+ * @module test/client
+ * @purpose Tests of the transport of the client: a host that says nothing is not asked
+ *          again, and the next host answers.
+ * @depends node:test, node:http, openai/client
+ * @ai.tags test, client, transport
+ */
+
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import http from 'node:http';
+
+import { createClient } from '../src/openai/client.js';
+import { defaults } from '../src/config.js';
+
+test('a host that says nothing is not asked again: the next host answers', async () => {
+    let silentRequests = 0;
+    const sockets = [];
+    const silent = http.createServer((req) => {
+        silentRequests += 1;
+        req.on('data', () => {});
+        // The host takes the request and never answers: the model is not thinking, the host
+        // is silent.
+    });
+    silent.on('connection', (socket) => sockets.push(socket));
+    await new Promise((resolve) => silent.listen(0, '127.0.0.1', resolve));
+    const silentUrl = `http://127.0.0.1:${silent.address().port}/v1/`;
+
+    const answered = http.createServer((req, res) => {
+        let body = '';
+        req.on('data', (chunk) => { body += chunk; });
+        req.on('end', () => {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ id: 'resp_1', status: 'completed', output: [], usage: {} }));
+        });
+    });
+    await new Promise((resolve) => answered.listen(0, '127.0.0.1', resolve));
+    const answeredUrl = `http://127.0.0.1:${answered.address().port}/v1/`;
+
+    const config = structuredClone(defaults);
+    // The host is silent for a third of a second; the retry would have asked it four times.
+    config.timeoutMs = 300;
+    config.limits.requestRetries = 3;
+    config.backends = [
+        { baseURL: silentUrl, apiKey: 'test-key' },
+        { baseURL: answeredUrl, apiKey: 'test-key' },
+    ];
+
+    const client = await createClient({ config, env: {} });
+    try {
+        const answer = await client.responses.create({ model: 'test-model', instructions: 'x', input: 'y' });
+        assert.equal(answer.id, 'resp_1');
+        assert.equal(silentRequests, 1, 'the silent host was asked again');
+    } finally {
+        client.close?.();
+        for (const socket of sockets) socket.destroy();
+        await new Promise((resolve) => silent.close(resolve));
+        await new Promise((resolve) => answered.close(resolve));
+    }
+});

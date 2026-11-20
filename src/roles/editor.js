@@ -100,6 +100,15 @@ ${FAMILY_CLI_NOTE}
   \`web_guidance\` tool when you fix a control, a form or a motion.
 - Edit in place. Read the file, change the part that needs it, and keep the rest as it is. A
   rewrite of a file that only needed one line is a step backwards.
+- The letters of a picture are text, not geometry. A wordmark is spelled text: write it with a
+  \`<text>\` element and the font of the project, or with the paths of a real font that you
+  name in the file. Never invent a pixel font out of rectangles and hope that it spells the
+  name — read the letters of the name you wrote, letter by letter, and check that the picture
+  shows the word and not a shape like it. The text of a picture belongs inside the
+  \`viewBox\`: a wordmark that is cut off at the edge is a broken wordmark.
+- The geometry of a drawing is the work of the model of the house: the editor answers with
+  the best model of the family, because a cheap model draws a floppy disk well and a wordmark
+  with letters that do not spell anything.
 - The design is the reference. Where the result and the design disagree, the design wins —
   unless the design breaks the accessibility, and then the accessibility wins and the report
   says so.

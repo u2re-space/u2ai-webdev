@@ -263,6 +263,9 @@ export async function createClient({ config, env = process.env, signal = null, o
                     ? error
                     : new ApiError(`Network error: ${error.message}`, { code: 'NETWORK_ERROR', retryable: true, cause: error });
                 if (wrapped.code === 'ABORTED' || error?.name === 'AbortError') throw wrapped;
+                // A host that says nothing is not a host to ask again: the same question
+                // would wait the same silence. The next host of the chain answers.
+                if (wrapped.code === 'TIMEOUT') throw wrapped;
                 if (attempt < retries && wrapped.retryable !== false) {
                     const delay = retryDelayMs(attempt, null, null);
                     announce({ type: 'request.retry', attempt: attempt + 1, delayMs: delay, error: wrapped.message });
@@ -360,11 +363,20 @@ export async function createClient({ config, env = process.env, signal = null, o
         }
         // A thinking model may work for minutes without a word. The heartbeat says that
         // the run is alive: the silence of the terminal is not the hang of the run.
+        // The heartbeat belongs to the silence: while the model streams, the run is
+        // alive and says so with the stream itself.
         const waitStarted = Date.now();
+        let lastActivity = waitStarted;
         const waitTimer = setInterval(() => {
+            if (Date.now() - lastActivity < WAIT_INTERVAL_MS) return;
             announce({ type: 'request.wait', path, model, elapsedMs: Date.now() - waitStarted });
         }, WAIT_INTERVAL_MS);
         if (typeof waitTimer.unref === 'function') waitTimer.unref();
+        // The pieces of the stream are the sign of life: they move the clock of the wait.
+        const onStreamEvent = (event) => {
+            lastActivity = Date.now();
+            callEvent?.(event);
+        };
         // The record of the call: the chain of hosts, the answers and the times.
         const record = {
             path,
@@ -385,7 +397,7 @@ export async function createClient({ config, env = process.env, signal = null, o
                 const attemptStarted = Date.now();
                 try {
                     const answer = await callBackend(backend, path, {
-                        method, body, rawBody, contentType, signal: callSignal, stream, onEvent: callEvent, model,
+                        method, body, rawBody, contentType, signal: callSignal, stream, onEvent: onStreamEvent, model,
                     });
                     record.attempts.push({ backend: backend.baseURL, ok: true, durationMs: Date.now() - attemptStarted });
                     record.response = redactBody(answer);

@@ -82,6 +82,7 @@ export function createRenderer({
     stdin = process.stdin,
     inputEnabled = false,
     input: inputOverride = null,
+    echoThought = true,
 } = {}) {
     const paint = colors ?? createColors(mode === 'tty');
     const symbols = ascii ? ASCII_SYMBOLS : SYMBOLS;
@@ -91,6 +92,22 @@ export function createRenderer({
         ? createInputChannel({ stdin, output: stderr, interactive: mode === 'tty' })
         : null);
     const terminalWrite = (text) => input ? input.log(text) : stderr.write(text);
+
+    // The stream of the model: the thought comes as pieces, one after another. The
+    // pieces are collected here and written as blocks, so the log of the run has a
+    // line per block of the thought and not a line per token.
+    let thought = '';
+    let thoughtAt = Date.now();
+
+    /**
+     * How long a block of the thought waits before it is written.
+     *
+     * A model that thinks for minutes without a word must still show that it works:
+     * the block is written while the thought grows, not only when it ends.
+     * @type {number}
+     * @ai.hint pure
+     */
+    const THOUGHT_FLUSH_MS = 5_000;
 
     /**
      * Write one line on stdout.
@@ -110,6 +127,52 @@ export function createRenderer({
     const err = (text) => {
         if (quiet) return;
         terminalWrite(`${sanitizeText(text)}\n`);
+    };
+
+    /**
+     * Write the thought of the model as lines of blocks.
+     *
+     * The stream of the model comes as pieces. The pieces are collected and written
+     * in blocks: a long thought is written while it grows, so the terminal shows that
+     * the model works, and the log of the run has a line per block and not a line per
+     * token. Nothing of the thought is lost: a long thought becomes several blocks.
+     * @param {string} text
+     * @returns {void}
+     */
+    const writeThought = (text) => {
+        const body = String(text ?? '').replace(/\s+/g, ' ').trim();
+        if (!body || json || !echoThought) return; // The json carries every piece of the stream on its own.
+        for (let at = 0; at < body.length; at += 400) {
+            err(paint.dim(`${symbols.info} thinking: ${body.slice(at, at + 400)}`));
+        }
+    };
+
+    /**
+     * Write the thought of the model as it stands and empty the buffer.
+     * @returns {void}
+     */
+    const flushThought = () => {
+        if (!thought) return;
+        const body = thought;
+        thought = '';
+        thoughtAt = Date.now();
+        writeThought(body);
+    };
+
+    /**
+     * Write the thought of the model while it grows, so the terminal shows that the
+     * model works even when the thought lasts minutes.
+     * @returns {void}
+     */
+    const trimThought = () => {
+        const now = Date.now();
+        const grown = thought.length > 900;
+        const waited = now - thoughtAt > THOUGHT_FLUSH_MS;
+        if (!grown && !waited) return;
+        const body = thought;
+        thought = '';
+        thoughtAt = now;
+        writeThought(body);
     };
 
     /**
@@ -397,8 +460,8 @@ export function createRenderer({
          */
         event(event) {
             const type = String(event?.type ?? '');
-            if (type === 'stage.start') this.stageStart(event.stage, event.title);
-            else if (type === 'stage.done') this.stageDone(event.stage, event.status);
+            if (type === 'stage.start') { flushThought(); this.stageStart(event.stage, event.title); }
+            else if (type === 'stage.done') { flushThought(); this.stageDone(event.stage, event.status); }
             else if (type === 'stage.skip') this.stageDone(event.stage, 'skipped');
             else if (type === 'stage.shot') {
                 this.note(`снимок страницы: ${event.path ?? ''}${event.width ? ` (${event.width}x${event.height})` : ''}`);
@@ -412,8 +475,25 @@ export function createRenderer({
                     + `SSIM ${event.ssim?.toFixed?.(4) ?? '?'}`);
                 if (event.difference) this.note(`  картинка различий: ${event.difference}`);
             }
-            else if (type === 'role.tool') this.tool(event.name, event.arguments ?? null);
-            else if (type === 'role.tool.result') this.toolResult(event);
+            else if (type === 'role.tool') { flushThought(); this.tool(event.name, event.arguments ?? null); }
+            else if (type === 'role.tool.result') { flushThought(); this.toolResult(event); }
+            else if (type === 'reasoning.delta') {
+                // The thinking of the model, while it thinks: the stage is alive, and the
+                // silence of the terminal is not the hang of the run. The pieces are
+                // collected and written as one block: the log of the run has a line per
+                // thought and not a line per token.
+                const text = String(event.text ?? '');
+                if (json) { emit('reasoning.delta', { text }); return; }
+                thought += text;
+                trimThought();
+            }
+            else if (type === 'text.delta') {
+                // The text of the answer comes the same way. The answer itself is
+                // reported by the stage; the stream is only a sign of life.
+                const text = String(event.text ?? '');
+                if (json) { emit('text.delta', { text }); return; }
+            }
+            else if (type === 'role.done') { flushThought(); }
             else if (type === 'delegate.start') {
                 if (json) {
                     emit('delegate.start', { from: event.from ?? null, to: event.to ?? null, task: event.task ?? '', reason: event.reason ?? '' });
@@ -448,8 +528,8 @@ export function createRenderer({
             else if (type === 'picture.ready') {
                 this.note(`картинка готова: ${event.name ?? ''} → ${event.file ?? ''}${event.model ? ` (${event.model})` : ''}`);
             }
-            else if (type === 'request.wait') this.wait(event.elapsedMs ?? 0);
-            else if (type === 'request.retry') this.retry(event);
+            else if (type === 'request.wait') { flushThought(); this.wait(event.elapsedMs ?? 0); }
+            else if (type === 'request.retry') { flushThought(); this.retry(event); }
             else if (type === 'request.error') this.warning(`запрос не удался: ${event.error ?? ''}`);
             else if (type === 'warning') this.warning(event.text);
             else if (type === 'bridge.log') this.bridge(event.name, event.line, event.stream ?? 'stdout');

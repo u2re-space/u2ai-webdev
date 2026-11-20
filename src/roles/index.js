@@ -771,6 +771,11 @@ export async function runRole({
             maxOutputTokens: maxOutputFor(currentModel, config, definition.maxOutputTokens, { readOnly: reduced }),
             verbosity: config?.verbosity ?? (reduced ? 'low' : null),
             signal,
+            // The answer comes as a stream: a model that thinks for minutes shows its
+            // reasoning while it thinks, and a host that says nothing is told apart from a
+            // model that is thinking. The silence of the terminal is not the hang of the run.
+            stream: true,
+            onEvent: notify,
         });
 
         const parsed = parseResponse(raw);

@@ -127,6 +127,10 @@ export const defaults = {
       // The structure is the most expensive thing to change later, so the architect answers
       // with the head of the family too — the Sol, and not the model of the run.
       architect: 'family:gpt',
+      // The vector graphics are drawn as text: the geometry of an isometric drawing and the
+      // letters of a wordmark are the work of the best model of the family. A cheaper model
+      // draws a floppy disk well and a wordmark with letters that do not spell anything.
+      editor: 'family:gpt',
     },
     /**
      * The ladders of the ranks of the models of the house in their families.
@@ -146,6 +150,9 @@ export const defaults = {
         // The architect only answers: there is nothing for it to polish on the disk, so it
         // stays on the head of the ladder.
         architect: [1],
+        // The editor writes the SVG and then answers for it: the whole session of the
+        // editor is the work of the model of the house.
+        editor: [1],
       },
     },
   },

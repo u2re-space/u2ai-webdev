@@ -211,6 +211,11 @@ export function createWorkerInput({ send = () => {}, stderr = process.stderr, on
  * semantic events that the graphical shell needs; the raw pipeline event is sent as
  * it is, so events unknown to the classic renderer are not lost.
  *
+ * The stream of the model is the exception: it comes in thousands of pieces, and the
+ * shell wants one line, not a thousand. The pieces are gathered and sent as one event
+ * every few hundred milliseconds — the shell shows the tail of the stream, and the
+ * frame rate of the shell stays the frame rate of a human.
+ *
  * @param {object} renderer
  * @param {(frame: object) => void} send
  * @returns {object}
@@ -219,11 +224,41 @@ export function createWorkerInput({ send = () => {}, stderr = process.stderr, on
  */
 export function createWorkerRenderer(renderer, send) {
     const observed = new Set(['plan', 'progress', 'summary', 'files', 'warning', 'error']);
+    const streams = new Set(['reasoning.delta', 'text.delta']);
+    let pending = null;
+    let timer = null;
+
+    /**
+     * Send the gathered stream as one event.
+     * @returns {void}
+     */
+    const flushStream = () => {
+        if (timer) { clearTimeout(timer); timer = null; }
+        if (!pending) return;
+        const { type, text } = pending;
+        pending = null;
+        send(createFrame(FRAME.event, { event: { type, text } }));
+    };
+
     return new Proxy(renderer, {
         get(target, property) {
             if (property === 'event') {
                 return (event) => {
-                    send(createFrame(FRAME.event, { event }));
+                    const type = String(event?.type ?? '');
+                    if (streams.has(type)) {
+                        // The pieces of the stream are gathered: the shell redraws one line.
+                        // The raw piece is not sent: the shell has no use for it.
+                        const text = String(event.text ?? '');
+                        if (pending?.type === type) pending.text += text;
+                        else { flushStream(); pending = { type, text }; }
+                        if (!timer) {
+                            timer = setTimeout(flushStream, 120);
+                            timer.unref?.();
+                        }
+                    } else {
+                        flushStream();
+                        send(createFrame(FRAME.event, { event }));
+                    }
                     target.event(event);
                 };
             }
@@ -278,6 +313,9 @@ export async function mainWorker(argv = []) {
         stdout: process.stdout,
         stderr: process.stderr,
         input,
+        // The graphical shell draws the stream of the model itself, in one line that is
+        // redrawn: the worker keeps its stderr for the log of the run.
+        echoThought: !connected,
     });
     const renderer = createWorkerRenderer(classic, send);
     const onMessage = (message) => input?.receive(message);

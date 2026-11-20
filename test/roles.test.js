@@ -26,6 +26,9 @@ import { defaults } from '../src/config.js';
 /**
  * A mock of the Responses API: it answers the first request with a tool call, the second one
  * with the final text.
+ *
+ * A request that asks for a stream is answered with the stream of the events: the roles
+ * always ask for one, so the mock has to speak the same language as the API.
  * @param {object[]} answers the answers, one per request
  * @returns {Promise<{ url: string, requests: object[], close: Function }>}
  */
@@ -36,9 +39,17 @@ async function mockApi(answers) {
         let body = '';
         req.on('data', (chunk) => { body += chunk; });
         req.on('end', () => {
-            requests.push(JSON.parse(body || '{}'));
+            const parsed = JSON.parse(body || '{}');
+            requests.push(parsed);
             const answer = answers[Math.min(index, answers.length - 1)];
             index += 1;
+            if (parsed.stream === true) {
+                res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+                res.write(`data: ${JSON.stringify({ type: 'response.created', response: { id: answer.id ?? 'resp_1', status: 'in_progress' } })}\n\n`);
+                res.write(`data: ${JSON.stringify({ type: 'response.completed', response: answer })}\n\n`);
+                res.end();
+                return;
+            }
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(answer));
         });
@@ -218,8 +229,28 @@ test('the effort of a stage is pulled down to what the model takes', async () =>
     }
 });
 
-test('the frontend roles get the standard of the work', () => {
-    for (const name of ['markup', 'coder', 'styler']) {
+test('the role asks for a stream: the model is seen while it thinks', async () => {
+    const api = await mockApi([textAnswer('ok')]);
+    const config = structuredClone(defaults);
+    config.backends = [{ baseURL: api.url, apiKey: 'test-key' }];
+    const client = await createClient({ config, env: {} });
+    try {
+        await runRole({
+            client,
+            config,
+            role: 'planner',
+            input: 'Say ok.',
+            root: process.cwd(),
+        });
+        // A stream shows the thinking of the model while it thinks: the silence of the
+        // terminal is not read as the hang of the stage.
+        assert.equal(api.requests[0].stream, true);
+    } finally {
+        await api.close();
+    }
+});
+
+test('the frontend roles get the standard of the work', () => {    for (const name of ['markup', 'coder', 'styler']) {
         const text = ROLES[name].instructions({});
         assert.match(text, /The standard of the frontend work/, `the role ${name} has no standard`);
         assert.match(text, /The file is finished/);

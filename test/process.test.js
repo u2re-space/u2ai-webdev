@@ -34,6 +34,47 @@ import { createJobManager, jobId } from '../src/jobs/manager.js';
 
 const CONFIG = { output: { work: './.tmp' }, stages: {} };
 
+test('a stage with a step skipped by the operator does not stop the run', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-operator-skip-'));
+    const order = [];
+    const stages = [
+        {
+            name: 'coding',
+            title: 'Coding',
+            dependsOn: [],
+            // The operator skipped the step of the stage: the stage is partial, not failed.
+            run: async () => {
+                order.push('coding');
+                return {
+                    ok: false,
+                    partial: true,
+                    steps: [{ stage: 'coding', ok: false, skipped: true, summary: 'Skipped by the operator.' }],
+                };
+            },
+        },
+        {
+            name: 'styling',
+            title: 'Styling',
+            dependsOn: ['coding'],
+            run: async () => { order.push('styling'); return { ok: true }; },
+        },
+    ];
+
+    const result = await runPipeline({
+        client: { responses: { create: async () => ({ output: [] }) } },
+        config: CONFIG,
+        root,
+        task: 'Make a landing.',
+        runId: 'run-skip',
+        stages,
+    });
+
+    // The run went on to the next stage: the skip of a step is not a failure.
+    assert.deepEqual(order, ['coding', 'styling']);
+    assert.equal(result.status, 'partial');
+    assert.equal(result.stages.find((item) => item.name === 'coding').status, 'partial');
+});
+
 test('the progress of a run holds the record of every stage', () => {
     const progress = createProgress({
         id: 'run-1',

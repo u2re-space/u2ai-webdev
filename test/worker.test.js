@@ -9,7 +9,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createFrame, FRAME, isFrame, PROTOCOL_VERSION } from '../src/cli/protocol.js';
-import { createWorkerInput } from '../src/cli/worker.js';
+import { createWorkerInput, createWorkerRenderer } from '../src/cli/worker.js';
 import { createWorkerClient } from '../src/tui/worker-client.js';
 
 test('a protocol frame carries its version and only a known kind', () => {
@@ -60,6 +60,27 @@ test('the worker operator channel keeps steering, questions, skips and quit apar
     input.receive(createFrame(FRAME.command, { name: 'quit' }));
     assert.equal(input.shouldQuit(), true);
     input.close();
+});
+
+test('the worker gathers the stream of the model before it reaches the shell', async () => {
+    const frames = [];
+    const seen = [];
+    const classic = {
+        event(event) { seen.push(event); },
+    };
+    const renderer = createWorkerRenderer(classic, (frame) => frames.push(frame));
+
+    renderer.event({ type: 'reasoning.delta', text: 'The header ' });
+    renderer.event({ type: 'reasoning.delta', text: 'must be blue.' });
+    // The pieces are not sent one by one: the shell would draw a thousand lines.
+    assert.equal(frames.length, 0);
+    renderer.event({ type: 'role.tool', name: 'read_file', arguments: { path: 'index.html' } });
+
+    const stream = frames.find((frame) => frame.event?.type === 'reasoning.delta');
+    assert.ok(stream, 'the gathered stream did not reach the shell');
+    assert.equal(stream.event.text, 'The header must be blue.');
+    // The classic renderer still sees every piece: the log of the worker keeps them.
+    assert.equal(seen.filter((event) => event.type === 'reasoning.delta').length, 2);
 });
 
 test('the worker is a child process with a ready frame, live output and a result', async () => {

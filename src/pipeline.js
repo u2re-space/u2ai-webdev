@@ -579,6 +579,10 @@ export async function runPipeline({
         const operatorPartial = result?.partial === true
             || (Array.isArray(result?.steps) && result.steps.some((step) => step?.skipped === true));
         const ok = result?.ok !== false;
+        // A step the operator skipped is not a failure of the stage: the stage is partial,
+        // and the run goes on to the next stage. Only a stage that failed on its own stops
+        // the run.
+        const failed = !ok && !operatorPartial;
 
         // The files of the stage go into the map and into the context of the run: the next
         // stage finds them without looking for them.
@@ -611,7 +615,7 @@ export async function runPipeline({
         reports.push({ name: stage.name, status: operatorPartial ? 'partial' : (ok ? 'completed' : 'failed'), result, warnings: stageWarnings });
         notify({ type: 'stage.done', stage: stage.name, status: operatorPartial ? 'partial' : (ok ? 'completed' : 'failed'), result });
 
-        if (!ok) {
+        if (failed) {
             status = 'failed';
             break;
         }
