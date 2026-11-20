@@ -107,7 +107,7 @@ export function createRenderer({
      * @type {number}
      * @ai.hint pure
      */
-    const THOUGHT_FLUSH_MS = 5_000;
+    const THOUGHT_FLUSH_MS = 1_000;
 
     /**
      * Write one line on stdout.
