@@ -1032,11 +1032,18 @@ that is named with `null` has no model of the house and answers on the model of 
   "house": {
     "models": {
       "styler": "family:gpt",
+      "architect": "family:gpt",
       "coder": null
     }
   }
 }
 ```
+
+Two roles have a model of the house of their own. The styler writes the styles with the best
+model of the family, and the architect decides the structure of the project with the same
+model: the files, the modules and the order are the most expensive thing to change later, so
+the architect does not answer on the model of the run — even when the run answers on a cheap
+one. A pin of the role (`--role architect=<model>`) still wins over the model of the house.
 
 The Kimi has no levels of the effort above `medium` — the answer of the same question costs the
 same seconds there — so a role that answers on it works on `medium` however deep the profile of
@@ -1083,6 +1090,21 @@ and the Terra for the polishing of them:
     "models": { "styler": "family:gpt" },
     "ranks": {
       "roles": { "styler": [1, 0] }
+    }
+  }
+}
+```
+
+The architect has a path of its own: `[1]`, the head of the family. It only answers, so there
+is nothing for it to polish — the whole session of the architect is the work of the model of
+the house.
+
+```json
+{
+  "house": {
+    "models": { "architect": "family:gpt" },
+    "ranks": {
+      "roles": { "architect": [1] }
     }
   }
 }

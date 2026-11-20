@@ -121,6 +121,10 @@ export const defaults = {
       // The styles are the work of the best model of the family: the Sol writes them, the
       // Terra polishes them afterwards.
       styler: 'family:gpt',
+      // The architecture decides the files, the modules and the order of the whole project.
+      // The structure is the most expensive thing to change later, so the architect answers
+      // with the head of the family too — the Sol, and not the model of the run.
+      architect: 'family:gpt',
     },
     /**
      * The ladders of the ranks of the models of the house in their families.
@@ -135,7 +139,12 @@ export const defaults = {
      * with the same model of the house.
      */
     ranks: {
-      roles: { styler: [1, 0] },
+      roles: {
+        styler: [1, 0],
+        // The architect only answers: there is nothing for it to polish on the disk, so it
+        // stays on the head of the ladder.
+        architect: [1],
+      },
     },
   },
   /**

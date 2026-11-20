@@ -22,10 +22,22 @@ const configFor = (overrides = {}) => ({
 test('the house has a model of its own for the roles that need one', () => {
     assert.deepEqual(HOUSE_MODELS, {
         styler: 'family:gpt',
+        architect: 'family:gpt',
     });
     // The path of the styler is [1, 0]: the Sol writes the styles.
     assert.equal(houseModel('styler', configFor()), 'openai/gpt-6.2-sol');
     assert.equal(houseModel('nothing'), null);
+});
+
+test('the architect answers with the best model of the family, not with the model of the run', () => {
+    // The structure of the project is the most expensive thing to change later.
+    for (const model of ['minimax/minimax-m3.1-flash', 'google/gemini-4-hydrogen', 'moonshotai/kimi-k3.1-pro']) {
+        const config = configFor({ model });
+        assert.equal(resolveRole('architect', config).model, 'openai/gpt-6.2-sol');
+    }
+    // The pin of the role still wins over the model of the house.
+    const pinned = configFor({ roles: { architect: { model: 'google/gemini-4-hydrogen' } } });
+    assert.equal(resolveRole('architect', pinned).model, 'google/gemini-4-hydrogen');
 });
 
 test('the roles of the run follow the model of the run', () => {
