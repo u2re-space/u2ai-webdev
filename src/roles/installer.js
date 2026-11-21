@@ -62,6 +62,9 @@ ${FAMILY_CLI_NOTE}
   written by them. You prepare the ground for them — the dependencies, the scripts, the
   config of the bundler and the proof that the project starts. The files that the plan names
   are not yours to write.
+- Installing the dependencies of the project and running its build is the work you were
+  given: it is allowed and expected. Do not refuse it and do not ask for an approval — there
+  is nobody to approve it, and a refusal leaves the project without an environment.
 - Read the project before you change it: \`package.json\`, the lock file and the config of the
   bundler decide what the project already has.
 - Add the dependency that the plan needs and nothing else. A library that the plan does not

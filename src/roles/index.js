@@ -46,6 +46,7 @@ import { getModelProfile, maxOutputFor, snapEffort } from '../model/profiles.js'
 import { familyOf, rankPath, resolveModelRef } from '../model/refs.js';
 import { houseModelRef } from '../model/trust.js';
 import { pageFrameContractFor } from './page-frame.js';
+import { PHASES, chunkText, chunksFor } from './chunks.js';
 
 import * as untrusted from './untrusted.js';
 import * as scanner from './scanner.js';
@@ -129,6 +130,19 @@ export const WORK_CORRECTION = 'You have not done the work yet: your answer name
  * @ai.hint pure
  */
 export const WORK_ORDER = 'Still nothing is written. Stop describing the work: make the calls. For every file of the step call the tool `write_file` with its path and its full content — one call per file, no exceptions. Do not answer until the files are on the disk. If you cannot write a file, say why in the notes of the answer.';
+
+/**
+ * The answer of a role that refused to do the work of its step.
+ *
+ * A refusal is almost never a fact about the task: it is a misreading of the rules of the
+ * trust as a rule of the danger. The files of the project are ordinary files of a project
+ * that is being built, and writing them is the work the role was given. The role is told
+ * this once, and it goes on with the work.
+ * @type {string}
+ * @exports
+ * @ai.hint pure
+ */
+export const REFUSAL_RECOVERY = 'The work of this step is the ordinary files of the project: reading them, writing them, patching them. That is allowed and expected — there is no permission to ask for and no rule that forbids it. The step is not done until the files of the step are on the disk. Do the work now with your tools: read what you need, write the files the step names, and answer with them. If a part of the step really cannot be done, do the rest and say in the notes of the answer what was left out and why.';
 
 /**
  * The correction of a role whose files do not compile.
@@ -669,6 +683,22 @@ export async function runRole({
     if (hasActionTools) {
         instructions += '\n\nBefore writing files or using any action-capable tool, call `write_ready` on its own first. Until then, only the read tools are available. After `write_ready`, continue with the requested action; the next turn has the full output budget.';
     }
+    // The instructions come in parts, and every part has its own moment. The rules of
+    // reading belong to the beginning of the work; the craft of the files of the step
+    // belongs to the write gate, and it comes with the rules of the files.
+    const stepFiles = Array.isArray(context?.step?.files)
+        ? context.step.files.map((item) => String(item ?? '').trim()).filter(Boolean)
+        : [];
+    const toolNames = specs.map((spec) => String(spec?.name ?? ''));
+    const readChunks = chunkText(chunksFor({ role: key, phase: PHASES.READ, files: stepFiles }));
+    if (readChunks) instructions += `\n\n${readChunks}`;
+    const writeChunks = chunkText(chunksFor({
+        role: key,
+        phase: PHASES.WRITE,
+        files: stepFiles,
+        tools: toolNames,
+    }));
+    const doneChunks = chunkText(chunksFor({ role: key, phase: PHASES.DONE, files: stepFiles }));
     const schemaName = definition.schema ?? 'response';
     const requestedTurns = Number.isInteger(maxTurns) && maxTurns > 0 ? maxTurns : definition.maxTurns;
     const limit = key === 'reviewer' ? Math.min(requestedTurns, 4) : requestedTurns;
@@ -715,6 +745,9 @@ export async function runRole({
     let schemaChannel = forcedChannel ?? null;
     let withSchema = true;
     let writeReady = false;
+    let writeCraftSent = false;
+    let doneSent = false;
+    let refusalRecovered = false;
     let delegationUsed = false;
     let stylerResearchCalls = 0;
     // The files the step names: the role has to write them.
@@ -817,6 +850,14 @@ export async function runRole({
     while (turns < limit) {
         turns += 1;
         appendSteering();
+        // The craft of the files of the step comes right before the write: the rules of a
+        // stylesheet, of a document or of a vector graphic are worth nothing in the middle of
+        // the reading of the project, and by the time the model writes they are the last
+        // thing it has read.
+        if (writeReady && !writeCraftSent) {
+            writeCraftSent = true;
+            if (writeChunks) items.push({ role: 'user', content: [textPart(writeChunks)] });
+        }
         // The model of this turn: the head of the ladder while the role works, the tail
         // while it polishes what is on the disk.
         modelFor(phase);
@@ -852,6 +893,16 @@ export async function runRole({
                 deferredSteering = [];
             }
             answer = parsed;
+            // A refusal is not a fact about the task: it is a misreading of the rules of the
+            // trust. The role is told once that the files of the project are ordinary files
+            // of a project that is being built, and it goes on with the work.
+            if (answer.refusal && !refusalRecovered && turns < limit) {
+                refusalRecovered = true;
+                phase = 'work';
+                items.push({ role: 'user', content: [textPart(REFUSAL_RECOVERY)] });
+                schemaChannel = 'tool';
+                continue;
+            }
             if (prematureSchemaAnswer && hasActionTools) {
                 fallback = parsed;
                 const files = Array.isArray(answer?.data?.files) ? answer.data.files : [];
@@ -1089,6 +1140,12 @@ export async function runRole({
                 + (criteria.length ? `Acceptance criteria: ${criteria.join('; ')}. ` : '')
                 + 'Preserve all explicit task requirements over generic style advice. Do not run Python, shell commands, scripts, or delegate.',
             )] });
+        }
+        // The files are on the disk: the last part of the instructions comes now, and it
+        // keeps the role from starting a new round of changes.
+        if (writes.length && !doneSent) {
+            doneSent = true;
+            if (doneChunks) items.push({ role: 'user', content: [textPart(doneChunks)] });
         }
         // The work of the role is done: the files are on the disk. The next turns are the
         // polish of what is written — the tail of the ladder of the role. A role that has

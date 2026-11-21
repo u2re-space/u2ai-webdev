@@ -17,14 +17,16 @@
  *
  * @depends none
  * @usedBy roles/markup, roles/coder, roles/styler
- * @exports WEB_DEVELOPMENT, webDevelopment
+ * @exports CORE, HTML, CSS, WEB_DEVELOPMENT, webDevelopment
  * @ai.tags roles, html, css, standard
  * @ai.hint pure
  * @changed 2026-11-15 Ported from the monolith and brought up to date: layers, nesting.
+ * @changed 2026-11-21 The parts of the standard are exported: the craft of a role takes the
+ *                       part that concerns it and brings it at the write gate.
  */
 
 /** The rules that hold for every file of the frontend. */
-const CORE = `### The rules that hold for every file
+export const CORE = `### The rules that hold for every file
 1. **The file is finished.** No \`<!-- add more items here -->\`, no \`/* rest of the styles */\`,
    no function that only says what its comment says. A file that cannot be finished is not
    written: say in the report what is missing and what is left to do.
@@ -55,7 +57,7 @@ Plan it silently, and then write the whole file at once:
 5. the layer and the file that every rule goes into.`;
 
 /** The rules of the markup. */
-const HTML = `### The rules of the markup
+export const HTML = `### The rules of the markup
 - **Semantic HTML5.** \`<header>\`, \`<nav>\`, \`<main>\`, \`<section>\`, \`<article>\`, \`<aside>\`,
   \`<footer>\` — one \`<main>\` per page, and no \`<div>\` where an element carries the
   meaning.
@@ -72,7 +74,7 @@ const HTML = `### The rules of the markup
   keeps its name: the markup is not renamed under the styles.`;
 
 /** The rules of the styles. */
-const CSS = `### The rules of the styles
+export const CSS = `### The rules of the styles
 
 #### The cascade is held by the layers, not by the specificity
 - The stylesheet declares its layers once, at the top, in the order of the priority:
@@ -137,6 +139,10 @@ export const WEB_DEVELOPMENT = [CORE, HTML, CSS].join('\n\n');
  * The styler writes the styles and gets the rules of the styles; the markup and the coder
  * write the pages and get the rules of the markup. Every role of the frontend gets the rules
  * that hold for every file.
+ *
+ * The standard is not carried by the prompt of a role any more: every role takes the part
+ * that concerns its craft and brings it at the write gate (`roles/chunks`). This function
+ * stays for whoever wants the whole standard of a craft in one text.
  * @param {string} [role]
  * @returns {string}
  * @exports

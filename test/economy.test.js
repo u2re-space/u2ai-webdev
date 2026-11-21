@@ -248,6 +248,7 @@ test('the roles that read and write know the cheap way', async () => {
     const styler = await import('../src/roles/styler.js');
     const coder = await import('../src/roles/coder.js');
     const markup = await import('../src/roles/markup.js');
+    const { chunkText, chunksFor, PHASES } = await import('../src/roles/chunks.js');
 
     for (const role of [styler, coder, markup]) {
         // The tools are there, so the role may use them.
@@ -255,11 +256,14 @@ test('the roles that read and write know the cheap way', async () => {
         assert.ok(role.tools.includes('patch_file'), role.name);
         assert.ok(role.tools.includes('batch'), role.name);
 
-        // And the prompt tells the role that the line is the address of a place.
-        const prompt = role.instructions({});
-        assert.match(prompt, /find_line/, role.name);
-        assert.match(prompt, /patch_file/, role.name);
-        assert.match(prompt, /batch/, role.name);
-        assert.match(prompt, /startLine/, role.name);
+        // And the instructions tell the role that the line is the address of a place: the
+        // rules of the reading come with the beginning of the work, the rules of the
+        // patching — with the write gate.
+        const read = chunkText(chunksFor({ role: role.name, phase: PHASES.READ, files: ['index.html'] }));
+        assert.match(read, /find_line/, role.name);
+        assert.match(read, /startLine/, role.name);
+        const write = chunkText(chunksFor({ role: role.name, phase: PHASES.WRITE, files: ['index.html'] }));
+        assert.match(write, /patch_file/, role.name);
+        assert.match(write, /batch/, role.name);
     }
 });

@@ -3,8 +3,8 @@
  * @module roles/styler
  * @purpose The styles of one step: the CSS or SCSS that the design direction asks for.
  * @depends roles/untrusted
- * @usedBy roles/index, stages/styling
- * @exports name, schema, tools, maxTurns, instructions
+ * @usedBy roles/index, roles/chunks, stages/styling
+ * @exports name, schema, tools, maxTurns, instructions, STYLE_RULES
  * @ai.tags roles, css, styles
  * @ai.hint pure
  */
@@ -13,9 +13,9 @@ import { UNTRUSTED } from './untrusted.js';
 import { INPUTS_IN_CONTEXT } from './inputs.js';
 import { referenceNote } from './reference.js';
 import { PAGE_FRAME_CONTRACT, pageScaleRules, pageWidthNote } from './page-frame.js';
-import { webDevelopment } from './web-development.js';
+import { CORE, CSS } from './web-development.js';
 import { DELEGATE_NAMES, delegationNote } from '../agent/delegation.js';
-import { economyNote, economyTools } from './economy.js';
+import { economyTools } from './economy.js';
 import { devToolsMarker, devToolsNote } from './devtools.js';
 
 /** The name of the role. */
@@ -37,7 +37,75 @@ export const tools = [
 export const maxTurns = 16;
 
 /**
- * The instructions of the role.
+ * The craft of the styles: the rules that hold for a stylesheet.
+ *
+ * The text is not in the prompt of the role: it comes at the write gate, right before the
+ * stylesheet is written. A rule of the styles in the middle of the reading of the project is
+ * a rule the model does not need yet, and one it forgets by the time it writes.
+ * @type {string}
+ * @exports
+ * @ai.hint pure
+ */
+export const STYLE_RULES = [CORE, CSS, `#### The tokens, the page and the states
+- Every new custom property token gets an \`@property\` at the top of the file, before the
+  \`:root\` rules: its type, its initial value and its inheritance are declared there.
+- The page has one scrollbar: the document scrolls, the body does not. Never put
+  \`overflow-y: auto;\` (or \`overflow: auto;\`) on the \`body\` while the document scrolls — a
+  scroller inside a scroller gives the page two scrollbars, and a \`body\` with a fixed
+  \`block-size\` gives it a horizontal one as well. The scrollbar belongs to the scrolling
+  root: set \`scrollbar-width: thin;\` and
+  \`scrollbar-color: contrast-color(var(--background-color)) var(--background-color);\` on it.
+  \`--background-color\` is the page surface and scrollbar track; the contrasting first color
+  is the thumb. Preserve at least 3:1 contrast, with a stronger
+  \`prefers-contrast: more\` override. If adding \`::-webkit-scrollbar\` fallbacks, scope them
+  to \`@supports not (scrollbar-color: auto)\` and reset \`scrollbar-width: auto\` inside.
+- The width of the page is the width of the window: the canvas is scaled by \`--zoom\`, and the
+  scale is computed from the width the body has without the scrollbar — a canvas wider than
+  the window gives the page a horizontal scrollbar.
+- The state of a control is a rule of its own: \`:hover\`, \`:focus-visible\`, \`:active\`,
+  \`:disabled\`.
+- The text of the body is 45..75 characters wide: \`max-width: 65ch\` on the text column. Use
+  \`white-space\` and \`text-wrap\` where it is suitable.
+- For scrollable content, use additionally CSS scroll snap features.
+
+#### The files of the styles
+- The styles of the step live in the files the step names. When the step names one file, write
+  one file: the rules of the layers go into it, one after another, under the comments that name
+  them — the reset, the base, the theme (the tokens), the layout, the components, the utilities.
+- Split the styles into partials only when the step names the partials as well. The order of the
+  imports follows the order of the layers.
+- A \`@use\` names a file that has to be on the disk. Before you write a \`@use\`, make sure that
+  the file is there (look for it with \`list_files\`): a partial of Sass is a file whose name
+  starts with an underscore (\`src/_variables.scss\`), and the \`@use\` names it without the
+  underscore (\`@use 'variables'\`). A \`@use\` of a file that was never written breaks the build
+  of the project — the page stays without styles.
+- Every file that the entry point \`@use\`s must be on the disk: write the partial in this step,
+  or keep the rules in the entry file.
+- The SCSS has an entry point: a file whose name does not start with an underscore and that
+  \`@use\`s the other files of the styles. A file that nobody uses renders nothing.
+
+#### The names of the styles
+- The styles answer to the class names of the markup. Do not invent a second naming.
+- The code is written after the styles, against the names you give: the class names and the
+  tokens of your stylesheet are the contract of the code that comes next. Name them well —
+  a name that changes later breaks the page.
+
+#### The platform of today
+- Use more actively CSS math \`calc(<expression>)\`, \`calc-size(<keyword>, <expression>)\`
+  (expression with the \`size\` keyword), \`round\`, \`abs\`, \`sign\`, \`mod\` (and etc., incl.
+  trigonometry), and other modern math functions and expressions.
+- Use more actively CSS interaction, such \`user-select\`, \`pointer-events\`, \`touch-action\`.
+- The features that the browsers of the project run by default are allowed: the native
+  nesting, the cascade layers, \`:has()\`, the container queries, the subgrid, \`color-mix()\`,
+  \`oklch()\`, \`light-dark()\`. The features that are behind a flag, behind an origin trial or
+  only in a draft are not used: look it up with the \`web_guidance\` tool when you rely on it.`].join('\n\n');
+
+/**
+ * The instructions of the role: the spine of the work, not the craft of the styles.
+ *
+ * The spine says who the role is, what the step is and what the answer has to be. The craft
+ * of the stylesheet (see `STYLE_RULES`) comes at the write gate — the rules of a stylesheet
+ * in the middle of the reading of the project are rules the model does not need yet.
  * @param {{ task?: string, step?: object, brief?: string, style?: string, design?: string,
  *   measurements?: string, palette?: string, referenceSizes?: object[], vectorOnly?: boolean }} [context]
  * @returns {string}
@@ -64,7 +132,7 @@ export function instructions(context = {}) {
     const pageFrame = context.vectorOnly ? '' : PAGE_FRAME_CONTRACT;
     const pageScale = context.vectorOnly ? '' : pageScaleRules();
     const repair = Array.isArray(context.issues) && context.issues.length
-        ? `The review of the step found what has to be fixed, and the request names the file, the defect and the change that is asked for. Fix it now: find the place of the defect with \`find_line\`, read that part of the file, and change that part with \`patch_file\`. 
+        ? `The review of the step found what has to be fixed, and the request names the file, the defect and the change that is asked for. Fix it now: find the place of the defect with \`find_line\`, read that part of the file, and change that part with \`patch_file\`.
         The answer is the repaired file on the disk, never a description of the change.`
       : '';
     return `You are the styler of a web project. You write the CSS (or SCSS) of one step and you make the result look the way the design direction says.
@@ -79,83 +147,27 @@ ${reference}
 ${width}
 ${repair}
 
-
-## Rules:
+## The rules of the work:
 
 ${INPUTS_IN_CONTEXT}
 ${pageFrame}
 ${delegationNote(DELEGATE_NAMES)}
-${economyNote()}
 ${devToolsNote({
     url: context?.pageUrl || context?.config?.browser?.url || null,
     width: context?.config?.browser?.viewport?.width ?? null,
 })}
  - The machine compares the page with the reference: the numbers of the difference and the picture of the difference come with the request.
-  The red places of that picture are the places where the page does not match the reference — those are the places to fix first. 
-  The picture of the page and the picture of the reference are brought to the same size before the comparison, so the difference is a difference of the page and not of the sizes. 
-  To compare again, call the tool \`compare_images\` with the reference and the picture of the page.
-- Look the guides up with the \`web_guidance\` tool before you write the rules of a layout, an animation or a scroll: the platform of today already holds the answer.
-- The title of the step is not the kind of work: 
-  a step whose title says "describe" or "specify" still means writing the styles of the files the step names. 
-  Your answer is the styles on the disk, never a description of them.
-- The colours, the sizes, the fonts, the spaces, the radii, the shadows and the durations are tokens. A rule names a token, never a raw value. 
-  The (constant) tokens are declared once, at the top.
-- Every length has an explicit unit. \`rem\` for the type and the spacing, \`px\` for the hairlines and the small radii, \`clamp()\` for the fluid type.
-- Make \`@property\` for every new custom property token (at start of CSS, before declare custom property tokens, before \`:root\` rules).
-- Use more actively CSS math \`calc(<expression>)\`, \`calc-size(<keyword>, <expression>)\` (expression with \`size\` keyword), \`round\`, \`abs\`, \`sign\`, \`mod\` (and etc., incl. trigonometry), and other modern math functions/expressions.
-- Use more actively CSS interaction, such \`user-select\`, \`pointer-events\`, \`touch-action\`, etc.
-- Use CSS/SCSS (selector) nesting (more actively).
-  - <https://drafts.csswg.org/css-nesting-1/>
-  - <https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Nesting>
-  - <https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Nesting/Nesting_and_specificity>
-  - <https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Nesting/Using>
-  - <https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Selectors/Nesting_selector>
-  - <https://sass-lang.com/documentation/style-rules/>
-- Use CSS \`white-space\` and \`text-wrap\` properties where is it suitable.
-- The page has one scrollbar: the document scrolls, the body does not. Never put
-  \`overflow-y: auto;\` (or \`overflow: auto;\`) on the \`body\` while the document scrolls — a
-  scroller inside a scroller gives the page two scrollbars, and a \`body\` with a fixed
-  \`block-size\` gives it a horizontal one as well. The scrollbar belongs to the scrolling
-  root: set \`scrollbar-width: thin;\` and
-  \`scrollbar-color: contrast-color(var(--background-color)) var(--background-color);\` on it.
-  \`--background-color\` is the page surface and scrollbar track; the contrasting first color
-  is the thumb. Preserve at least 3:1 contrast, with a stronger
-  \`prefers-contrast: more\` override. If adding \`::-webkit-scrollbar\` fallbacks, scope them
-  to \`@supports not (scrollbar-color: auto)\` and reset \`scrollbar-width: auto\` inside.
-- The width of the page is the width of the window: the canvas is scaled by \`--zoom\`, and the
-  scale is computed from the width the body has without the scrollbar — a canvas wider than
-  the window gives the page a horizontal scrollbar.
-- For scrollable content, use additionally CSS scroll snap features.
-- The layout is grid for the page and for the areas, flex for the rows. 
-  A row of cards is \`repeat(auto-fit, minmax(240px, 1fr))\`, not a fixed width with a margin.
-- The state of a control is a rule of its own: \`:hover\`, \`:focus-visible\`, \`:active\`, \`:disabled\`. The focus is visible: an outline of 2px with an offset, never \`outline: none\`.
-- The text of the body is 45..75 characters wide: \`max-width: 65ch\` on the text column.
-- The motion is short: 120..200ms for a hover, 200..300ms for a panel. Animate \`transform\`, \`opacity\` and \`color\`, never \`width\`, \`height\` or \`top\`.
-- Every animation has a branch for \`prefers-reduced-motion: reduce\`.
-- The contrast of the text is 4.5:1, the contrast of the border of a control is 3:1. 
-  When the design cannot pass the threshold, say so in the report instead of hiding it.
-- The styles of the step live in the files the step names. 
-  When the step names one file, write one file: 
-  the rules of the layers go into it, one after another, under the comments that name them — the reset, the base, the theme (the tokens), the layout, the components, the utilities.
-- Split the styles into partials only when the step names the partials as well. 
-  The order of the imports follows the order of the layers.
-- A \`@use\` names a file that has to be on the disk. 
-  Before you write a \`@use\`, make sure that the file is there (look for it with \`list_files\`): 
-  a partial of Sass is a file whose name starts with an underscore (\`src/_variables.scss\`), and the \`@use\` names it without the underscore (\`@use 'variables'\`). 
-  A \`@use\` of a file that was never written breaks the build of the project — the page stays without styles.
-- Every file that the entry point \`@use\`s must be on the disk: 
-  write the partial in this step, or keep the rules in the entry file. 
-  A \`@use\` of a file that was never written breaks the build of the project — the page stays without styles.
-- The SCSS has an entry point: a file whose name does not start with an underscore and that \`@use\`s the other files of the styles. A file that nobody uses renders nothing.
-- The styles answer to the class names of the markup. Do not invent a second naming.
-- The code is written after the styles, against the names you give: the class names and the
-  tokens of your stylesheet are the contract of the code that comes next. Name them well —
-  a name that changes later breaks the page.
-- The build stage checks the styles with the project's compiler after this step. The styler has no shell-command tool: write the stylesheet files of the step and let the build stage report compilation errors.
+   The red places of that picture are the places where the page does not match the reference — those are the places to fix first.
+   The picture of the page and the picture of the reference are brought to the same size before the comparison, so the difference is a difference of the page and not of the sizes.
+   To compare again, call the tool \`compare_images\` with the reference and the picture of the page.
+ - Look the guides up with the \`web_guidance\` tool before you write the rules of a layout, an animation or a scroll: the platform of today already holds the answer.
+ - The title of the step is not the kind of work:
+   a step whose title says "describe" or "specify" still means writing the styles of the files the step names.
+   Your answer is the styles on the disk, never a description of them.
+ - The rules of the stylesheet itself come to you at the write gate, right before you write it: the layers, the tokens, the nesting, the units, the motion and the files of the styles.
+ - The build stage checks the styles with the project's compiler after this step. The styler has no shell-command tool: write the stylesheet files of the step and let the build stage report compilation errors.
 
 ${pageScale}
-
-${webDevelopment('styler')}
 
 ${UNTRUSTED}`;
 }

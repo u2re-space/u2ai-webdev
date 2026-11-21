@@ -17,6 +17,7 @@ import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { ROLES, ROLE_NAMES, resolveRole, readOnlyOperation, roleSchema, buildInstructions, runRole, roleReason, pictureParts } from '../src/roles/index.js';
 import { runStepStage } from '../src/stages/step.js';
 import { WEB_DEVELOPMENT, webDevelopment } from '../src/roles/web-development.js';
+import { chunkText, chunksFor } from '../src/roles/chunks.js';
 import { LIVE_ROLE_NAMES } from '../src/stages/roles.js';
 import { toolSpecs } from '../src/agent/tool-specs.js';
 import { createToolset } from '../src/agent/tools.js';
@@ -250,27 +251,32 @@ test('the role asks for a stream: the model is seen while it thinks', async () =
     }
 });
 
-test('the frontend roles get the standard of the work', () => {    for (const name of ['markup', 'coder', 'styler']) {
-        const text = ROLES[name].instructions({});
-        assert.match(text, /The standard of the frontend work/, `the role ${name} has no standard`);
+test('the frontend roles get the standard of the work', () => {
+    // The standard is not in the spine of the role: it comes with the craft of the files of
+    // the step, at the write gate.
+    const craftOf = (role, file) => chunkText(chunksFor({ role, phase: 'write', files: [file] }));
+    for (const [name, file] of [['markup', 'index.html'], ['coder', 'src/main.js'], ['styler', 'src/styles.scss']]) {
+        const text = craftOf(name, file);
+        assert.match(text, /The rules that hold for every file/, `the role ${name} has no standard`);
         assert.match(text, /The file is finished/);
     }
     // The layers and the nesting are the rules of the styles.
-    const styler = ROLES.styler.instructions({});
+    const styler = craftOf('styler', 'src/styles.scss');
     assert.match(styler, /@layer reset, base, theme, layout, components, utilities;/);
     assert.match(styler, /The native nesting groups the rules/);
-    // The roles that do not write the frontend do not get the standard.
+    // The roles that do not write the frontend do not get the standard in their spine.
     for (const name of ['planner', 'installer', 'learner']) {
-        assert.doesNotMatch(ROLES[name].instructions({}), /The standard of the frontend work/);
+        assert.doesNotMatch(ROLES[name].instructions({}), /The rules that hold for every file/);
     }
 });
 
 test('a role gets the part of the standard that concerns its craft', () => {
-    const coder = ROLES.coder.instructions({});
+    const craftOf = (role, file) => chunkText(chunksFor({ role, phase: 'write', files: [file] }));
+    const coder = craftOf('coder', 'src/main.js');
     assert.match(coder, /Semantic HTML5/);
     assert.doesNotMatch(coder, /grid-template-areas/);
 
-    const styler = ROLES.styler.instructions({});
+    const styler = craftOf('styler', 'src/styles.scss');
     assert.match(styler, /grid-template-areas/);
     assert.doesNotMatch(styler, /Semantic HTML5/);
 
@@ -332,8 +338,10 @@ test('the roles that write the assets take the prepared pictures as they are', (
 });
 
 test('the editor gets a precise image-edit, flag and optional-crop workflow', () => {
-    const text = ROLES.editor.instructions({ design: 'DESIGN.md', reference: ['landing.png'] });
-    assert.match(text, /what to remove or change, what must remain pixel-faithful/i);
+    // The contract of an edit of a picture comes with the craft of the picture, at the
+    // write gate.
+    const text = chunkText(chunksFor({ role: 'editor', phase: 'write', files: ['assets/hero.png'] }));
+    assert.match(text, /what to remove or change,\s+what must remain pixel-faithful/i);
     assert.match(text, /measurements are optional/i);
     assert.match(text, /--background transparent/);
     assert.match(text, /--reference <file>/);
@@ -360,14 +368,15 @@ test('the planner does not plan a step of the environment', () => {
 });
 
 test('the coder keeps out of the environment and out of the styles', () => {
-    const text = ROLES.coder.instructions({});
+    // The boundaries of the work come with the craft of the script, at the write gate.
+    const text = chunkText(chunksFor({ role: 'coder', phase: 'write', files: ['src/main.js'] }));
     // The environment is the work of the stage `setup`.
     assert.match(text, /The environment is the work of another stage/);
     assert.match(text, /install the dependencies, do not change/);
     // The stylesheets belong to the styler, and the code is written against them.
     assert.match(text, /The stylesheets are written before your code/);
-    assert.match(text, /Read the stylesheets of the project/);
-    assert.match(text, /Do not change the stylesheets/);
+    assert.match(text, /read the stylesheets\s+of the project/i);
+    assert.match(text, /Do not\s+change the stylesheets/);
     // The production build belongs to the stage `build`, which runs after the styles.
     assert.match(text, /production build of the project is the work of the stage `build`/);
     assert.match(text, /do not start a loop of build-and-fix/);
@@ -954,7 +963,9 @@ test('write_ready is documented as the write gate, not as a hand-off', () => {
     const requestGate = ROLES.coder.instructions({ task: 'Write the code.' });
     assert.match(requestGate, /write_ready/);
     assert.match(requestGate, /starts no other role/);
-    assert.match(requestGate, /write_file/);
+    // The rules of the write come with the gate: there the role is told what to write with.
+    const write = chunkText(chunksFor({ role: 'coder', phase: 'write', files: ['src/main.js'] }));
+    assert.match(write, /write_file/);
 
     const handoff = toolSpecs(defaults.tools, { names: ['delegate_role'] })[0];
     assert.match(handoff.description, /different from `write_ready`/);

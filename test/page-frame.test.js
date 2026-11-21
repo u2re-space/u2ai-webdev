@@ -15,6 +15,7 @@ import path from 'node:path';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 
 import { ROLES } from '../src/roles/index.js';
+import { chunkText, chunksFor } from '../src/roles/chunks.js';
 import {
     PAGE_CLASS,
     PAGE_FRAME_CONTRACT,
@@ -56,7 +57,9 @@ test('the markup writes the canvas inside the body', () => {
 });
 
 test('the styles give the canvas the width of the design and the scale', () => {
-    const text = flat(ROLES.styler.instructions({}));
+    // The rules of the scrollbar come with the craft of the styles, at the write gate.
+    const craft = chunkText(chunksFor({ role: 'styler', phase: 'write', files: ['src/styles.scss'] }));
+    const text = flat(`${ROLES.styler.instructions({})}\n${craft}`);
 
     assert.match(text, /The canvas of the page and the scale/);
     // The body is the container of the width, not a scroller of its own.

@@ -3,8 +3,8 @@
  * @module roles/markup
  * @purpose The markup of one step: the semantics, the accessibility and the attributes.
  * @depends roles/untrusted
- * @usedBy roles/index, stages/markup
- * @exports name, schema, tools, maxTurns, instructions
+ * @usedBy roles/index, roles/chunks, stages/markup
+ * @exports name, schema, tools, maxTurns, instructions, MARKUP_RULES
  * @ai.tags roles, markup, accessibility
  * @ai.hint pure
  */
@@ -13,9 +13,9 @@ import { UNTRUSTED } from './untrusted.js';
 import { INPUTS_IN_CONTEXT } from './inputs.js';
 import { referenceNote } from './reference.js';
 import { PAGE_FRAME_CONTRACT, pageFrameRules, pageWidthNote } from './page-frame.js';
-import { webDevelopment } from './web-development.js';
+import { CORE, HTML } from './web-development.js';
 import { DELEGATE_NAMES, delegationNote } from '../agent/delegation.js';
-import { economyNote, economyTools } from './economy.js';
+import { economyTools } from './economy.js';
 
 /** The name of the role. */
 export const name = 'markup';
@@ -34,7 +34,39 @@ export const tools = [
 export const maxTurns = 16;
 
 /**
- * The instructions of the role.
+ * The craft of the markup: the rules that hold for a page.
+ *
+ * The text is not in the prompt of the role: it comes at the write gate, right before the
+ * markup is written. A rule of the markup in the middle of the reading of the project is a
+ * rule the model does not need yet, and one it forgets by the time it writes.
+ * @type {string}
+ * @exports
+ * @ai.hint pure
+ */
+export const MARKUP_RULES = [CORE, HTML, `#### The element comes before the class
+- The platform of today comes before the habit of yesterday: look the guides up with the
+  \`web_guidance\` tool before you write a dialog, a form or a table, and follow what they
+  say.
+- A title is a heading, a list is a list, a link to a place is an anchor and an action is a
+  button. A \`<div>\` with a click handler is neither.
+- The landmarks are in place: one \`<main>\`, and the \`header\`, \`nav\`, \`aside\` and \`footer\`
+  where they belong.
+- Every image has an \`alt\`: a text that says what it shows, or an empty one when the image is
+  decorative. Every field of a form has a \`<label for>\`, and the error of a field is linked to
+  it with \`aria-describedby\`.
+- The attributes of ARIA are a gap-filler, not a habit. \`aria-hidden\` on a decorative picture,
+  \`aria-expanded\` on a disclosure, \`aria-current\` on the active item of a menu.
+- The class names follow the naming of the project: one pattern, one way of writing it, and
+  the names say what the part is (\`card__title\`, not \`blue-text\`).
+- The markup is valid: the tags are closed, the attributes are quoted, the boolean attributes
+  have no value.`].join('\n\n');
+
+/**
+ * The instructions of the role: the spine of the work, not the craft of the markup.
+ *
+ * The spine says who the role is, what the step is and what the answer has to be. The craft
+ * of the page (see `MARKUP_RULES`) comes at the write gate — the rules of a document in the
+ * middle of the reading of the project are rules the model does not need yet.
  * @param {{ task?: string, step?: object, brief?: string, markup?: string, design?: string,
  *   measurements?: string, assets?: string, referenceSizes?: object[] }} [context]
  * @returns {string}
@@ -84,21 +116,6 @@ Rules:
 ${INPUTS_IN_CONTEXT}
 ${vectorOnly ? '' : PAGE_FRAME_CONTRACT}
 ${delegationNote(DELEGATE_NAMES)}
-${economyNote()}
-- The platform of today comes before the habit of yesterday: look the guides up with the
-  \`web_guidance\` tool before you write a dialog, a form or a table, and follow what they
-  say.
-- The element comes before the class. A title is a heading, a list is a list, a link to a place
-  is an anchor and an action is a button. A \`<div>\` with a click handler is neither.
-- The landmarks are in place: one \`<main>\`, and the \`header\`, \`nav\`, \`aside\` and \`footer\`
-  where they belong. The headings form one tree, from \`<h1>\` down, without a skipped level.
-- Every image has an \`alt\`: a text that says what it shows, or an empty one when the image is
-  decorative. Every field of a form has a \`<label for>\`, and the error of a field is linked to
-  it with \`aria-describedby\`.
-- The attributes of ARIA are a gap-filler, not a habit. \`aria-hidden\` on a decorative picture,
-  \`aria-expanded\` on a disclosure, \`aria-current\` on the active item of a menu.
-- The class names follow the naming of the project: one pattern, one way of writing it, and
-  the names say what the part is (\`card__title\`, not \`blue-text\`).
 - The class names are a contract with the styles: a class that the styles describe keeps its
   name. Do not rename a class and do not drop a class that has a rule — the styles are
   another role's work, and they are not changed together with the markup.
@@ -119,12 +136,10 @@ ${economyNote()}
   \`search_files\` before you link it. A path you have not seen is a path that does not exist.
   The stylesheet of the project and the script of the project are the two exceptions: other
   roles write them after you, and the context names them, so link them as they are named there.
-- The markup is valid: the tags are closed, the attributes are quoted, the boolean attributes
-  have no value.
+- The rules of the document itself come to you at the write gate, right before you write it:
+  the semantics, the accessibility, the names and the validity of the markup.
 
 ${vectorOnly ? '' : pageFrameRules()}
-
-${webDevelopment('markup')}
 
 ${UNTRUSTED}`;
 }

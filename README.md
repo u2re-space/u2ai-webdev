@@ -699,6 +699,33 @@ The vector editor has no shell: the graphics are text, and the stage itself pars
 every SVG the editor writes. A command line there would only let the role hunt for a validator
 it does not need — and wait for it.
 
+### The parts of the instructions
+
+A prompt that is carried whole is noise: half of the rules do not concern what the role is doing
+right now, and a model with a short context forgets the important ones among them by the time it
+needs them. So the instructions of a role are cut into parts, and every part comes in its own
+moment.
+
+| Part | When it comes | What it holds |
+|---|---|---|
+| The spine | always, in the prompt of the role | Who the role is, the step, the files, the criteria, the boundaries of the work. |
+| The rules of reading | with the first turn | How to read the project, and what not to do while reading: a path that was not seen does not exist, the same range is not read twice, the inputs of the run are not read again. |
+| The rules of writing | at the write gate (`write_ready`), right before the write | How to write a file: the tools of the house, the boundaries of the step, and the permission to do the work — writing the ordinary files of the project is the work, it needs no approval and is not a forbidden action. |
+| The craft of the files | with the rules of writing | The rules of the kind of the file the step writes: the styles, the markup, the code, the SVG, the picture. The craft follows the file, not the role: a step that writes a stylesheet gets the rules of the stylesheet. |
+| The rules of the end | after the first write | The files are on the disk: fix a place only if a tool reported an error, and finish with the report. |
+
+The write gate is the hinge: until the role calls `write_ready`, it has only the read tools, and
+the craft of the files has not arrived yet. The gate opens, the craft comes as the last thing
+the model reads, and the model writes.
+
+The result is a shorter prompt and the same knowledge at the right time. The always-on prompt of
+the styler is about a third shorter than before, and the rules of the stylesheet arrive whole —
+but only when the stylesheet is about to be written.
+
+A refusal is treated as a misreading, not as a fact: the role is told once that the files of the
+project are ordinary files of a project that is being built, and it goes on with the work. A
+refusal that ends the step is a step with nothing in it.
+
 ## The survey of the project
 
 The stage `scan` runs right after the collection of the inputs and before the plan. The role
