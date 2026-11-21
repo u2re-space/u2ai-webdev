@@ -77,7 +77,7 @@ export async function stylingStage({
     runContext = null,
 } = {}) {
     const brief = architecture ? architectureText(architecture) : '';
-    const styles = stylesOf({ plan, architecture, config });
+    const styles = await stylesOf({ plan, architecture, config, root });
     const tokens = architecture?.tokens ?? [];
     const conflicts = inputs?.conflicts ?? [];
 

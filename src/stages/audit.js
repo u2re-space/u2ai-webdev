@@ -28,6 +28,7 @@
 import { runRole, resolveRole } from '../roles/index.js';
 import { getModelProfile } from '../model/profiles.js';
 import { architectureText } from './architect.js';
+import { stylesOf } from './style-entry.js';
 import { readBuild } from './build.js';
 import { listFiles } from '../agent/fs-tools.js';
 import { inputContext } from '../inputs/index.js';
@@ -249,6 +250,9 @@ export async function auditStage({
             project: root,
             stack: config?.stack ?? {},
             design,
+            // The contract of the styles: the auditor has to know how the styles reach the
+            // page, or it reports the opposite of what the build of the project does.
+            styles: await stylesOf({ plan, architecture, config, root }),
         },
         root,
         env,

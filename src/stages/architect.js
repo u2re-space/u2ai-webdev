@@ -147,10 +147,10 @@ export function architectureText(architecture = {}) {
     const styles = architecture.styles ?? null;
     if (styles?.source) {
         out.push('## The styles of the project');
-        out.push(`- the stylesheet of the project: \`${styles.source}\` (${styles.language})`);
+        out.push(`- the stylesheet of the project: \`${styles.source}\` (${styles.language}) — the file the styler writes`);
         if (styles.link && styles.link !== styles.source) {
-            out.push(`- the page loads \`${styles.link}\`: the compiled css of that stylesheet. It is the`
-                + ' artifact of the build, not a file of the project, and nobody writes it by hand');
+            out.push(`- the compiled css of that stylesheet: \`${styles.link}\`. It is the artifact of the`
+                + ' build, not a file of the project, and nobody writes it by hand');
         }
         out.push('- one stylesheet, one name: the roles that touch the styles use these paths, and'
             + ' nobody names another one');

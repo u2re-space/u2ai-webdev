@@ -232,6 +232,24 @@ the run says so. Without that one name, the roles each invented their own: the m
 clean up the disagreement afterwards. The language of the house is SCSS, and the scaffold of a
 new project writes `src/styles.scss` — the name of the plan follows it.
 
+The one name is not enough: the styles have to reach the page somehow, and the way depends on
+the project. A project with a bundler takes them by the import — the script of the project
+imports the source, the bundler compiles it, and the markup does not link a stylesheet at all.
+A project without a bundler takes them by the link — the page loads the compiled CSS that the
+build writes next to the source, and the script does not import the stylesheet, because a
+browser cannot read SCSS. The manifest of the project decides which way it is; the stack of the
+architecture is only the fallback, because the project is created after the architecture.
+
+The contract of the styles says that to every role that touches them: the markup links the
+compiled CSS or links nothing, the coder imports the source (with the path relative to the
+script) or imports nothing, the styler writes the source, and the reviewer does not demand the
+other way round. Without that, the roles disagreed with each other and with the build: the
+markup linked the `.scss` source that a browser cannot read, the coder imported the artifact of
+the build that goes stale, and the reviewer demanded a link that breaks a bundled project. The
+build stage fixes what the roles got wrong: the link to the source goes away, the import of the
+source goes away where it does not belong, and the import of the artifact goes away where the
+bundler compiles the source itself.
+
 `--route <stages>` chooses the stages the run goes through (the stages they need are added
 automatically), `--stop-after <stage>` (or `--stop-after=<stage>`) pauses the run on the
 border of a stage, and `--resume <id>` continues it later. The name of the stage of the pause

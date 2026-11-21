@@ -383,7 +383,15 @@ test('the coder keeps out of the environment and out of the styles', () => {
 });
 
 test('the roles that touch the styles are given the one name of the stylesheet', () => {
-    const styles = { source: 'src/styles.scss', link: 'src/styles.css', language: 'scss', from: 'plan' };
+    const styles = {
+        source: 'src/styles.scss',
+        link: 'src/styles.css',
+        language: 'scss',
+        from: 'plan',
+        script: 'src/main.js',
+        import: './styles.scss',
+        wiring: 'linked',
+    };
     const markup = ROLES.markup.instructions({ styles });
     const coder = ROLES.coder.instructions({ styles });
     const styler = ROLES.styler.instructions({ styles, style: 'scss' });
@@ -391,13 +399,38 @@ test('the roles that touch the styles are given the one name of the stylesheet',
     // The markup links the compiled css of that stylesheet, and it does not invent a name.
     assert.match(markup, /src\/styles\.scss/);
     assert.match(markup, /src\/styles\.css/);
-    assert.match(markup, /Do not write `styles\.css`/);
-    // The code imports the stylesheet itself.
+    assert.match(markup, /links that exact path/);
+    // The code does not import the stylesheet: the browser cannot read scss.
     assert.match(coder, /src\/styles\.scss/);
-    assert.match(coder, /imports that stylesheet/);
+    assert.match(coder, /does not import the stylesheet/);
     // The styler writes the stylesheet.
     assert.match(styler, /src\/styles\.scss/);
     assert.match(styler, /write that file/);
+});
+
+test('a project with a bundler gets the styles by the import, and nobody links the css', () => {
+    const styles = {
+        source: 'src/styles.scss',
+        link: 'src/styles.css',
+        language: 'scss',
+        from: 'plan',
+        script: 'src/main.js',
+        import: './styles.scss',
+        wiring: 'bundled',
+    };
+    const markup = ROLES.markup.instructions({ styles });
+    const coder = ROLES.coder.instructions({ styles });
+    const reviewer = ROLES.reviewer.instructions({ styles });
+
+    // The markup does not link a stylesheet: the bundler brings them.
+    assert.match(markup, /does not link a stylesheet/);
+    assert.doesNotMatch(markup, /Do not write `styles\.css`/);
+    // The code imports the source, with the path relative to the script.
+    assert.match(coder, /import '\.\/styles\.scss';/);
+    assert.match(coder, /src\/main\.js/);
+    // The reviewer does not demand the link that would break the build.
+    assert.match(reviewer, /does not link a stylesheet/);
+    assert.match(reviewer, /Do not ask for a link to the stylesheet/);
 });
 
 test('the planner names the roles that the stages of the run execute', () => {

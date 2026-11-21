@@ -33,6 +33,7 @@ import { checkFiles } from '../agent/syntax.js';
 import { checkMarkupStyles, renamedClasses } from '../agent/markup-styles.js';
 import { readReferences } from '../inputs/references.js';
 import { architectureText } from './architect.js';
+import { stylesOf } from './style-entry.js';
 import { projectFiles } from './project-files.js';
 import { applyFiles, filesByTool, LOOKS_AT_DESIGN } from './step.js';
 import { comparisonNote, comparePictures, picturePart } from './vision.js';
@@ -377,6 +378,9 @@ export async function repairIssues({
     }
 
     const brief = architecture ? architectureText(architecture) : '';
+    // The contract of the styles: the role that repairs the page repairs it the way the
+    // project is built, and not the way another project would be.
+    const styles = await stylesOf({ plan, architecture, config, root });
     for (const group of groups.values()) {
         if (!group.role) {
             warnings.push(`Ремонт пропущен: у замечания нет владельца (${group.issues[0]?.path ?? 'файл'}).`);
@@ -392,6 +396,7 @@ export async function repairIssues({
                 step: group.step,
                 brief,
                 issues: group.issues,
+                styles,
             },
             root,
             env,
@@ -569,6 +574,9 @@ export async function reviewStage({
     if (!client?.responses) throw new Error('Клиент API не передан.');
     const run = id ?? runId();
     const brief = architecture ? architectureText(architecture) : '';
+    // The contract of the styles: the reviewer has to know how the styles reach the page,
+    // or it demands the opposite of what the build of the project does.
+    const styles = await stylesOf({ plan, architecture, config, root });
 
     const done = new Set((Array.isArray(reports) ? reports : []).map((report) => report?.step?.id).filter(Boolean));
     const steps = (Array.isArray(plan?.steps) ? plan.steps : [])
@@ -704,6 +712,7 @@ export async function reviewStage({
                 reference: reference.names,
                 referenceSizes: reference.sizes,
                 design: Boolean(inputs),
+                styles,
             },
             root,
             env,

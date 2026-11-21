@@ -13,6 +13,7 @@ import { UNTRUSTED } from './untrusted.js';
 import { INPUTS_IN_CONTEXT } from './inputs.js';
 import { referenceNote } from './reference.js';
 import { CORE, HTML } from './web-development.js';
+import { coderStyleNote } from './style-note.js';
 import { DELEGATE_NAMES, delegationNote } from '../agent/delegation.js';
 import { economyTools } from './economy.js';
 import { devToolsMarker, devToolsNote } from './devtools.js';
@@ -94,7 +95,7 @@ export function instructions(context = {}) {
         ? `The stack: ${context.stack.frontendFramework ?? 'vanilla'}, ${context.stack.markupLanguage ?? 'html'}, ${context.stack.styleLanguage ?? 'scss'}, ${context.stack.scriptLanguage ?? 'javascript'}.`
         : '';
     const styles = context.styles?.source
-        ? `The styles of the project: the stylesheet is \`${context.styles.source}\` (${context.styles.language}), and the page loads \`${context.styles.link}\`. The script of the project imports that stylesheet, and the import names the file relative to the script (\`./styles.scss\` from \`src/main.js\`). Do not name another stylesheet: the styles have one name.`
+        ? coderStyleNote(context.styles)
         : '';
     const design = context.design
         ? `The design direction, palette and any existing measurements are in the task context. Measurements are optional; use DESIGN.md and the attached reference image directly.`

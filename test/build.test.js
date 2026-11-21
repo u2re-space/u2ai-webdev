@@ -372,6 +372,59 @@ test('the stage gives the styles of a Vite project to the bundler', async () => 
     assert.doesNotMatch(html, /main\.css/);
 });
 
+test('a project with a bundler gets the styles by the source, and the artifact import goes away', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-vite-artifact-'));
+    await mkdir(path.join(root, 'src'), { recursive: true });
+    await writeFile(path.join(root, 'vite.config.js'), 'export default {};\n', 'utf8');
+    await writeFile(path.join(root, 'index.html'),
+        '<!doctype html><html><head></head><body><script type="module" src="/src/main.js"></script></body></html>', 'utf8');
+    await writeFile(path.join(root, 'src', 'styles.scss'), '.a { color: red; }\n', 'utf8');
+    await writeFile(path.join(root, 'src', 'styles.css'), '.a { color: red; }\n', 'utf8');
+    // The script imports the artifact of the build: it is a file that goes stale.
+    await writeFile(path.join(root, 'src', 'main.js'), "import './styles.css';\nconsole.log('hi');\n", 'utf8');
+    await fakeSass(root);
+
+    const result = await buildStage({
+        root,
+        config: { output: { work: './.tmp' } },
+        runId: 'run-vite-artifact',
+    });
+
+    const script = await readFile(path.join(root, 'src', 'main.js'), 'utf8');
+    assert.doesNotMatch(script, /styles\.css/);
+    assert.match(script, /import '\.\/styles\.scss';/);
+    assert.match(result.warnings.join(' '), /Импорт артефакта сборки удалён/);
+});
+
+test('a project without a bundler loads the compiled css and does not import the source', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-plain-'));
+    await mkdir(path.join(root, 'styles'), { recursive: true });
+    await mkdir(path.join(root, 'scripts'), { recursive: true });
+    // The markup links the source: the browser cannot read scss.
+    await writeFile(path.join(root, 'index.html'),
+        '<!doctype html><html><head><link rel="stylesheet" href="./styles/main.scss"></head>'
+        + '<body><script type="module" src="./scripts/main.js"></script></body></html>', 'utf8');
+    await writeFile(path.join(root, 'styles', 'main.scss'), '.a { color: red; }\n', 'utf8');
+    // The script imports the source: the browser cannot read it either.
+    await writeFile(path.join(root, 'scripts', 'main.js'), "import '../styles/main.scss';\nconsole.log('hi');\n", 'utf8');
+    await fakeSass(root);
+
+    const result = await buildStage({
+        root,
+        config: { output: { work: './.tmp' } },
+        runId: 'run-plain',
+    });
+
+    // The page loads the compiled css.
+    const html = await readFile(path.join(root, 'index.html'), 'utf8');
+    assert.doesNotMatch(html, /main\.scss/);
+    assert.match(html, /<link rel="stylesheet" href="\.\/styles\/main\.css" \/>/);
+    // The script does not import the styles.
+    const script = await readFile(path.join(root, 'scripts', 'main.js'), 'utf8');
+    assert.doesNotMatch(script, /main\.scss/);
+    assert.match(result.warnings.join(' '), /Импорт исходника стилей удалён/);
+});
+
 test('the style that a stylesheet uses and that is not there is named', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-build-'));
     await mkdir(path.join(root, 'scss'), { recursive: true });

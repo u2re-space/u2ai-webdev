@@ -50,7 +50,7 @@ export async function markupStage({
     runContext = null,
 } = {}) {
     const brief = architecture ? architectureText(architecture) : '';
-    const styles = stylesOf({ plan, architecture, config });
+    const styles = await stylesOf({ plan, architecture, config, root });
     return await runStepStage({
         client,
         config,

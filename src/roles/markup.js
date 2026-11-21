@@ -14,6 +14,7 @@ import { INPUTS_IN_CONTEXT } from './inputs.js';
 import { referenceNote } from './reference.js';
 import { PAGE_FRAME_CONTRACT, pageFrameRules, pageWidthNote } from './page-frame.js';
 import { CORE, HTML } from './web-development.js';
+import { markupStyleNote } from './style-note.js';
 import { DELEGATE_NAMES, delegationNote } from '../agent/delegation.js';
 import { economyTools } from './economy.js';
 
@@ -86,8 +87,8 @@ export function instructions(context = {}) {
     const design = context.design && !vectorOnly
         ? 'The design direction and any prepared assets are in the task context. The attached reference image is a visual source of truth; measurements are optional. Match its regions, proportions, hierarchy and names of the parts.'
         : '';
-    const styles = context.styles?.link
-        ? `The styles of the project: the stylesheet is \`${context.styles.source}\` (${context.styles.language}), and the page loads \`${context.styles.link}\`. The page loads that exact path: do not write \`styles.css\` because that is what a page usually has, and do not name a compiled css that no build has produced yet. The stylesheet has one name and the roles use it.`
+    const styles = context.styles?.source
+        ? markupStyleNote(context.styles)
         : '';
     const reference = vectorOnly ? '' : referenceNote(context);
     const width = vectorOnly ? '' : pageWidthNote(context);
@@ -127,11 +128,9 @@ ${delegationNote(DELEGATE_NAMES)}
   markup on the disk, never a description of it.
 - Write the markup of the files the step names. The styles and the scripts are other roles'
   work: leave the hooks they need (\`id\`, \`data-*\`, the class names), do not write their rules.
-- The page is wired: the head carries the \`<link rel="stylesheet">\` of the stylesheet of the
-  project, and the body carries the \`<script type="module">\` of the script of the project. A
-  page without them opens unstyled. The stylesheet has the name and the path the context gives:
-  use that exact path. Do not write \`styles.css\` because that is what a page usually has, and
-  do not name a compiled css that no build has produced yet.
+- The body carries the script of the project: \`<script type="module" src="...">\` with the path
+  the context names. The head carries the stylesheet only when the context says that the page
+  loads it — the styles block above says how the styles reach the page in this project.
 - Every path the page points at has to be on the disk: find it with \`list_files\` and
   \`search_files\` before you link it. A path you have not seen is a path that does not exist.
   The stylesheet of the project and the script of the project are the two exceptions: other

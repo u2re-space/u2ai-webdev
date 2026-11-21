@@ -14,6 +14,7 @@ import { INPUTS_IN_CONTEXT } from './inputs.js';
 import { referenceNote } from './reference.js';
 import { PAGE_FRAME_CONTRACT, pageScaleRules, pageWidthNote } from './page-frame.js';
 import { CORE, CSS } from './web-development.js';
+import { stylerStyleNote } from './style-note.js';
 import { DELEGATE_NAMES, delegationNote } from '../agent/delegation.js';
 import { economyTools } from './economy.js';
 import { devToolsMarker, devToolsNote } from './devtools.js';
@@ -122,7 +123,7 @@ export function instructions(context = {}) {
         ? `The style language of the project: ${context.style}.`
         : 'The style language of the project: scss.';
     const styles = context.styles?.source
-        ? `The stylesheet of the project: \`${context.styles.source}\`. That is the only stylesheet and that is its exact name: write that file, and never name another one.`
+        ? stylerStyleNote(context.styles)
         : '';
     const design = context.design
         ? 'The design direction, palette and any existing measurements are in the task context. Follow DESIGN.md as the style source of truth; measurements are optional. When absent, infer colours, type scale, spacing and block proportions from the attached reference image.'

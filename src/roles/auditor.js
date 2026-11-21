@@ -12,6 +12,7 @@
  */
 
 import { UNTRUSTED } from './untrusted.js';
+import { reviewStyleNote } from './style-note.js';
 import { FAMILY_CLI_NOTE } from './cli-note.js';
 
 /** The name of the role. */
@@ -44,6 +45,7 @@ export function instructions(context = {}) {
     const design = context.design
         ? 'The design of the task is in the task context: DESIGN.md, any existing measurements, the palette and the tokens. Measurements are optional; compare the result visually with the reference when available.'
         : '';
+    const styles = reviewStyleNote(context.styles ?? {});
     return `You are the auditor of a web project. You look at the whole project, not at one
 step, and you report what is wrong with it.
 
@@ -53,6 +55,7 @@ ${design}
 
 Rules:
 ${FAMILY_CLI_NOTE}
+${styles ? `- ${styles}` : ''}
 - Read the project before the verdict: list the files with \`list_files\`, read the ones that
   matter with \`read_file\`, and run the build of the project with \`run_command\`. The listing
   of the project is in the task context: every path in it exists, and a path outside of it

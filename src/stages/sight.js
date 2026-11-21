@@ -29,6 +29,7 @@ import path from 'node:path';
 import { runRole } from '../roles/index.js';
 import { readReferences } from '../inputs/references.js';
 import { applyFiles, filesBlock, visibleFiles } from './step.js';
+import { stylesOf } from './style-entry.js';
 import { projectFiles } from './project-files.js';
 import { picturePart, shootPage, visionEnabled, visionPrompt, comparePictures, designWidth } from './vision.js';
 import { buildProject, ensurePage } from './dev-server.js';
@@ -290,6 +291,7 @@ export async function sightStage({
                     reference: reference.names,
                     referenceSizes: reference.sizes,
                     design: Boolean(inputs),
+                    styles: await stylesOf({ plan, architecture, config, root }),
                 },
                 root,
                 env,

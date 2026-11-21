@@ -11,6 +11,7 @@
 
 import { UNTRUSTED } from './untrusted.js';
 import { referenceNote } from './reference.js';
+import { reviewStyleNote } from './style-note.js';
 
 /** The name of the role. */
 export const name = 'reviewer';
@@ -50,6 +51,7 @@ export function instructions(context = {}) {
         ? `The screenshots of the result are attached to the task. Look at them before you judge the layout.`
         : '';
     const reference = referenceNote(context);
+    const styles = reviewStyleNote(context.styles ?? {});
     return `You are the reviewer of a web project. You look at the result of a step and you say
 whether it does what the step asked, whether it matches the design, and whether it is good
 enough to keep.
@@ -65,6 +67,7 @@ ${reference}
 Rules:
 - Judge against the task, the criteria, the screenshot, and the project files already supplied.
   Do not browse the web or query documentation during review.
+${styles ? `- ${styles}` : ''}
 - The report of the build, the screenshot and the comparison are already in context. The paths
   of the step files are supplied. Read a relevant file at most once; use \`find_line\` to locate
   a detail in a large file, then read only that range. Do not inspect files outside this step

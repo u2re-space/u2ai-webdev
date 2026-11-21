@@ -37,6 +37,7 @@ import { mkdir, readFile, readdir, rm, stat } from 'node:fs/promises';
 
 import { runProgram } from '../agent/programs.js';
 import { findSass, firstError, styleReferences, missingStyleReferences, partialName } from '../agent/syntax.js';
+import { bundledProject, importSpecifier } from './style-entry.js';
 import { runId, runFile, writeJsonFile, readJsonFile } from './workspace.js';
 import { writeFileAtomic } from '../shared/house.js';
 
@@ -526,20 +527,7 @@ export async function ensureHtmlWiring(root, htmlRel, { styles = [], script = nu
  * @ai.hint io
  */
 export async function isViteProject(root) {
-    const names = ['vite.config.js', 'vite.config.mjs', 'vite.config.ts', 'vite.config.mts', 'vite.config.cjs'];
-    for (const name of names) {
-        const found = await stat(path.join(root, name)).then((info) => info.isFile()).catch(() => false);
-        if (found) return true;
-    }
-    const text = await readFile(path.join(root, 'package.json'), 'utf8').catch(() => null);
-    if (text === null) return false;
-    let manifest = null;
-    try {
-        manifest = JSON.parse(text);
-    } catch {
-        return false;
-    }
-    return Boolean(manifest?.dependencies?.vite || manifest?.devDependencies?.vite);
+    return bundledProject(root);
 }
 
 /**
@@ -551,10 +539,69 @@ export async function isViteProject(root) {
  * @ai.hint pure
  */
 export function importPath(scriptRel, styleRel) {
+    return importSpecifier(scriptRel, styleRel);
+}
+
+/**
+ * Remove the import of a file from a script.
+ *
+ * The import of the source stylesheet in a project without a bundler breaks the page: the
+ * browser cannot read scss. The import of the artifact of the build in a project with a
+ * bundler makes the page read a file that goes stale: the bundler compiles the source itself.
+ * @param {string} content the text of the script
+ * @param {string} scriptRel the path of the script
+ * @param {string} targetRel the path of the file whose import goes away
+ * @returns {{ text: string, changed: boolean }}
+ * @exports
+ * @ai.hint pure
+ */
+export function removeImportOf(content, scriptRel, targetRel) {
+    const text = String(content ?? '');
+    const target = path.posix.normalize(String(targetRel ?? '').trim());
+    if (!text || !target) return { text, changed: false };
     const dir = path.posix.dirname(String(scriptRel ?? ''));
-    const rel = dir === '.' ? String(styleRel ?? '') : path.posix.relative(dir, String(styleRel ?? ''));
-    if (!rel) return './';
-    return rel.startsWith('.') ? rel : `./${rel}`;
+    const pattern = /^[ \t]*import\s+(?:[^'";]*?\sfrom\s+)?['"]([^'"]+)['"];?[ \t]*\r?\n?/gm;
+    let out = text;
+    let changed = false;
+    let match = pattern.exec(text);
+    while (match) {
+        const specifier = match[1];
+        if (specifier.startsWith('.')) {
+            const resolved = path.posix.normalize(path.posix.join(dir === '.' ? '' : dir, specifier));
+            if (resolved === target) {
+                out = out.replace(match[0], '');
+                changed = true;
+            }
+        }
+        match = pattern.exec(text);
+    }
+    return { text: out, changed };
+}
+
+/**
+ * Remove the import of a stylesheet from the script of the project.
+ * @param {string} root
+ * @param {string} scriptRel the path of the script
+ * @param {string} styleRel the path of the stylesheet
+ * @param {{ apply?: boolean }} [options]
+ * @returns {Promise<{ changed: boolean, removed: boolean }>}
+ * @exports
+ * @ai.hint io
+ */
+export async function removeStyleImport(root, scriptRel, styleRel, { apply = true } = {}) {
+    const result = { changed: false, removed: false };
+    const script = String(scriptRel ?? '').trim();
+    const style = String(styleRel ?? '').trim();
+    if (!script || !style) return result;
+    const file = path.join(root, script);
+    const text = await readFile(file, 'utf8').catch(() => null);
+    if (text === null) return result;
+    const stripped = removeImportOf(text, script, style);
+    if (!stripped.changed) return result;
+    result.removed = true;
+    result.changed = true;
+    if (apply) await writeFileAtomic(file, stripped.text);
+    return result;
 }
 
 /**
@@ -570,16 +617,25 @@ export function importPath(scriptRel, styleRel) {
  * @exports
  * @ai.hint io
  */
-export async function ensureStyleImport(root, scriptRel, styleRel, { apply = true } = {}) {
+export async function ensureStyleImport(root, scriptRel, styleRel, { apply = true, drop = [] } = {}) {
     const script = String(scriptRel ?? '').trim();
     const style = String(styleRel ?? '').trim();
-    const result = { changed: false, specifier: '', already: false };
+    const result = { changed: false, specifier: '', already: false, dropped: [] };
     if (!script || !style) return result;
     const specifier = importPath(script, style);
     result.specifier = specifier;
     const file = path.join(root, script);
-    const text = await readFile(file, 'utf8').catch(() => null);
+    let text = await readFile(file, 'utf8').catch(() => null);
     if (text === null) return result;
+    // The import of the artifact of the build goes away: the bundler compiles the source
+    // itself, and the artifact is a file that goes stale.
+    for (const artifact of Array.isArray(drop) ? drop : []) {
+        const stripped = removeImportOf(text, script, artifact);
+        if (!stripped.changed) continue;
+        text = stripped.text;
+        result.dropped.push(String(artifact));
+        result.changed = true;
+    }
     // The import is already there when the script names this very stylesheet: the name of
     // the file alone is not a proof — `./domain/main.js` is not `./styles/main.scss`.
     const already = scriptImports(text).some((item) => {
@@ -590,6 +646,7 @@ export async function ensureStyleImport(root, scriptRel, styleRel, { apply = tru
     });
     if (already) {
         result.already = true;
+        if (apply && result.changed) await writeFileAtomic(file, text);
         return result;
     }
     if (!apply) {
@@ -874,12 +931,18 @@ export async function buildStage({
     let compiled = { compiled: [], errors: [], note: null };
     let imported = null;
     let unlinked = null;
+    let dropped = null;
 
     if (vite && scriptRel && entry) {
         // Vite: the import of the stylesheet goes into the script of the project, and the
         // link of the markup to the CSS of the build goes away — that file is an artifact
         // of the bundler, and a link to it breaks the build of the project.
-        imported = await ensureStyleImport(root, scriptRel, entry, { apply });
+        imported = await ensureStyleImport(root, scriptRel, entry, {
+            apply,
+            // The import of the artifact of the build goes away as well: the bundler
+            // compiles the source itself, and the artifact is a file that goes stale.
+            drop: primary?.output && primary.output !== entry ? [primary.output] : [],
+        });
         if (htmlRel) {
             // The link to the source stylesheet goes away as well: the import is the one way
             // to the styles now, and the two together load the styles twice.
@@ -901,6 +964,22 @@ export async function buildStage({
                     : 'Скрипт проекта не найден: стили собраны напрямую.',
             );
         }
+        // The project without a bundler: the page loads the compiled css, and a link to the
+        // source in the markup is a request the browser cannot read.
+        if (htmlRel && entry && primary?.output !== entry) {
+            unlinked = await removeStyleLink(root, htmlRel, [entry], { apply });
+            if (unlinked?.removed) {
+                warnings.push(`Ссылка на исходник стилей удалена: ${entry}. Страница грузит ${primary?.output}.`);
+            }
+        }
+        // The script of such a project does not import the stylesheet: the browser cannot
+        // read scss, and the request for it breaks the page.
+        if (scriptRel && entry && primary?.output !== entry) {
+            dropped = await removeStyleImport(root, scriptRel, entry, { apply });
+            if (dropped?.removed) {
+                warnings.push(`Импорт исходника стилей удалён из ${scriptRel}: браузер не читает ${path.posix.extname(entry) || 'исходник'}.`);
+            }
+        }
         compiled = apply
             ? await compileStyles(root, targets, { env })
             : { compiled: [], errors: [], note: 'сборка отключена: файлы не записываются.' };
@@ -914,7 +993,10 @@ export async function buildStage({
     } else if (imported?.already) {
         warnings.push(`Импорт стилей на месте: ${imported.specifier}.`);
     }
-    if (unlinked?.removed) {
+    for (const item of imported?.dropped ?? []) {
+        warnings.push(`Импорт артефакта сборки удалён из ${scriptRel}: ${item}. Стили приходят из исходника.`);
+    }
+    if (unlinked?.removed && primary) {
         warnings.push(`Ссылка на собранный CSS удалена: ${primary.output}.`);
     }
     for (const item of scratch) {
