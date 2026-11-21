@@ -365,11 +365,14 @@ test('the stage gives the styles of a Vite project to the bundler', async () => 
     assert.equal(result.build.vite, true);
     // The bundler compiles the SCSS itself: no CSS file is built by the stage.
     assert.deepEqual(result.build.compiled, []);
-    assert.equal(result.build.removedLink, 'styles/main.css');
-    const script = await readFile(path.join(root, 'src', 'main.js'), 'utf8');
-    assert.match(script, /import '\.\.\/styles\/main\.scss';/);
+    // The markup of plain html links the source stylesheet: the bundler compiles it
+    // from the link, and the styles load without JavaScript.
     const html = await readFile(path.join(root, 'index.html'), 'utf8');
+    assert.match(html, /<link rel="stylesheet" href="\.\/styles\/main\.scss" \/>/);
     assert.doesNotMatch(html, /main\.css/);
+    // The script does not import the stylesheet: the link already brings the styles.
+    const script = await readFile(path.join(root, 'src', 'main.js'), 'utf8');
+    assert.doesNotMatch(script, /import/);
 });
 
 test('a project with a bundler gets the styles by the source, and the artifact import goes away', async () => {
@@ -377,7 +380,8 @@ test('a project with a bundler gets the styles by the source, and the artifact i
     await mkdir(path.join(root, 'src'), { recursive: true });
     await writeFile(path.join(root, 'vite.config.js'), 'export default {};\n', 'utf8');
     await writeFile(path.join(root, 'index.html'),
-        '<!doctype html><html><head></head><body><script type="module" src="/src/main.js"></script></body></html>', 'utf8');
+        '<!doctype html><html><head><link rel="stylesheet" href="./src/styles.scss"></head>'
+        + '<body><script type="module" src="/src/main.js"></script></body></html>', 'utf8');
     await writeFile(path.join(root, 'src', 'styles.scss'), '.a { color: red; }\n', 'utf8');
     await writeFile(path.join(root, 'src', 'styles.css'), '.a { color: red; }\n', 'utf8');
     // The script imports the artifact of the build: it is a file that goes stale.
@@ -392,7 +396,9 @@ test('a project with a bundler gets the styles by the source, and the artifact i
 
     const script = await readFile(path.join(root, 'src', 'main.js'), 'utf8');
     assert.doesNotMatch(script, /styles\.css/);
-    assert.match(script, /import '\.\/styles\.scss';/);
+    // The page keeps its link to the source itself: the bundler compiles it from the link.
+    const html = await readFile(path.join(root, 'index.html'), 'utf8');
+    assert.match(html, /<link rel="stylesheet" href="\.\/src\/styles\.scss">/);
     assert.match(result.warnings.join(' '), /Импорт артефакта сборки удалён/);
 });
 

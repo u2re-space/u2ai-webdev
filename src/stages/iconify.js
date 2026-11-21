@@ -16,13 +16,23 @@
  * @changed 2026-11-13 Ported from the monolith: подбор иконок и интеграция в разметку.
  */
 
-import { stat } from 'node:fs/promises';
+import { stat, readFile } from 'node:fs/promises';
 import { resolveInside } from '../agent/paths.js';
 import { architectureText } from './architect.js';
 import { runStepStage } from './step.js';
 
 /** Роль, чьи шаги исполняет эта стадия. */
 export const role = 'iconifier';
+
+/**
+ * Escape the characters that mean something in a regular expression.
+ * @param {string} text
+ * @returns {string}
+ * @ai.hint pure
+ */
+function escapeRegExp(text) {
+    return String(text ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 /**
  * The files of the icons of an answer.
@@ -84,7 +94,9 @@ export async function iconifyStage({
         },
     });
 
-    // Every icon the answer names must be on the disk.
+    // Every icon the answer names must be on the disk. A name with a fragment
+    // (`assets/icons.svg#icon-search`) points into a sprite: the file before the
+    // fragment is the one on the disk, and the fragment names the symbol inside it.
     const missing = [];
     const present = [];
     const sets = new Set();
@@ -98,11 +110,20 @@ export async function iconifyStage({
                 missing.push({ name, file: '', reason: 'the answer did not name the file' });
                 continue;
             }
-            const found = await resolveInside(root, file)
-                .then(({ abs }) => stat(abs).then((info) => info.isFile()))
+            const at = file.indexOf('#');
+            const path = at >= 0 ? file.slice(0, at) : file;
+            const fragment = at >= 0 ? file.slice(at + 1) : '';
+            const found = await resolveInside(root, path)
+                .then(async ({ abs }) => {
+                    if (!await stat(abs).then((info) => info.isFile()).catch(() => false)) return false;
+                    // A fragment without a symbol behind it is a name without an icon.
+                    if (!fragment) return true;
+                    const text = await readFile(abs, 'utf8').catch(() => '');
+                    return new RegExp(`\\bid=["']${escapeRegExp(fragment)}["']`).test(text);
+                })
                 .catch(() => false);
             if (found) present.push(file);
-            else missing.push({ name, file, reason: 'the file is not in the project' });
+            else missing.push({ name, file, reason: fragment && !file.endsWith(`#${fragment}`) ? 'the file is not in the project' : (fragment ? `the symbol ${fragment} is not in ${path}` : 'the file is not in the project') });
         }
         if (report.set) sets.add(report.set);
     }

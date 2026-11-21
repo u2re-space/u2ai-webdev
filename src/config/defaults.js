@@ -397,7 +397,10 @@ export const defaults = {
     sight: { enabled: true, maxTurns: 16, timeoutMs: 30 * 60_000 },
     vector: { enabled: true, maxTurns: 8, timeoutMs: null },
     iconify: { enabled: true, maxTurns: 8, timeoutMs: null },
-    review: { enabled: true, maxTurns: 4, repair: true, repairRounds: 2, checkStyles: true, timeoutMs: null },
+    // The review judges every step of the plan, repairs what it finds and judges the
+    // repaired steps again. That is more work than the stages that write the files, and
+    // a repair that runs out of its budget dies with the findings still on the disk.
+    review: { enabled: true, maxTurns: 4, repair: true, repairRounds: 2, checkStyles: true, timeoutMs: 30 * 60_000 },
     audit: { enabled: true, maxTurns: 8, timeoutMs: null },
     learn: { enabled: true, maxTurns: 8, timeoutMs: null },
   },

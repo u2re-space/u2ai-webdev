@@ -27,7 +27,8 @@
  * @depends node:path, node:fs/promises
  * @usedBy stages/architect, stages/markup, stages/coding, stages/styling, stages/build
  * @exports STYLE_LANGUAGES, WIRINGS, styleFiles, styleEntry, styleLanguage, styleEntryOf,
- *          styleWiring, styleContract, stylesOf, scriptOf, importSpecifier, bundledProject
+ *          styleWiring, styleContract, stylesOf, scriptOf, importSpecifier, bundledProject,
+ *          markupOf
  * @ai.tags styles, plan, contract
  * @ai.hint pure
  * @changed 2026-11-21 Контракт стилей вырос: у него есть ещё скрипт проекта и способ, которым
@@ -301,7 +302,22 @@ export async function styleContract({ plan = null, architecture = null, config =
         script,
         import: script ? importSpecifier(script, base.source) : null,
         wiring,
+        markup: markupOf({ architecture, config }),
     };
+}
+
+/**
+ * Язык разметки проекта: он решает, умеет ли сборщик компилировать стили из ссылки.
+ * @param {{ architecture?: object|null, config?: object|null }} [request]
+ * @returns {string}
+ * @exports
+ * @ai.hint pure
+ */
+export function markupOf({ architecture = null, config = null } = {}) {
+    const markup = String(
+        architecture?.stack?.markup ?? config?.stack?.markupLanguage ?? 'html',
+    ).trim().toLowerCase();
+    return markup || 'html';
 }
 
 /**
@@ -331,5 +347,6 @@ export async function stylesOf({ plan = null, architecture = null, config = null
         script,
         import: script ? importSpecifier(script, base.source) : null,
         wiring,
+        markup: markupOf({ architecture, config }),
     };
 }

@@ -422,12 +422,13 @@ test('a project with a bundler gets the styles by the import, and nobody links t
         script: 'src/main.js',
         import: './styles.scss',
         wiring: 'bundled',
+        markup: 'jsx',
     };
     const markup = ROLES.markup.instructions({ styles });
     const coder = ROLES.coder.instructions({ styles });
     const reviewer = ROLES.reviewer.instructions({ styles });
 
-    // The markup does not link a stylesheet: the bundler brings them.
+    // A markup that is not plain html cannot link a stylesheet: the bundler brings them.
     assert.match(markup, /does not link a stylesheet/);
     assert.doesNotMatch(markup, /Do not write `styles\.css`/);
     // The code imports the source, with the path relative to the script.
@@ -436,6 +437,34 @@ test('a project with a bundler gets the styles by the import, and nobody links t
     // The reviewer does not demand the link that would break the build.
     assert.match(reviewer, /does not link a stylesheet/);
     assert.match(reviewer, /Do not ask for a link to the stylesheet/);
+});
+
+test('a bundler project of plain html links the source stylesheet in the head', () => {
+    const styles = {
+        source: 'src/styles.scss',
+        link: 'src/styles.css',
+        language: 'scss',
+        from: 'plan',
+        script: 'src/main.js',
+        import: './styles.scss',
+        wiring: 'bundled',
+        markup: 'html',
+    };
+    const markup = ROLES.markup.instructions({ styles });
+    const coder = ROLES.coder.instructions({ styles });
+    const reviewer = ROLES.reviewer.instructions({ styles });
+
+    // The markup links the source itself: the bundler compiles it from the link, and the
+    // styles load even without JavaScript.
+    assert.match(markup, /<link rel="stylesheet" href="src\/styles\.scss">/);
+    assert.match(markup, /the styles load even without JavaScript/);
+    assert.doesNotMatch(markup, /does not link a stylesheet/);
+    // The code does not import the stylesheet: the link already brings the styles.
+    assert.match(coder, /does not import the stylesheet/);
+    assert.match(coder, /load them twice/);
+    // The reviewer does not demand the import: the link is the way of this project.
+    assert.match(reviewer, /links the stylesheet `src\/styles\.scss`/);
+    assert.match(reviewer, /Do not ask for the import of the stylesheet/);
 });
 
 test('the planner names the roles that the stages of the run execute', () => {
