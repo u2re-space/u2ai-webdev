@@ -95,6 +95,19 @@ test('a broken SVG is named', () => {
     assert.equal(validateSvg(SVG).ok, true);
 });
 
+test('a comment does not feed the stack of the tags', () => {
+    // The prose of a comment may name an element: the <use> in the sentence is not an
+    // element of the drawing, and the stack of the tags must not wait for its close.
+    const commented = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">\n'
+        + '  <!-- Standalone view of the same symbols available to external <use> references. -->\n'
+        + '  <path d="M4 4h16v16H4z"/>\n'
+        + '</svg>\n';
+    const check = validateSvg(commented);
+    assert.equal(check.ok, true);
+    assert.deepEqual(check.errors, []);
+    assert.equal(parseSvg(commented).ok, true);
+});
+
 test('the SVG is tidied without touching the drawing', () => {
     const dirty = `<?xml version="1.0"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">

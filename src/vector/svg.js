@@ -65,6 +65,22 @@ function elementsOf(text) {
 }
 
 /**
+ * The text without the comments and the CDATA sections.
+ *
+ * The comment is prose, not markup: an element name inside it — a `<use>` in a
+ * sentence about `<use>` — is not an element of the drawing. The stack of the tags
+ * sees only the real ones.
+ * @param {string} text
+ * @returns {string}
+ * @ai.hint pure
+ */
+function withoutComments(text) {
+    return String(text ?? '')
+        .replace(/<!--[\s\S]*?-->/g, ' ')
+        .replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, ' ');
+}
+
+/**
  * Read the parts of an SVG that matter: the root tag, its attributes and the elements.
  * @param {string} text
  * @returns {{ ok: boolean, root: string|null, attributes: Record<string, string>,
@@ -100,7 +116,7 @@ export function parseSvg(text) {
         match = re.exec(rootMatch[1]);
     }
 
-    const elements = elementsOf(source);
+    const elements = elementsOf(withoutComments(source));
     const stack = [];
     for (const element of elements) {
         const name = element.name.toLowerCase();
