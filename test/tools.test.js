@@ -58,6 +58,22 @@ test('read_file attaches an image as a visual input instead of rejecting it as b
     assert.doesNotMatch(result, /Бинарный файл/);
 });
 
+test('the tool of ImageMagick runs the program and keeps the paths inside the project', async () => {
+    const { root, tools } = await workspace();
+    // The program is not installed on every machine: the tool says so and does nothing.
+    const answer = await tools.execute('magick', { args: ['identify', 'src/index.html'] });
+    assert.match(answer, /ImageMagick|not found|не найден|не закончил/i);
+
+    // A path outside of the project is refused before the program starts.
+    const escaped = await tools.execute('magick', { args: ['convert', '../escape.png', 'out.png'] });
+    assert.match(escaped, /ImageMagick/);
+    assert.doesNotMatch(escaped, /finished the work/i);
+
+    // Without arguments there is nothing to run.
+    const empty = await tools.execute('magick', { args: [] });
+    assert.match(empty, /no arguments/i);
+});
+
 test('ask_user waits for the operator only when an interactive callback is provided', async () => {
     const { root, config } = await workspace();
     let asked = '';

@@ -94,8 +94,8 @@ report into the directory of the run and hands the result to the next one.
 | `collect` | Read the inputs of the project, the map of the project, the registry of the components, the skill packs and the memory. |
 | `scan` | Read the project itself: what it is, which files matter, its conventions and its risks. |
 | `plan` | Break the task into steps, each with its role, its files and its check. |
-| `pictures` | Prepare the crops of the reference that are pictures: the chess piece, the board, the badge. |
 | `architect` | Decide the structure of the project: the files, the modules and the order. |
+| `pictures` | Prepare the crops of the reference that are pictures: the chess piece, the board, the badge. |
 | `setup` | Prepare the environment: the scaffold, the dependencies and the entry points. |
 | `vector` | Draw the vector graphics as code: the SVG of the ornaments and the illustrations. |
 | `markup` | Write the markup of the pages. |
@@ -1916,6 +1916,22 @@ version. The help is a local text — it calls no model and costs nothing, while
 costs a failed call and a wasted turn. The manual of the family — which CLI does what, the
 flags they share, the flags and the commands of every one of them — is in the tool
 `ai_cli_help`.
+
+The `editor` does not need the free door for the pictures: the bridge of `ai-image` is its own
+door, and it is open in full. `call_ai_image` takes any command and any flag of `ai-image`, and
+its table of the commands and the flags is one call away — `call_ai_image` with the args
+`["--help"]`. The stage of the vector keeps that door and the tools of the patch
+(`find_line`, `patch_file`), and it does not open the whole family: `ai`, `ai-webdev` and the
+other CLIs of the house stay out of it.
+
+ImageMagick is the tool of the pictures, and the `editor` has it as its own tool `magick`: the
+arguments are the arguments of ImageMagick, one element per argument, and every path of the
+command stays inside the working directory.
+
+```json
+{"args": ["convert", "assets/hero.png", "-resize", "800x", "assets/hero.webp"]}
+{"args": ["identify", "-format", "%wx%h", "assets/hero.png"]}
+```
 
 The rules of a free call are the rules of every tool of the house:
 

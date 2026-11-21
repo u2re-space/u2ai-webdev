@@ -33,7 +33,7 @@ export const schema = 'code';
 export const tools = [
     'list_files', 'read_file', 'write_file', 'replace_text', 'search_files',
     'find_line', 'patch_file',
-    'generate_svg', 'call_ai_image', 'ai_cli', 'ai_cli_help', 'read_skill',
+    'generate_svg', 'call_ai_image', 'magick', 'ai_cli', 'ai_cli_help', 'read_skill',
     'web_guidance', 'screenshot', 'compare_images',
     devToolsMarker(),
 ];
@@ -92,8 +92,10 @@ export const IMAGE_RULES = `### The rules of the picture
   what must remain pixel-faithful, the boundary of the edit, and any placement or style that
   should follow the reference. Protect neighboring objects, fragments, text, edges and
   transparency unless the task explicitly names them.
-- Use only the \`ai-image\` flags that serve the requested result. Ask \`ai-image --help\` with
-  \`ai_cli\` before using unfamiliar flags. For background removal, explicitly pass
+- Use only the \`ai-image\` flags that serve the requested result. The \`ai-image\` CLI is yours in
+  full: call \`call_ai_image\` with any command and any flag of it, and ask it for its own table
+  of the commands and the flags — \`call_ai_image\` with the args \`["--help"]\` — before you use
+  an unfamiliar flag. For background removal, explicitly pass
   \`--background transparent\` and save to an alpha-capable format such as PNG. When a provided
   image is meant to guide the edit, pass it with the edit's repeatable \`--reference <file>\`
   flag; translate relevant \`DESIGN.md\` guidance into the edit prompt rather than treating it
@@ -101,12 +103,17 @@ export const IMAGE_RULES = `### The rules of the picture
   requires one; send the result to a deliberate project asset path with \`--out\`.
 - If unrelated parts of a source image make a precise edit ambiguous, inspect its pixels and
   dimensions first (read the image or use \`ai-image info <source> --json\`), then crop with
-  \`ai_cli\` using cli \`ai-image\` and args \`["crop", "<source>", "--x", "<x>", "--y", "<y>",
+  \`call_ai_image\` and the args \`["crop", "<source>", "--x", "<x>", "--y", "<y>",
   "--width", "<width>", "--height", "<height>", "--out", "<crop>"]\`; edit that crop, not the
   whole source. Derive the box from the actual source image, not guessed measurements;
   preserve the original, keep the crop large enough to include the whole subject and its edge,
   and do not crop when it would discard context needed for the edit. Use the reference and
-  \`DESIGN.md\` to identify what matters, not as permission to change unrelated content.`;
+  \`DESIGN.md\` to identify what matters, not as permission to change unrelated content.
+- ImageMagick is yours as well: the tool \`magick\` runs it with any arguments of ImageMagick —
+  the conversion of a picture into another format, its size, its crop, the raster of an SVG, the
+  frames of a GIF. The arguments are the arguments of ImageMagick, one element per argument:
+  \`magick\` with the args \`["convert", "assets/hero.png", "-resize", "800x", "assets/hero.webp"]\`.
+  Every path of the command stays inside the project, and the file it writes lands there too.`;
 
 /**
  * The instructions of the role: the spine of the work, not the craft of the vector graphic.
@@ -137,6 +144,8 @@ Rules:
 - In the vector stage, work only on the SVG files listed by this step. Read only reference files explicitly named by the task.
 - Do not assume or search for an HTML page, a design document, a dev server, or other unlisted project files.
 - Do not create HTML previews or use screenshot, browser, DevTools, shell or delegation tools. SVG is code; validate it locally.
+- The \`ai-image\` CLI is yours in full: call \`call_ai_image\` with any command and any flag of it. Its whole table of the commands and the flags is one call away: \`call_ai_image\` with the args \`["--help"]\`. Ask it before you guess a flag.
+- ImageMagick is yours too: the tool \`magick\` runs it with any arguments of ImageMagick — the conversion of a picture, its size, its crop, the raster of an SVG. The arguments are the arguments of ImageMagick, one element per argument: \`magick\` with the args \`["convert", "assets/hero.png", "-resize", "800x", "assets/hero.webp"]\`. Every path stays inside the project.
 - A vector graphic comes into being in one of two ways: you write the SVG yourself, or the \`ai-image\` bridge draws it.
   - A raster picture of the project that has to become a vector one: call \`call_ai_image\` with the args \`["vectorize", "<source>", "--out", "<file.svg>"]\`.
   - A graphic that has no source picture: call \`call_ai_image\` with the args \`["generate", "<what to draw>", "--format", "svg", "--out", "<file.svg>"]\`.

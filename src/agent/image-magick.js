@@ -22,10 +22,12 @@
  * @depends node:path, node:os, node:fs/promises, node:module, agent/programs
  * @usedBy agent/image-compare, agent/tools
  * @exports magickCandidates, findMagick, parseMetric, nativeBackend, wasmBackend,
- *          resolveImageBackend, METRICS
+ *          resolveImageBackend, runMagick, METRICS
  * @ai.tags images, imagemagick, compare
  * @ai.hint io
  * @changed 2026-11-17 Сверка страницы с референсом: нативный ImageMagick и запасной wasm.
+ * @changed 2026-11-21 `runMagick`: программа ImageMagick целиком в распоряжении роли, которая
+ *                       работает с картинками.
  */
 
 import path from 'node:path';
@@ -167,6 +169,50 @@ export async function nativeBackend({ executable = null, env = process.env, cwd 
         executable: file,
         version: line ? line.replace(/^Version:\s*/, '').split(' ')[0] : 'unknown',
         compare: (request) => nativeCompare({ executable: file, env, cwd, timeoutMs, ...request }),
+        // The whole program is at the disposal of the role that works with the pictures:
+        // the arguments are the arguments of ImageMagick, and the program does the work.
+        run: (args = [], options = {}) => runProgram({
+            command: file,
+            args: (Array.isArray(args) ? args : []).map(String),
+            cwd: options.cwd ?? cwd,
+            env: options.env ?? env,
+            timeoutMs: options.timeoutMs ?? timeoutMs,
+        }),
+    };
+}
+
+/**
+ * Run ImageMagick on the pictures of the project.
+ *
+ * The program of the machine is the one that runs: the wasm of the house knows only the
+ * comparison of two pictures, and the work of a role is wider than that.
+ * @param {{ args?: string[], env?: object, cwd?: string, timeoutMs?: number, executable?: string|null }} [request]
+ * @returns {Promise<{ ok: boolean, code: number|null, stdout: string, stderr: string,
+ *   reason: string|null, version: string|null }>}
+ * @exports
+ * @ai.hint io
+ */
+export async function runMagick({ args = [], env = process.env, cwd = process.cwd(), timeoutMs = 60_000, executable = null } = {}) {
+    const file = await findMagick({ executable, env });
+    if (!file) {
+        return {
+            ok: false,
+            code: null,
+            stdout: '',
+            stderr: '',
+            version: null,
+            reason: 'ImageMagick не найден: поставьте ImageMagick на машину или укажите его в конфигурации.',
+        };
+    }
+    const list = (Array.isArray(args) ? args : []).map(String);
+    const result = await runProgram({ command: file, args: list, cwd, env, timeoutMs });
+    return {
+        ok: result.ok,
+        code: result.code ?? null,
+        stdout: String(result.stdout ?? ''),
+        stderr: String(result.stderr ?? ''),
+        version: String(result.version ?? ''),
+        reason: result.reason ?? null,
     };
 }
 

@@ -2463,6 +2463,31 @@ CLI `ai-webdev` (`@u2ai/webdev`) с собственным конфигом `~/.
 - [x] README (EN) — один контракт стилей и два способа доставки
 - [x] Проверка: `npm test`, `npm run check`, `git diff --check`
 
+### step-112 — Картинки приходят после архитектуры, а редактор распоряжается ими
+
+- [x] Повод: стадия `pictures` стояла до `architect` — структура проекта выдумывалась раньше,
+      чем подготовлены картинки, которые она называет
+- [x] `src/stages/index.js` — `pictures` стоит после `architect` и зависит от него; порядок
+      реестра и порядок зависимостей совпадают
+- [x] `src/config/constants.js` — имя стадии `pictures` переехало за `architect` в перечне
+      стадий дома
+- [x] `src/roles/index.js` — векторная стадия больше не отнимает у редактора инструменты
+      патча: `find_line`, `patch_file` и `batch` остаются у него, и к ним прибавляется
+      ImageMagick
+- [x] `src/agent/image-magick.js` — `runMagick`: программа ImageMagick целиком в распоряжении
+      роли, которая работает с картинками
+- [x] `src/agent/tool-specs.js` — новый инструмент `magick`: аргументы ImageMagick, один
+      элемент на аргумент, пути только внутри проекта. Выключается ключом `tools.image_magick`
+- [x] `src/agent/tools.js` — `magick` запускает программу и не даёт выйти за пределы проекта
+- [x] `src/roles/editor.js` — у редактора есть `magick`, а `ai-image` он распоряжается целиком:
+      любой командой и любым флагом, включая `--help` (его таблица флагов — один вызов)
+- [x] `src/roles/editor.js`, `src/roles/chunks.js` — правила картинки и вектора называют
+      `call_ai_image` с `["--help"]`, а не `ai_cli`, которого в векторной стадии нет
+- [x] `test/process.test.js`, `test/chunks.test.js`, `test/tools.test.js`, `test/roles.test.js` —
+      тесты: порядок стадий, инструменты векторной стадии, ImageMagick и права на `ai-image`
+- [x] README (EN) — порядок стадий, права редактора и инструмент `magick`
+- [x] Проверка: `npm test`, `npm run check`, `git diff --check`
+
 ### step-110 — Параллельная запись файлов
 
 - [x] Повод: воротa записи открывались только на одиночном вызове `write_ready`. Модель,

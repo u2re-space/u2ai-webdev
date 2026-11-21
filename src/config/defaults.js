@@ -311,6 +311,8 @@ export const defaults = {
     external_measure: true,
     /** Call the external `ai-image` CLI. */
     external_image: true,
+    /** Run ImageMagick on the pictures of the project. */
+    image_magick: true,
     /** Call any CLI of the house with the flags of its own command line. */
     external_cli: true,
   },

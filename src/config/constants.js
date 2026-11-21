@@ -24,7 +24,7 @@ export const ENUMS = Object.freeze({
   backendRoutes: Object.freeze(['responses', 'chat']),
   /** Pipeline stages in execution order. */
   stages: Object.freeze([
-    'collect', 'scan', 'pictures', 'plan', 'architect', 'setup',
+    'collect', 'scan', 'plan', 'architect', 'pictures', 'setup',
     'markup', 'styling', 'coding', 'build', 'sight',
     'vector', 'iconify',
     'review', 'audit', 'learn',

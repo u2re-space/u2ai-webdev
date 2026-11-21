@@ -49,6 +49,26 @@ function schemaAnswer(name, args) {
 }
 
 /**
+ * A response with the calls of one turn.
+ * @param {{ name: string, args: object }[]} calls the calls of the turn
+ * @returns {object}
+ */
+function callsAnswer(calls) {
+    return {
+        id: 'resp_1',
+        status: 'completed',
+        model: 'test-model',
+        output: calls.map((call, index) => ({
+            type: 'function_call',
+            call_id: `call_${index}_${call.name}`,
+            name: call.name,
+            arguments: JSON.stringify(call.args ?? {}),
+        })),
+        usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+    };
+}
+
+/**
  * A response that refuses to answer.
  * @param {string} text
  * @returns {object}
@@ -223,6 +243,38 @@ test('the vector editor patches an SVG by the lines of the file', async () => {
     assert.match(before, /The SVG is XML text/);
     assert.match(before, /A change is a patch/);
     assert.match(before, /patch_file/);
+});
+
+test('the vector editor keeps the tools of the picture and of the patch', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-vector-tools-'));
+    const { client, requests } = mockClient([
+        callsAnswer([{ name: 'write_ready', args: {} }]),
+        callsAnswer([{ name: 'write_file', args: { path: 'assets/logo.svg', content: '<svg></svg>' } }]),
+        schemaAnswer('code', { summary: '', files: [], commands: [], notes: '' }),
+    ]);
+    await runRole({
+        client,
+        config: structuredClone(defaults),
+        role: 'editor',
+        input: 'Draw the logo.',
+        context: {
+            vectorOnly: true,
+            step: { id: 'v1', title: 'Logo', files: ['assets/logo.svg'], criteria: [] },
+        },
+        root,
+        requireFiles: true,
+    });
+
+    // After the gate the editor has the whole craft of the picture: the bridge of the
+    // sibling CLI, ImageMagick, and the tools of the patch.
+    const names = (requests[1].tools ?? []).map((tool) => tool.name);
+    assert.ok(names.includes('call_ai_image'), 'the editor has no bridge to ai-image');
+    assert.ok(names.includes('magick'), 'the editor has no ImageMagick');
+    assert.ok(names.includes('find_line'), 'the editor cannot find the line of the SVG');
+    assert.ok(names.includes('patch_file'), 'the editor cannot patch the SVG');
+    // The stage of the vector does not open the whole house to the editor.
+    assert.ok(!names.includes('screenshot'));
+    assert.ok(!names.includes('ai_cli'));
 });
 
 test('a role that refuses is told once that the files are the work, and it goes on', async () => {

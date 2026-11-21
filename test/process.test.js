@@ -201,10 +201,13 @@ test('the registry of the stages knows the order and the dependencies', () => {
     assert.ok(order.stages.findIndex((stage) => stage.name === 'markup')
         < order.stages.findIndex((stage) => stage.name === 'coding'));
 
-    // The pictures come after the plan: the plan is what measures the reference.
-    assert.deepEqual(stageDependencies('pictures'), ['plan']);
-    assert.ok(order.stages.findIndex((stage) => stage.name === 'plan')
+    // The pictures come after the architect: the structure of the project is decided first,
+    // and the assets it names are cut out of the reference for it.
+    assert.deepEqual(stageDependencies('pictures'), ['architect']);
+    assert.ok(order.stages.findIndex((stage) => stage.name === 'architect')
         < order.stages.findIndex((stage) => stage.name === 'pictures'));
+    assert.ok(order.stages.findIndex((stage) => stage.name === 'plan')
+        < order.stages.findIndex((stage) => stage.name === 'architect'));
 
     // The survey comes before the plan: the project is read before it is planned.
     assert.deepEqual(stageDependencies('scan'), ['collect']);

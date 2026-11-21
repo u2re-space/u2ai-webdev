@@ -52,6 +52,7 @@ import {
     resolveFamilyCli,
     runFamilyCli,
 } from './cli-family.js';
+import { runMagick } from './image-magick.js';
 
 export { toolSpecs, enabledToolNames } from './tool-specs.js';
 export { WINDOWS_EXTENSIONS, quoteWindowsArg, findProgram, killTree } from './programs.js';
@@ -1262,6 +1263,35 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                 return await callMeasure(args);
             case 'call_ai_image':
                 return await callBridge('ai-image', args);
+            case 'magick': {
+                const list = parseArgsList(args.args);
+                if (!list.length) {
+                    return 'ImageMagick: no arguments. The arguments are the arguments of ImageMagick, '
+                        + 'one element per argument — for example ["convert", "in.png", "out.webp"].';
+                }
+                // Every path of the command stays inside the root of the run.
+                for (const arg of familyPathArgs(list)) {
+                    try {
+                        await resolveInside(root, arg, { allowRoot: false });
+                    } catch (error) {
+                        return `ImageMagick: ${error.message}`;
+                    }
+                }
+                const result = await runMagick({
+                    args: list,
+                    env,
+                    cwd: root,
+                    timeoutMs: Number.isSafeInteger(Number(args.timeoutMs)) ? Number(args.timeoutMs) : 60_000,
+                });
+                if (!result.ok) {
+                    const why = result.reason ?? result.stderr?.trim().slice(0, 400) ?? '';
+                    return `ImageMagick did not finish: ${why || `the code is ${result.code}`}.`;
+                }
+                const out = String(result.stdout ?? '').trim();
+                const err = String(result.stderr ?? '').trim();
+                return [out, err ? `stderr: ${err}` : ''].filter(Boolean).join('\n')
+                    || 'ImageMagick finished the work.';
+            }
             case 'ai_cli': {
                 const name = String(args.cli ?? '').trim();
                 if (!name) return 'The CLI is not named.';

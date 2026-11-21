@@ -349,7 +349,12 @@ test('the editor gets a precise image-edit, flag and optional-crop workflow', ()
     assert.match(text, /"--width", "<width>", "--height", "<height>", "--out", "<crop>"\]/);
     assert.match(text, /ai-image info <source> --json/);
     assert.match(text, /Derive the box from the actual source image/);
-    assert.match(text, /ai-image --help/);
+    // The editor commands ai-image in full, and the manual is one call away.
+    assert.match(text, /call_ai_image/);
+    assert.match(text, /\["--help"\]/);
+    // And ImageMagick is his too.
+    assert.match(text, /ImageMagick/);
+    assert.match(text, /"convert", "assets\/hero\.png"/);
 });
 
 test('the planner does not plan a drawn copy of a picture of the reference', () => {

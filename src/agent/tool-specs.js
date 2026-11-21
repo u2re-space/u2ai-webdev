@@ -562,6 +562,8 @@ export const TOOL_SPECS = Object.freeze({
     call_ai_image: {
         configKey: 'external_image',
         description: 'Call the external `ai-image` CLI to generate, crop, edit or vectorize a project picture. '
+            + 'The CLI is yours in full: any command and any flag of it, and its own table of the '
+            + 'commands and the flags comes from the args ["--help"]. '
             + 'This CLI has no image generator of its own: the work is delegated to @u2ai/images. '
             + 'For an edit, make the prompt explicit about what changes or is removed, what must '
             + 'remain unchanged, and where the edit stops; protect neighboring details. If the full '
@@ -575,12 +577,33 @@ export const TOOL_SPECS = Object.freeze({
             + 'raster picture as an SVG document, and `["generate", "<what to draw>", "--format", "svg", '
             + '"--out", "<file.svg>"]` draws a new one. The bridge picks the vector model itself, so '
             + 'name a model only when the task or the project config names one. '
-            + 'Ask `ai-image --help` through `ai_cli` before using unfamiliar flags. References and '
-            + 'DESIGN.md guide the visual intent, not unrelated changes to the source.',
+            + 'References and DESIGN.md guide the visual intent, not unrelated changes to the source.',
         parameters: {
             type: 'object',
             properties: {
                 args: str('JSON array of the arguments of `ai-image`, as strings.'),
+            },
+            required: ['args'],
+            additionalProperties: false,
+        },
+        required: ['args'],
+        roles: ['editor'],
+    },
+    magick: {
+        configKey: 'image_magick',
+        description: 'Run ImageMagick on the pictures of the project: the arguments are the arguments '
+            + 'of ImageMagick, one element per argument, without a shell. It converts a picture to '
+            + 'another format (`magick in.png out.webp`), resizes it (`-resize 1200x`), crops it '
+            + '(`-crop 400x300+10+20`), turns an SVG into a raster picture, joins the frames of a '
+            + 'GIF, and reads the size of a picture (`magick identify -format "%wx%h" file.png`). '
+            + 'Every path of the command stays inside the working directory, and the file it writes '
+            + 'lands there too. The program must be installed on the machine: without it the tool '
+            + 'says so and does nothing.',
+        parameters: {
+            type: 'object',
+            properties: {
+                args: str('JSON array of the arguments of ImageMagick, as strings. '
+                    + 'For example ["convert", "assets/hero.png", "-resize", "800x", "assets/hero.webp"].'),
             },
             required: ['args'],
             additionalProperties: false,

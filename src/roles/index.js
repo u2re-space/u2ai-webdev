@@ -202,10 +202,13 @@ const DELEGATED_TOOLS = new Set([
     'copy_path', 'generate_svg',
 ]);
 const VECTOR_TOOLS = new Set([
-    'list_files', 'read_file', 'write_file', 'replace_text', 'search_files', 'read_skill',
+    'list_files', 'read_file', 'find_line', 'write_file', 'replace_text', 'patch_file', 'batch',
+    'search_files', 'read_skill',
     // The vector stage may ask the sibling CLI for a vector graphic: it traces a raster
     // picture or draws a new one. The raster work of the stage stays out.
     'call_ai_image',
+    // ImageMagick is the tool of the pictures: the editor converts, resizes and reads them.
+    'magick',
 ]);
 const PAGE_FRAME_ROLES = new Set(['markup', 'styler']);
 const READ_ONLY_TOOLS = new Set([

@@ -96,11 +96,22 @@ export const STAGES = Object.freeze([
         apply: (ctx, result) => { ctx.plan = result?.plan ?? null; },
     },
     {
+        name: 'architect',
+        title: 'Design the structure',
+        dependsOn: ['plan'],
+        run: architectStage,
+        args: (ctx) => ({ input: ctx.input ?? null }),
+        args: (ctx) => ({ input: ctx.input ?? null }),
+        apply: (ctx, result) => { ctx.architecture = result?.architecture ?? null; },
+    },
+    {
         name: 'pictures',
         title: 'Prepare the pictures',
         // Existing crops may be prepared here, but the plan and the run do not require a
         // measurement sheet: roles can work directly from DESIGN.md and the attached reference.
-        dependsOn: ['plan'],
+        // The pictures are prepared after the architect: the structure of the project is
+        // decided first, and the assets it names are cut out of the reference for it.
+        dependsOn: ['architect'],
         run: picturesStage,
         args: (ctx) => ({ apply: ctx.apply !== false }),
         apply: (ctx, result) => {
@@ -114,15 +125,6 @@ export const STAGES = Object.freeze([
             }
             ctx.inputs = next;
         },
-    },
-    {
-        name: 'architect',
-        title: 'Design the structure',
-        dependsOn: ['plan'],
-        run: architectStage,
-        args: (ctx) => ({ input: ctx.input ?? null }),
-        args: (ctx) => ({ input: ctx.input ?? null }),
-        apply: (ctx, result) => { ctx.architecture = result?.architecture ?? null; },
     },
     {
         name: 'setup',
