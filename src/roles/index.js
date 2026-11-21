@@ -232,7 +232,7 @@ export function readOnlyOperation({ schema = null, tools = [], outputMode = null
 const WRITE_READY_TOOL = Object.freeze({
     type: 'function',
     name: 'write_ready',
-    description: 'INTERNAL WRITE GATE — not delegation. Call this exact tool name by itself after inspection to unlock your own file-writing tools on the next turn. It writes no files and starts no other role. Then write the files named by your step with write_file.',
+    description: 'INTERNAL WRITE GATE — not delegation. Call this exact tool name after the inspection to unlock your own file-writing tools on the next turn. It writes no files and starts no other role. Then write the files named by your step with write_file — every file of the step may be written in that one turn, several write_file calls together.',
     parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
 });
 
@@ -681,7 +681,7 @@ export async function runRole({
     const hasActionTools = Boolean(requireFiles) && key !== 'reviewer' && readSpecs.length < specs.length;
     const preWriteSpecs = [...readSpecs, ...(hasActionTools ? [WRITE_READY_TOOL] : [])];
     if (hasActionTools) {
-        instructions += '\n\nBefore writing files or using any action-capable tool, call `write_ready` on its own first. Until then, only the read tools are available. After `write_ready`, continue with the requested action; the next turn has the full output budget.';
+        instructions += '\n\nBefore writing files or using any action-capable tool, call `write_ready` first. Until then, only the read tools are available. After `write_ready`, the next turn has the full output budget and all the writing tools: write every file of the step there — several `write_file` calls in one turn are allowed and are the cheapest way.';
     }
     // The instructions come in parts, and every part has its own moment. The rules of
     // reading belong to the beginning of the work; the craft of the files of the step
@@ -803,6 +803,9 @@ export async function runRole({
             temperature: definition.temperature,
             maxOutputTokens: maxOutputFor(currentModel, config, definition.maxOutputTokens, { readOnly: reduced }),
             verbosity: config?.verbosity ?? (reduced ? 'low' : null),
+            // Several calls in one turn are allowed: a step that writes several files writes
+            // them in one turn, and not one turn per file.
+            parallelToolCalls: true,
             signal,
             // The answer comes as a stream: a model that thinks for minutes shows its
             // reasoning while it thinks, and a host that says nothing is told apart from a
@@ -1016,21 +1019,28 @@ export async function runRole({
         for (const call of work) {
             let output;
             if (call.name === WRITE_READY_TOOL.name && hasActionTools && !readyAtTurnStart
-                && work.length === 1 && !call.parseError) {
+                && !call.parseError) {
+                // The gate opens even when the model calls it together with other calls: a
+                // gate that opens only alone makes the model repeat the same turn until the
+                // turns run out.
                 writeReady = true;
-                output = 'Write-ready. The next turn has the full output budget and the remaining tools.';
+                output = 'Write-ready. The next turn has the full output budget and the remaining tools: write every file of the step there, several calls in one turn.';
                 notify({ type: 'role.write_ready', role: key, turn: turns });
             } else if (call.parseError) {
                 // Invalid arguments are reported as such even if the tool was not yet enabled.
                 output = `The tool failed: the arguments of the call are not a JSON object (${call.parseError}). Call the tool again with valid JSON.`;
             } else if (hasActionTools && !readyAtTurnStart && !READ_ONLY_TOOLS.has(call.name)) {
-                output = 'The tool was not run: call write_ready first. The next turn will have the full output budget.';
+                // The write waits for the next turn: the turn of the gate is the turn of the
+                // inspection, and its budget is the reduced one.
+                output = writeReady
+                    ? 'The write gate is open, but this turn was the turn of the inspection and its budget is the reduced one. Write the file in the next turn: every file of the step may be written there, several calls in one turn.'
+                    : 'The tool was not run: the write gate is closed. Call `write_ready` first — alone or together with your reads — and write the files in the next turn, where the full output budget is.';
             } else if (call.name === 'ask_user' && !inputChannel?.interactive) {
                 output = 'No interactive operator is available. Make a reasonable assumption, continue, and state it in your final answer.';
             } else if (call.name === WRITE_READY_TOOL.name && readyAtTurnStart) {
                 output = 'Write-ready was already signaled; continue with the requested action.';
             } else if (call.name === WRITE_READY_TOOL.name) {
-                output = 'write_ready must be called alone, before any action-capable tool.';
+                output = 'write_ready is not a tool of this role: it has no writing tools to unlock.';
             } else if (call.name === 'delegate_role') {
                 if (delegationUsed) {
                     output = 'The tool failed: this role has already handed work over once. Continue with your own step.';

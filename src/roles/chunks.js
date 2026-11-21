@@ -138,8 +138,9 @@ export const WRITE_CHUNK = `## How to write
   files of the project is the work you were given: it is allowed and expected. Do not refuse it
   and do not ask for an approval — there is nobody to approve it, and a refusal leaves the step
   empty.
-- Write the file the step names, under exactly that path, with the whole content. One file —
-  one call of \`write_file\`.
+- Write every file of the step in one turn: several \`write_file\` calls in one turn are allowed,
+  and it is the cheapest way — one turn instead of one turn per file. The whole content of every
+  file goes in its call, under the exact path of the step.
 - The file is finished: no placeholder, no "the rest is left as an exercise", no empty function
   that only says what its comment says.
 - Change only what has to change. The number of the line is the address of a place: find it

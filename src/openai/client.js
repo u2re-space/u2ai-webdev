@@ -484,6 +484,20 @@ export async function createClient({ config, env = process.env, signal = null, o
             });
             return answer;
         } catch (error) {
+            // A strict gateway may refuse one optional field of the request: the calls of the
+            // tools in parallel are one of them. Drop the field and repeat once — the run
+            // loses the parallel calls, not the step.
+            if (body.parallel_tool_calls === true) {
+                const { body: stripped, removed } = stripRejectedFields(body, error, ['parallel_tool_calls']);
+                if (removed.length) {
+                    announce({ type: 'request.adjust', removed });
+                    const answer = await call('responses', {
+                        method: 'POST', body: stripped, kind: 'text', model: wantedModel, signal: callSignal,
+                        stream: stream ? 'responses' : false, onEvent: callEvent, supports: 'responses',
+                    });
+                    return answer;
+                }
+            }
             if (!responsesRouteUnsupported(error)) throw error;
             const gaps = chatGaps(body);
             if (gaps.length) {

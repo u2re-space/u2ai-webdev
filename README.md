@@ -718,6 +718,23 @@ The write gate is the hinge: until the role calls `write_ready`, it has only the
 the craft of the files has not arrived yet. The gate opens, the craft comes as the last thing
 the model reads, and the model writes.
 
+The gate opens on the call itself, even when the model calls it together with its reads: a gate
+that opens only on a lonely call makes the model repeat the same turn until the turns run out.
+The writes of the turn of the gate wait for the next turn — that turn is the turn of the
+inspection, and its budget is the reduced one — and the answer says so instead of blaming the
+model.
+
+### The writing of several files
+
+A step often owns more than one file, and a role writes them in one turn: several `write_file`
+calls together, or one `batch` call with the writes of the step. The host is asked for the calls
+in parallel explicitly, and a gateway that refuses the field gets the request without it.
+
+The disk is the truth for the files a role wrote with its tools — one by one, in a batch, or with
+a patch. The answer of the role may carry an older text of the same file (the text before the
+patch, the text of the first draft), and putting that text over the disk would undo the work of
+the role. The stage therefore skips the files the tools of the role have written.
+
 The result is a shorter prompt and the same knowledge at the right time. The always-on prompt of
 the styler is about a third shorter than before, and the rules of the stylesheet arrive whole —
 but only when the stylesheet is about to be written.
@@ -813,10 +830,10 @@ a call with broken arguments does not run the tool, and the model is told what t
 A role of a step has to write the files of the step. An answer that names no file, that writes
 nothing, or that holds nothing but a placeholder is a description of the work, not the work:
 the role is told to do it, with the tools. The first correction asks, the second one orders and
-names the tool to call (`write_file`, one call per file of the step). The stage checks the files
-of the step on the disk afterwards, and a step whose files are missing is not called done. The
-title of a step does not change the kind of the work: a step that says "describe the behaviour"
-still means the files of the behaviour.
+names the tool to call (`write_file`, one call per file of the step — several calls in one turn
+are allowed). The stage checks the files of the step on the disk afterwards, and a step whose
+files are missing is not called done. The title of a step does not change the kind of the work: a
+step that says "describe the behaviour" still means the files of the behaviour.
 
 The command that does not finish on its own is refused: a server, a watcher or a tail would
 hold the run until the timeout. The default time of a command is 60 seconds, and the model may

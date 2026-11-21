@@ -13,7 +13,8 @@
  * @depends node:path, node:fs/promises, roles/index, agent/fs-tools, agent/syntax,
  *          inputs/index, inputs/references, stages/workspace
  * @usedBy stages/markup, stages/coding, stages/styling
- * @exports STEPS_DIR, LOOKS_AT_DESIGN, stepsForRole, applyFiles, filesByTool, stepReportPath,
+ * @exports STEPS_DIR, LOOKS_AT_DESIGN, stepsForRole, applyFiles, filesByTool, filesOfRole,
+ *          stepReportPath,
  *          writeStepReport, readStepReport, readStepReports, resumableStep, roleWorkOnDisk,
  *          laterSteps, missingFiles, writtenLater, stepScope, inScope, visibleFiles, filesBlock,
  *          referenceList, runStepStage
@@ -200,15 +201,50 @@ async function ownedByLater(root, config, id, plan, step, rel) {
  */
 export function filesByTool(result = {}) {
     const calls = Array.isArray(result?.toolCalls) ? result.toolCalls : [];
-    const names = new Set(['write_file', 'replace_text', 'copy_path', 'generate_svg']);
+    const names = new Set(['write_file', 'replace_text', 'patch_file', 'copy_path', 'generate_svg']);
     const files = [];
     for (const call of calls) {
-        if (!names.has(String(call?.name ?? ''))) continue;
+        const name = String(call?.name ?? '');
+        if (name === 'batch') {
+            // The batch writes several files in one call: every one of them is the work of
+            // the role, and the answer must not be put over them.
+            const actions = Array.isArray(call?.arguments?.actions) ? call.arguments.actions : [];
+            for (const action of actions) {
+                if (!names.has(String(action?.tool ?? ''))) continue;
+                const args = action?.args ?? {};
+                const file = String(args?.path ?? args?.destination ?? '').trim();
+                if (file) files.push(file);
+            }
+            continue;
+        }
+        if (!names.has(name)) continue;
         const args = call?.arguments ?? {};
         const file = String(args?.path ?? args?.destination ?? '').trim();
         if (file) files.push(file);
     }
     return files;
+}
+
+/**
+ * The files of the role that the role wrote with its own tools.
+ *
+ * The tools of the role know what was really written — a file, a patch, or several files in
+ * one batch — and that list is the truth: the answer of the role may carry an older text of
+ * the same file, and putting it over the disk would undo the work of the role.
+ * @param {object} result the answer of a role
+ * @returns {string[]}
+ * @exports
+ * @ai.hint pure
+ */
+export function filesOfRole(result = {}) {
+    const written = Array.isArray(result?.outputFiles) ? result.outputFiles : [];
+    const list = written.length ? written : filesByTool(result);
+    const out = [];
+    for (const item of list) {
+        const rel = String(item ?? '').trim().replace(/\\/g, '/');
+        if (rel && !out.includes(rel)) out.push(rel);
+    }
+    return out;
 }
 
 /**
@@ -310,7 +346,8 @@ export async function applyFiles({
     const replaced = [];
     const failed = [];
     const warnings = [];
-    const own = new Set((Array.isArray(owned) ? owned : []).map((item) => String(item ?? '').trim().toLowerCase()));
+    const own = new Set((Array.isArray(owned) ? owned : [])
+        .map((item) => String(item ?? '').trim().replace(/\\/g, '/').toLowerCase()));
     for (const item of Array.isArray(files) ? files : []) {
         const rel = String(item?.path ?? '').trim();
         const content = typeof item?.content === 'string' ? item.content : null;
@@ -339,7 +376,7 @@ export async function applyFiles({
             continue;
         }
         const current = await currentContent(root, rel);
-        if (current !== null && own.has(rel.toLowerCase())) {
+        if (current !== null && own.has(rel.replace(/\\/g, '/').toLowerCase())) {
             // The role wrote this file with its own tool: the disk is the truth.
             skipped.push(rel);
             continue;
@@ -940,7 +977,10 @@ export async function runStepStage({
 
         const data = result.data ?? {};
         const files = Array.isArray(data.files) ? data.files : [];
-        const own = filesByTool(result);
+        // The files the role wrote with its tools — one by one, in a batch, or with a patch.
+        // The disk is the truth for them: the answer of the role may carry an older text of
+        // the same file, and putting it over the disk would undo the work.
+        const own = filesOfRole(result);
         // The boundaries of the step: the answer of the role writes the files of the step
         // and the files of the same kind, and nothing else.
         const bounds = { ...stepScope(step, plan), step: String(step?.id ?? '') };
@@ -1014,14 +1054,15 @@ export async function runStepStage({
             // says that the broken file is still broken.
             const repaired = Array.isArray(repair.data?.files) ? repair.data.files : [];
             if (apply && repaired.length) {
-                const written = await applyFiles({ root, files: repaired, owned: filesByTool(repair), scope: bounds });
+                const repairedOwn = filesOfRole(repair);
+                const written = await applyFiles({ root, files: repaired, owned: repairedOwn, scope: bounds });
                 warnings.push(...written.warnings);
                 applied = {
                     written: [...applied.written, ...written.written],
                     skipped: applied.skipped,
                     replaced: [...applied.replaced, ...written.replaced],
                     failed: [...applied.failed, ...written.failed],
-                    own: [...new Set([...applied.own, ...filesByTool(repair)])],
+                    own: [...new Set([...applied.own, ...repairedOwn])],
                     warnings: applied.warnings,
                 };
             }

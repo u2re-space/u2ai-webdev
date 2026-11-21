@@ -121,7 +121,7 @@ export const TOOL_SPECS = Object.freeze({
         configKey: 'write',
         description: 'Run several actions of this catalogue in one call: a list of reads, searches, writes and '
             + 'patches. One call instead of many — the context and the turns of the run are saved. The answer '
-            + 'is the answer of every action, in order.',
+            + 'is the answer of every action, in order. Several files of the step may be written in one batch.',
         parameters: {
             type: 'object',
             properties: {
@@ -148,7 +148,8 @@ export const TOOL_SPECS = Object.freeze({
     },
     write_file: {
         configKey: 'write',
-        description: 'Write a text file into the working directory. The content replaces the file.',
+        description: 'Write a text file into the working directory. The content replaces the file. '
+            + 'Every file of the step may be written in one turn — one call per file, several calls together.',
         parameters: {
             type: 'object',
             properties: {

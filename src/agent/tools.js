@@ -457,7 +457,10 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
     const scopedFiles = Array.isArray(writeFiles)
         ? new Set(writeFiles.map((file) => String(file ?? '').replace(/\\/g, '/').toLowerCase()))
         : null;
-    const scopedWrites = new Set();
+    // Every file the role has written with a tool — one by one, in a batch, or with a
+    // patch. The disk is the truth for them, and the stage must not put the older text of
+    // the answer over them.
+    const writtenFiles = new Set();
 
     // The files the role has already read: the content of a file stays in the conversation,
     // and the second read of it costs the context of the run for nothing.
@@ -643,9 +646,9 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
         return located;
     }
 
-    /** Remember a scoped output only after the operation has succeeded. */
-    function rememberScopedWrite(rel) {
-        if (scopedFiles && rel) scopedWrites.add(String(rel));
+    /** Remember a file the role has written: the file on the disk is the truth for it. */
+    function rememberWrite(rel) {
+        if (rel) writtenFiles.add(String(rel).replace(/\\/g, '/'));
     }
 
     /**
@@ -729,7 +732,7 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
             return `Мост ${name} не отработал: ${result.reason ?? 'неизвестная причина'}${detail ? `\n${detail}` : ''}`;
         }
         // The file of the bridge is a file of the run: the stage may pick it up.
-        if (output?.rel) rememberScopedWrite(output.rel);
+        if (output?.rel) rememberWrite(output.rel);
         return (result.stdout.trim() || result.stderr.trim() || `${name} отработал.`);
     }
 
@@ -908,7 +911,7 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                     file: target.rel,
                     edits: Array.isArray(args.edits) ? args.edits : [],
                 });
-                rememberScopedWrite(target.rel);
+                rememberWrite(target.rel);
                 await rememberInMap(target.rel);
                 await forgetReadFact(target.rel);
                 return `Файл ${result.rel} изменён: правок ${result.applied}, строк затронуто ${result.lines}, `
@@ -945,7 +948,7 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                 const target = await writePath(args.path);
                 forgetReads(target.rel);
                 const result = await writeTextFile({ root, file: target.rel, content: String(args.content ?? '') });
-                rememberScopedWrite(target.rel);
+                rememberWrite(target.rel);
                 await rememberInMap(target.rel);
                 await forgetReadFact(target.rel);
                 await context?.file?.(target.rel);
@@ -961,7 +964,7 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                     replacement: String(args.replacement ?? ''),
                     all: Boolean(args.all),
                 });
-                rememberScopedWrite(target.rel);
+                rememberWrite(target.rel);
                 await rememberInMap(target.rel);
                 await forgetReadFact(target.rel);
                 return `Заменено в ${result.rel}: ${result.replacements} (${result.bytes} байт).`;
@@ -983,7 +986,7 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                 const source = await resolveInside(root, String(args.source ?? ''), { allowRoot: false });
                 const destination = await writePath(args.destination);
                 const result = await copyPath({ root, source: source.rel, destination: destination.rel });
-                rememberScopedWrite(result.destination);
+                rememberWrite(result.destination);
                 await rememberInMap(result.rel ?? destination.rel);
                 return `Скопировано ${result.rel ?? source.rel} → ${destination.rel}.`;
             }
@@ -1171,7 +1174,7 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                     output,
                     cwd: root,
                 });
-                rememberScopedWrite(result.rel);
+                rememberWrite(result.rel);
                 return `Записан SVG ${result.rel} (${result.bytes} байт).`;
             }
             case 'download_font': {
@@ -1186,7 +1189,7 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                     output,
                     cwd: root,
                 });
-                rememberScopedWrite(result.rel);
+                rememberWrite(result.rel);
                 return `Загружен шрифт ${result.family}: ${result.rel} (${result.bytes} байт).`;
             }
             case 'compare_images': {
@@ -1321,7 +1324,7 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
         execute,
         specs,
         writePaths() {
-            return [...scopedWrites];
+            return [...writtenFiles];
         },
         /**
          * The tool list of one role: the catalogue, cut down to what that role may call.
