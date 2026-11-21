@@ -10,7 +10,7 @@
  *
  * @depends none
  * @usedBy tui/app, tui/render
- * @exports LOG_LIMIT, createTuiState, reduceTuiState
+ * @exports LOG_LIMIT, STREAM_LIMIT, createTuiState, reduceTuiState
  * @ai.tags tui, state, reducer
  */
 
@@ -18,6 +18,9 @@ import { STAGES } from '../stages/index.js';
 
 /** How many lines the shell keeps in memory. */
 export const LOG_LIMIT = 1000;
+
+/** How much of the stream of the model the shell keeps for the scroll of the thought. */
+export const STREAM_LIMIT = 4000;
 
 /**
  * The initial state of the shell.
@@ -135,10 +138,20 @@ export function stageProgress(state) {
 function reduceEvent(state, event) {
     const type = String(event?.type ?? '');
     if (type === 'stage.start') {
-        return withStage(state, event.stage, 'running', event.title);
+        const next = withStage(state, event.stage, 'running', event.title);
+        const location = { ...(next.location ?? {}) };
+        if (location.stage === String(event.stage ?? '')) return next;
+        // The place of the run moves with the stage: the role, the step and the effort
+        // of the last stage are not the ones of this one until their role reports them.
+        delete location.role;
+        delete location.step;
+        delete location.effort;
+        location.stage = String(event.stage ?? '');
+        return { ...next, location };
     }
     if (type === 'stage.done') {
-        return withStage(state, event.stage, event.status ?? 'completed');
+        const next = withStage(state, event.stage, event.status ?? 'completed');
+        return { ...next, notice: `${String(event.stage ?? 'stage')}: ${String(event.status ?? 'completed')}` };
     }
     if (type === 'stage.skip') {
         return withStage(state, event.stage, 'skipped');
@@ -147,7 +160,17 @@ function reduceEvent(state, event) {
         return { ...state, plan: event.payload ?? event.plan ?? null };
     }
     if (type === 'progress') {
-        return { ...state, progress: event.payload ?? event.progress ?? null };
+        const payload = event.payload ?? event.progress ?? null;
+        // The progress of the run on the disk is the truth of the run: a resume carries
+        // the stages that ran before this shell was born, and the bar takes them in.
+        let next = { ...state, progress: payload };
+        for (const stage of Array.isArray(payload?.stages) ? payload.stages : []) {
+            const name = String(stage?.name ?? '').trim();
+            const status = String(stage?.status ?? '').trim();
+            if (!name || !status) continue;
+            next = withStage(next, name, status);
+        }
+        return next;
     }
     if (type === 'summary') {
         const report = event.payload ?? event.report ?? null;
@@ -195,7 +218,13 @@ function reduceEvent(state, event) {
         const joined = fresh ? text : `${current.text ?? ''}${text}`;
         return {
             ...state,
-            stream: { kind, text: joined.length > 600 ? joined.slice(joined.length - 600) : joined, fresh: false },
+            // The tail of the stream stays on the disk of the state: the operator scrolls
+            // back through the thought, so the shell keeps more than one screen of it.
+            stream: {
+                kind,
+                text: joined.length > STREAM_LIMIT ? joined.slice(joined.length - STREAM_LIMIT) : joined,
+                fresh: false,
+            },
         };
     }
     if (type === 'request.wait') {
@@ -258,7 +287,9 @@ export function reduceTuiState(state, action) {
         return {
             ...current,
             location: frame.location ?? current.location,
-            statusText: String(frame.status ?? ''),
+            // The frame of the place of the run carries no word about the state: the last
+            // spoken state stays on the screen instead of going empty.
+            statusText: String(frame.status ?? '').trim() || current.statusText,
         };
     }
     if (frame.type === 'error') {

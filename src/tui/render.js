@@ -10,7 +10,8 @@
  *
  * @depends cli/stdio
  * @usedBy tui/app
- * @exports truncate, formatStatusRow, createTuiLayout, renderTui
+ * @exports truncate, formatStatusRow, markdownSegments, thoughtLineCount, wrapThought,
+ *           THOUGHT_ROWS, createTuiLayout, prepareTuiFrame, renderTui
  * @ai.tags tui, terminal, layout
  */
 
@@ -46,49 +47,162 @@ function symbols(ascii) {
 }
 
 /**
+ * How many rows the dashboard gives to the thought of the model.
+ * @exports
+ */
+export const THOUGHT_ROWS = 4;
+
+/**
+ * The inline markdown of the stream: the strong, the code and the emphasis.
+ * @ai.hint pure
+ */
+const INLINE_MD = /(\*\*|__)([\s\S]+?)\1|`([^`]+)`|(?<![\w\\])\*([^*\s][^*]*?)\*(?!\w)|(?<![\w\\])_([^_\s][^_]*?)_(?!\w)/g;
+
+/**
+ * Cut one text into the inline markdown segments: every segment carries its style.
+ *
+ * The thought of the model speaks markdown: the strong, the code and the emphasis
+ * live in the same line as the ordinary words. The shell takes the marks away and
+ * keeps their place, so the row can carry the styles of the pieces.
+ *
+ * @param {unknown} text
+ * @returns {{ text: string, style: string }[]}
+ * @exports
+ * @ai.hint pure
+ */
+export function markdownSegments(text) {
+    const body = String(text ?? '');
+    const out = [];
+    const push = (value, style) => {
+        if (!value) return;
+        const last = out[out.length - 1];
+        if (last && last.style === style) last.text += value;
+        else out.push({ text: value, style });
+    };
+    let at = 0;
+    for (const match of body.matchAll(INLINE_MD)) {
+        const start = match.index ?? 0;
+        if (start > at) push(body.slice(at, start), '');
+        if (match[2] !== undefined) push(match[2], 'strong');
+        else if (match[3] !== undefined) push(match[3], 'code');
+        else if (match[4] !== undefined) push(match[4], 'em');
+        else push(match[5], 'em');
+        at = start + match[0].length;
+    }
+    if (at < body.length) push(body.slice(at), '');
+    return out;
+}
+
+/**
+ * Wrap the markdown segments of a thought into rows of plain words.
+ * @param {string} body the collapsed text of the thought
+ * @param {number} width the width of a row
+ * @returns {{ text: string, style: string }[][]}
+ * @ai.hint pure
+ */
+function wrapWords(body, width) {
+    const words = [];
+    for (const segment of markdownSegments(body)) {
+        for (const piece of segment.text.split(' ')) {
+            if (piece) words.push({ text: piece, style: segment.style || '' });
+        }
+    }
+    const lines = [];
+    let current = [];
+    let used = 0;
+    for (const word of words) {
+        let piece = word.text;
+        if (piece.length > width) piece = `${piece.slice(0, Math.max(1, width - 1))}…`;
+        const cost = current.length ? piece.length + 1 : piece.length;
+        if (current.length && used + cost > width) {
+            lines.push(current);
+            current = [];
+            used = 0;
+        }
+        current.push({ text: piece, style: word.style });
+        used += current.length === 1 ? piece.length : piece.length + 1;
+    }
+    if (current.length) lines.push(current);
+    return lines;
+}
+
+/**
+ * Build one row of the thought from the words of a line.
+ * @param {{ text: string, style: string }[]} words
+ * @param {{ prefix?: string, head?: string }} [decoration]
+ * @returns {{ text: string, segments: { text: string, style: string }[] | null }}
+ * @ai.hint pure
+ */
+function thoughtRow(words, { prefix = '', head = '' } = {}) {
+    const segments = [{ text: `${prefix}${head}`, style: '' }];
+    let text = `${prefix}${head}`;
+    words.forEach((word, index) => {
+        const chunk = index === 0 ? word.text : ` ${word.text}`;
+        const style = word.style || '';
+        const last = segments[segments.length - 1];
+        if (last.style === style) last.text += chunk;
+        else segments.push({ text: chunk, style });
+        text += chunk;
+    });
+    return { text, segments };
+}
+
+/**
+ * How many rows the whole thought takes at the width of the screen.
+ *
+ * The shell keeps the tail of the stream and lets the operator scroll back through
+ * it: this count is the bound of that scroll.
+ *
+ * @param {unknown} text
+ * @param {string} [kind]
+ * @param {number} [cols]
+ * @returns {number}
+ * @exports
+ * @ai.hint pure
+ */
+export function thoughtLineCount(text, kind = 'thinking', cols = 100) {
+    const body = String(text ?? '').replace(/\s+/g, ' ').trim();
+    if (!body) return 0;
+    const label = kind === 'answer' ? '▸ answer: ' : '▸ thinking: ';
+    return wrapWords(body, Math.max(16, cols - label.length - 2)).length;
+}
+
+/**
  * The rows of the thought of the model.
  *
  * The thought of a model is longer than the screen, and the operator reads what the
- * model thinks now, not what it thought first. The thought is wrapped into the rows of
- * the dashboard at the width of the screen: a line that does not fit wraps in the
- * terminal and pushes the rows of the dashboard down. The first row that was cut away
- * is marked with an ellipsis.
+ * model thinks now, not what it thought first. The thought is wrapped into the rows
+ * of the dashboard at the width of the screen: a line that does not fit wraps in the
+ * terminal and pushes the rows of the dashboard down. The shell shows the last rows
+ * of the thought; the `offset` moves the window back through the rows that are cut
+ * away, and the first visible row is then marked with an ellipsis. The rows speak
+ * markdown: the strong, the code and the emphasis come back as styled segments.
  *
  * @param {unknown} text
  * @param {string} kind `thinking` or `answer`
  * @param {number} cols the width of the screen
  * @param {number} [rows] how many rows the thought takes
- * @returns {string[]}
+ * @param {number} [offset] how many rows the window is moved back from the end
+ * @returns {{ text: string, segments: { text: string, style: string }[] | null }[]}
  * @exports
  * @ai.hint pure
  */
-export function wrapThought(text, kind = 'thinking', cols = 100, rows = 2) {
+export function wrapThought(text, kind = 'thinking', cols = 100, rows = THOUGHT_ROWS, offset = 0) {
     const count = Math.max(1, Math.floor(Number(rows) || 1));
     const body = String(text ?? '').replace(/\s+/g, ' ').trim();
-    if (!body) return Array.from({ length: count }, () => '');
+    if (!body) return Array.from({ length: count }, () => ({ text: '', segments: null }));
     const label = kind === 'answer' ? '▸ answer: ' : '▸ thinking: ';
-    // Every row is wrapped at the width of the narrowest one: the first row carries the
-    // label and the ellipsis, and the next ones carry the indent. A row that does not
-    // fit wraps in the terminal and pushes the rows of the dashboard down.
     const width = Math.max(16, cols - label.length - 2);
-    const lines = [];
-    let current = '';
-    for (const word of body.split(' ')) {
-        if (!word) continue;
-        const candidate = current ? `${current} ${word}` : word;
-        if (candidate.length <= width) { current = candidate; continue; }
-        if (current) lines.push(current);
-        current = word.length <= width ? word : `${word.slice(0, width - 1)}…`;
-    }
-    if (current) lines.push(current);
-    // The newest words are the ones that stay: the thought is read from its end.
-    const kept = lines.slice(-count);
-    const cut = lines.length > kept.length;
-    const out = kept.map((line, index) => {
-        const body = cut && index === 0 ? `… ${line}` : line;
-        return index === 0 ? `${label}${body}` : `  ${body}`;
-    });
-    while (out.length < count) out.push('');
+    const lines = wrapWords(body, width);
+    const shift = Math.max(0, Math.floor(Number(offset) || 0));
+    const start = Math.max(0, lines.length - count - shift);
+    const kept = lines.slice(start, start + count);
+    const cut = start > 0;
+    const out = kept.map((words, index) => thoughtRow(words, {
+        prefix: index === 0 ? label : '  ',
+        head: cut && index === 0 ? '… ' : '',
+    }));
+    while (out.length < count) out.push({ text: '', segments: null });
     return out;
 }
 
@@ -139,18 +253,22 @@ function visibleStages(state, rows) {
  *
  * The row is the compact view of the current work: its model, stage, role, effort,
  * mode, plan step and state. A pending question goes first, because the answer of the
- * operator is the most immediate action.
+ * operator is the most immediate action. When the row has to share its width — with
+ * the bar of the progress, for example — the least telling fields give way first: the
+ * model, the stage, the effort and the state stay on the screen.
  *
  * @param {object} state
+ * @param {{ maxWidth?: number }} [options]
  * @returns {string}
  * @exports
  * @ai.hint pure
  */
-export function formatStatusRow(state) {
+export function formatStatusRow(state, { maxWidth = Number.POSITIVE_INFINITY } = {}) {
     const location = state?.location ?? {};
     const running = Object.values(state?.stages ?? {})
         .find((stage) => stage?.status === 'running');
     const text = (value) => String(value ?? '').trim();
+    const question = state?.question ?? null;
     const fields = [
         `Model: ${text(location.model) || '—'}`,
         `Stage: ${text(location.stage) || text(running?.name) || '—'}`,
@@ -160,9 +278,18 @@ export function formatStatusRow(state) {
     ];
     if (text(location.step)) fields.push(`Step: ${text(location.step)}`);
     fields.push(`Status: ${text(state?.statusText) || text(state?.status) || 'starting'}`);
-    const question = state?.question ?? null;
     if (question) fields.unshift(`Question: ${text(question.question) || 'Input'}`);
-    return fields.join(' · ');
+    const limit = Math.max(0, Math.floor(Number(maxWidth) || 0));
+    if (!Number.isFinite(limit)) return fields.join(' · ');
+    // The fields give way from the middle outwards: the mode and the step are the first
+    // to go, the state and the effort stay as long as they fit.
+    const order = ['Mode', 'Step', 'Role', 'Model', 'Stage', 'Effort'];
+    const row = () => fields.join(' · ');
+    while (row().length > limit && order.some((key) => fields.some((field) => field.startsWith(`${key}: `)))) {
+        const drop = order.find((key) => fields.some((field) => field.startsWith(`${key}: `)));
+        fields.splice(fields.findIndex((field) => field.startsWith(`${drop}: `)), 1);
+    }
+    return row();
 }
 
 /**
@@ -170,8 +297,9 @@ export function formatStatusRow(state) {
  *
  * @param {object} state
  * @param {{ width?: number, height?: number, input?: string, ascii?: boolean,
- *   logOffset?: number }} [options]
- * @returns {{ lines: object[], inputRow: number, statusRow: number, progressRow: number }}
+ *   logOffset?: number, thoughtOffset?: number }} [options]
+ * @returns {{ lines: object[], inputRow: number, statusRow: number, progressRow: number,
+ *   thoughtMaxOffset: number }}
  * @exports
  * @ai.hint pure
  */
@@ -181,6 +309,7 @@ export function createTuiLayout(state, {
     input = '',
     ascii = false,
     logOffset = 0,
+    thoughtOffset = 0,
 } = {}) {
     const wantedWidth = Math.floor(Number(width));
     const wantedHeight = Math.floor(Number(height));
@@ -190,13 +319,13 @@ export function createTuiLayout(state, {
     const lines = [];
     const push = (text = '', style = 'normal') => lines.push({ text: String(text), style });
 
-    const observed = Array.isArray(state?.observed) ? state.observed : [];
-    const done = observed.filter((name) => {
-        const status = state?.stages?.[name]?.status;
-        return status && status !== 'pending' && status !== 'running';
-    }).length;
-    const total = observed.length;
-    const barWidth = Math.max(8, Math.min(24, Math.floor(cols * 0.22)));
+    // The bar of the progress counts the whole plan of the run: the stages that have not
+    // started yet belong to the total, so the bar only fills when the run is truly over.
+    const allStages = Object.values(state?.stages ?? {});
+    const done = allStages.filter((stage) => stage?.status
+        && stage.status !== 'pending' && stage.status !== 'running').length;
+    const total = allStages.length;
+    const barWidth = Math.max(6, Math.min(16, Math.floor(cols * 0.12)));
     const filled = total > 0 ? Math.round((done / total) * barWidth) : 0;
     const bar = `${marks.barFull.repeat(filled)}${marks.barEmpty.repeat(Math.max(0, barWidth - filled))}`;
 
@@ -206,7 +335,7 @@ export function createTuiLayout(state, {
     push(truncate(state?.task || 'Preparing the run…', cols), 'dim');
     push(marks.rule.repeat(cols), 'dim');
 
-    const footerRows = 10;
+    const footerRows = 11;
     const headerRows = lines.length;
     const mainRows = Math.max(3, rows - headerRows - footerRows - 1);
     const leftWidth = Math.max(24, Math.min(44, Math.floor(cols * 0.38)));
@@ -235,24 +364,35 @@ export function createTuiLayout(state, {
 
     push(marks.rule.repeat(cols), 'dim');
     // The stream of the model: the thought while it thinks, the answer while it writes.
-    // Two rows, wrapped at the width of the screen: a line that does not fit pushes the
-    // rows of the dashboard down.
+    // Four rows, wrapped at the width of the screen and speaking markdown. The window
+    // follows the end of the thought; the operator moves it back through the thought
+    // with the scroll of the shell.
     const stream = state?.stream ?? {};
     const streamKind = String(stream.kind ?? '') === 'answer' ? 'answer' : 'thinking';
-    for (const row of wrapThought(stream.text, streamKind, cols, 2)) push(row, 'dim');
-    const progressText = total > 0 ? `${bar} ${done}/${total}` : `${bar} 0/0`;
+    const thoughtMaxOffset = Math.max(0, thoughtLineCount(stream.text, streamKind, cols) - THOUGHT_ROWS);
+    const thoughtShift = Math.min(Math.max(0, Number(thoughtOffset) || 0), thoughtMaxOffset);
+    for (const row of wrapThought(stream.text, streamKind, cols, THOUGHT_ROWS, thoughtShift)) {
+        lines.push({ text: row.text, style: 'dim', segments: row.segments });
+    }
+    push(marks.rule.repeat(cols), 'dim');
+    // The last word of the run: a file that was written, a warning, a wait. It lives on
+    // its own row above the status, so the bar and the state stay readable.
     const notice = String(state?.notice ?? '');
     const progressRow = lines.length;
-    push(`${truncate(progressText, Math.floor(cols * 0.45))}  ${truncate(notice, Math.floor(cols * 0.5))}`, 'normal');
+    push(truncate(notice, cols), 'normal');
     const question = state?.question ?? null;
-    push(marks.rule.repeat(cols), 'dim');
+    // The status and the state of the run share one row with the bar of the progress:
+    // the operator reads how far the run went and where it stands in one glance. The
+    // fields of the row give way before the state is cut away.
     const statusRow = lines.length;
-    push(truncate(formatStatusRow(state), cols), question ? 'warn' : 'dim');
+    const progressText = total > 0 ? `${bar} ${done}/${total}` : `${bar} 0/0`;
+    const statusWidth = Math.max(0, cols - progressText.length - 3);
+    push(truncate(`${progressText} · ${formatStatusRow(state, { maxWidth: statusWidth })}`, cols), question ? 'warn' : 'dim');
     push(marks.rule.repeat(cols), 'dim');
     const inputRow = lines.length;
-    push(truncate('text: steer · /skip [name] · /help · /quit · Ctrl+C: stop', cols), 'dim');
+    push(truncate('text: steer · /skip [name] · Shift+↑/↓: thought · /help · /quit · Ctrl+C: stop', cols), 'dim');
     push(truncate(`› ${input}`, cols), 'normal');
-    return { lines, inputRow, statusRow, progressRow };
+    return { lines, inputRow, statusRow, progressRow, thoughtMaxOffset };
 }
 
 /**
@@ -264,7 +404,7 @@ export function createTuiLayout(state, {
  *
  * @param {object} state
  * @param {{ width?: number, height?: number, input?: string, ascii?: boolean,
- *   logOffset?: number }} [options]
+ *   logOffset?: number, thoughtOffset?: number }} [options]
  * @returns {object} the frame: the rows and the place of the input
  * @exports
  * @ai.hint pure
@@ -275,12 +415,13 @@ export function prepareTuiFrame(state, {
     input = '',
     ascii = false,
     logOffset = 0,
+    thoughtOffset = 0,
 } = {}) {
     const measuredWidth = Math.floor(Number(width));
     const measuredHeight = Math.floor(Number(height));
     const cols = Number.isFinite(measuredWidth) && measuredWidth > 0 ? measuredWidth : 100;
     const rows = Number.isFinite(measuredHeight) && measuredHeight > 0 ? measuredHeight : 30;
-    return createTuiLayout(state, { width: cols, height: rows, input, ascii, logOffset });
+    return createTuiLayout(state, { width: cols, height: rows, input, ascii, logOffset, thoughtOffset });
 }
 
 /**
@@ -292,8 +433,8 @@ export function prepareTuiFrame(state, {
  *
  * @param {object} term a terminal-kit terminal
  * @param {object} state
- * @param {{ input?: string, ascii?: boolean, logOffset?: number, previous?: object[],
- *   layout?: object }} [options]
+ * @param {{ input?: string, ascii?: boolean, logOffset?: number, thoughtOffset?: number,
+ *   previous?: object[], layout?: object }} [options]
  * @returns {object[]} the rows of the frame
  * @exports
  * @ai.hint io
@@ -302,6 +443,7 @@ export function renderTui(term, state, {
     input = '',
     ascii = false,
     logOffset = 0,
+    thoughtOffset = 0,
     previous = null,
     layout = null,
 } = {}) {
@@ -309,16 +451,33 @@ export function renderTui(term, state, {
     const measuredHeight = Math.floor(Number(term?.height));
     const width = Number.isFinite(measuredWidth) && measuredWidth > 0 ? measuredWidth : 100;
     const height = Number.isFinite(measuredHeight) && measuredHeight > 0 ? measuredHeight : 30;
-    const frame = layout ?? prepareTuiFrame(state, { width, height, input, ascii, logOffset });
+    const frame = layout ?? prepareTuiFrame(state, { width, height, input, ascii, logOffset, thoughtOffset });
     const lines = frame?.lines ?? [];
     const styleNames = { title: 'bold', good: 'green', bad: 'red', warn: 'yellow', dim: 'dim' };
+    const segmentStyles = { strong: 'bold', em: 'italic', code: 'cyan' };
     lines.forEach((line, index) => {
         const old = Array.isArray(previous) ? previous[index] : null;
         // A row that did not change is left alone: the terminal keeps it, and the eye
-        // does not see it blink.
-        if (old && old.text === line.text && old.style === line.style) return;
+        // does not see it blink. The pieces of a markdown row must match piece by piece.
+        const sameSegments = Array.isArray(line.segments)
+            ? Array.isArray(old?.segments)
+                && old.segments.length === line.segments.length
+                && line.segments.every((segment, at) => segment.text === old.segments[at]?.text
+                    && segment.style === old.segments[at]?.style)
+            : !Array.isArray(old?.segments);
+        if (old && old.text === line.text && old.style === line.style && sameSegments) return;
         term.moveTo(1, index + 1);
         term.eraseLineAfter();
+        if (Array.isArray(line.segments) && line.segments.length) {
+            // The pieces of the markdown: every piece carries its own style, and the
+            // styles of the thought live next to the ordinary words of the row.
+            for (const segment of line.segments) {
+                const styleName = segmentStyles[segment.style] ?? 'normal';
+                const paint = typeof term?.[styleName] === 'function' ? term[styleName] : term;
+                paint(segment.text);
+            }
+            return;
+        }
         const styleName = styleNames[line.style] ?? 'normal';
         const style = typeof term?.[styleName] === 'function' ? term[styleName] : term;
         style(line.text);

@@ -9,8 +9,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createFrame, FRAME } from '../src/cli/protocol.js';
-import { createTuiState, reduceTuiState, stageProgress } from '../src/tui/state.js';
-import { createTuiLayout, formatStatusRow, renderTui, truncate, wrapThought } from '../src/tui/render.js';
+import { createTuiState, reduceTuiState, stageProgress, STREAM_LIMIT } from '../src/tui/state.js';
+import { createTuiLayout, formatStatusRow, markdownSegments, renderTui, truncate, wrapThought } from '../src/tui/render.js';
 import { createTuiApp } from '../src/tui/app.js';
 
 test('the state of the shell follows the stages, the progress and the result', () => {
@@ -76,7 +76,7 @@ test('the shell keeps the tail of a long stream, not the whole of it', () => {
         frame: createFrame(FRAME.event, { event: { type: 'text.delta', text: 'x'.repeat(2000) } }),
     });
     assert.equal(state.stream.kind, 'answer');
-    assert.ok(state.stream.text.length <= 600);
+    assert.ok(state.stream.text.length <= STREAM_LIMIT);
     assert.ok(state.stream.text.endsWith('x'));
 });
 
@@ -127,8 +127,12 @@ test('the status row above the input names the current model, stage, role, effor
     const layout = createTuiLayout(state, { width: 120, height: 30, input: 'continue' });
     assert.ok(layout.progressRow < layout.statusRow);
     assert.equal(layout.inputRow - layout.statusRow, 2);
-    assert.match(layout.lines[layout.progressRow].text, /0\/0/);
+    // The bar of the progress shares the row of the status and the state: its total is
+    // every stage of the run, even the ones that have not started yet.
+    assert.match(layout.lines[layout.statusRow].text, /0\/16/);
     assert.match(layout.lines[layout.statusRow].text, /Model: test\/model/);
+    assert.match(layout.lines[layout.statusRow].text, /Effort: high/);
+    assert.match(layout.lines[layout.statusRow].text, /Status: running/);
     //assert.match(layout.lines[layout.inputRow].text, /continue/);
 
     const header = layout.lines.slice(0, 4).map((line) => line.text).join('\n');
@@ -187,27 +191,106 @@ test('the thought of the model is wrapped, so no row outgrows the screen', () =>
         + 'paragraph aligns with a slight offset for visual balance across the whole layout.';
     const rows = wrapThought(long, 'thinking', 100, 2);
     assert.equal(rows.length, 2);
-    for (const row of rows) assert.ok(row.length <= 100, `the row does not fit: ${row.length}`);
-    assert.match(rows[0], /^▸ thinking: /);
-    assert.match(rows[1], /^ {2}/);
+    for (const row of rows) assert.ok(row.text.length <= 100, `the row does not fit: ${row.text.length}`);
+    assert.match(rows[0].text, /^▸ thinking: /);
+    assert.match(rows[1].text, /^ {2}/);
+});
+
+test('the thought of the model takes four rows on the dashboard', () => {
+    const long = Array.from({ length: 60 }, (_, index) => `word${index}`).join(' ');
+    const rows = wrapThought(long, 'thinking', 100, 4);
+    assert.equal(rows.length, 4);
+    for (const row of rows) assert.ok(row.text.length <= 100, `the row does not fit: ${row.text.length}`);
+});
+
+test('the thought speaks markdown: the marks go away and the styles stay', () => {
+    const rows = wrapThought('A **bold plan** with `code` and _emphasis_ inside.', 'thinking', 100, 2);
+    assert.ok(!rows[0].text.includes('**'), `the marks stayed: ${rows[0].text}`);
+    assert.ok(!rows[0].text.includes('`'), `the code marks stayed: ${rows[0].text}`);
+    const styles = rows[0].segments.map((segment) => segment.style);
+    assert.ok(styles.includes('strong'), `no strong piece: ${JSON.stringify(rows[0].segments)}`);
+    assert.ok(styles.includes('code'), `no code piece: ${JSON.stringify(rows[0].segments)}`);
+    assert.ok(styles.includes('em'), `no emphasis piece: ${JSON.stringify(rows[0].segments)}`);
+    assert.equal(markdownSegments('plain words').every((segment) => segment.style === ''), true);
+    // A snake_case name is not an emphasis: the underscore in a word stays a word.
+    const plain = markdownSegments('read the src_file_name today');
+    assert.equal(plain.some((segment) => segment.style === 'em'), false);
+});
+
+test('the thought scrolls back through its rows', () => {
+    const long = Array.from({ length: 120 }, (_, index) => `word${index}`).join(' ');
+    const rows = wrapThought(long, 'thinking', 100, 4, 0);
+    const scrolled = wrapThought(long, 'thinking', 100, 4, 2);
+    assert.notEqual(rows[3].text, scrolled[3].text, 'the window did not move');
+    assert.match(scrolled[0].text, /^▸ thinking: /);
+    assert.match(scrolled[0].text, /…/);
+    assert.match(rows[0].text, /word\d+$/);
+
+    let state = createTuiState({ command: 'run', task: 'make a landing' });
+    state = reduceTuiState(state, {
+        type: 'frame',
+        frame: createFrame(FRAME.event, { event: { type: 'reasoning.delta', text: long } }),
+    });
+    const layout = createTuiLayout(state, { width: 100, height: 30 });
+    assert.ok(layout.thoughtMaxOffset > 0, 'the long thought has nowhere to scroll');
+    const top = createTuiLayout(state, { width: 100, height: 30, thoughtOffset: layout.thoughtMaxOffset });
+    const first = top.lines.find((line) => Array.isArray(line.segments));
+    assert.ok(first, 'the scrolled thought has no rows');
+    // The window at its very top starts at the first word of the thought.
+    assert.match(first.text, /word0/);
+    assert.match(first.text, /^▸ thinking: word0/);
+    // One row above the top: the window is marked as cut.
+    const near = createTuiLayout(state, { width: 100, height: 30, thoughtOffset: layout.thoughtMaxOffset - 1 });
+    const nearFirst = near.lines.find((line) => Array.isArray(line.segments));
+    assert.match(nearFirst.text, /…/);
 });
 
 test('the thought that is cut is marked with an ellipsis', () => {
     const rows = wrapThought('one two three four five six seven eight nine ten', 'thinking', 30, 1);
     assert.equal(rows.length, 1);
-    assert.match(rows[0], /…/);
+    assert.match(rows[0].text, /…/);
 });
 
 test('no row of the thought outgrows the screen, whatever the screen is', () => {
     const long = Array.from({ length: 60 }, (_, index) => `word${index}`).join(' ');
     for (const cols of [56, 80, 100, 200]) {
         for (const rows of wrapThought(long, 'thinking', cols, 2)) {
-            assert.ok(rows.length <= cols, `the row does not fit at ${cols}: ${rows.length}`);
+            assert.ok(rows.text.length <= cols, `the row does not fit at ${cols}: ${rows.text.length}`);
         }
         for (const rows of wrapThought('x'.repeat(300), 'thinking', cols, 2)) {
-            assert.ok(rows.length <= cols, `the long word does not fit at ${cols}: ${rows.length}`);
+            assert.ok(rows.text.length <= cols, `the long word does not fit at ${cols}: ${rows.text.length}`);
         }
     }
+});
+
+test('the bar of the progress counts the whole plan of the run', () => {
+    let state = createTuiState({ command: 'run', task: 'make a landing' });
+    // Two stages done, one running, the rest pending: the total is every stage of the
+    // run, not only the ones that started.
+    state = reduceTuiState(state, {
+        type: 'frame',
+        frame: createFrame(FRAME.event, { event: { type: 'stage.done', stage: 'collect', status: 'completed' } }),
+    });
+    state = reduceTuiState(state, {
+        type: 'frame',
+        frame: createFrame(FRAME.event, { event: { type: 'stage.start', stage: 'scan', title: 'Scan' } }),
+    });
+    const layout = createTuiLayout(state, { width: 120, height: 30 });
+    const total = Object.keys(state.stages).length;
+    assert.match(layout.lines[layout.statusRow].text, new RegExp(`1/${total}`));
+
+    // The progress of the disk folds into the stages: a resume shows what ran before.
+    state = reduceTuiState(state, {
+        type: 'frame',
+        frame: createFrame(FRAME.event, {
+            event: {
+                type: 'progress',
+                payload: { stages: [{ name: 'setup', status: 'completed' }, { name: 'markup', status: 'completed' }] },
+            },
+        }),
+    });
+    const after = createTuiLayout(state, { width: 120, height: 30 });
+    assert.match(after.lines[after.statusRow].text, new RegExp(`3/${total}`));
 });
 
 test('the frame is drawn by the difference: a row that did not change is not written', () => {

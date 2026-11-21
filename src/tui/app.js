@@ -40,6 +40,9 @@ export function createTuiApp({
     let state = createTuiState({ command, task });
     let input = '';
     let logOffset = 0;
+    // The scroll of the thought: how many rows the window of the stream is moved back
+    // from its end. The thought follows its end until the operator scrolls back.
+    let thoughtOffset = 0;
     let client = null;
     let renderTimer = null;
     let stopped = false;
@@ -65,7 +68,8 @@ export function createTuiApp({
             state,
             input,
             logOffset,
-            frame: prepareTuiFrame(state, { width, height, input, ascii, logOffset }),
+            thoughtOffset,
+            frame: prepareTuiFrame(state, { width, height, input, ascii, logOffset, thoughtOffset }),
         };
     }
 
@@ -88,10 +92,11 @@ export function createTuiApp({
     const draw = () => {
         // The frame is prepared before it is drawn, and it is reused when the state did
         // not move since the preparation.
-        if (!prepared || prepared.state !== state || prepared.input !== input || prepared.logOffset !== logOffset) {
+        if (!prepared || prepared.state !== state || prepared.input !== input
+            || prepared.logOffset !== logOffset || prepared.thoughtOffset !== thoughtOffset) {
             prepare();
         }
-        frame = renderTui(term, state, { input, ascii, logOffset, previous: frame, layout: prepared.frame });
+        frame = renderTui(term, state, { input, ascii, logOffset, thoughtOffset, previous: frame, layout: prepared.frame });
     };
 
     /**
@@ -162,11 +167,23 @@ export function createTuiApp({
             return;
         }
         if (name === 'UP') {
+            // The shifted arrows scroll the thought of the model, the plain ones the log.
+            if (matches.includes('SHIFT_UP')) {
+                const max = prepared?.frame?.thoughtMaxOffset ?? 0;
+                thoughtOffset = Math.min(thoughtOffset + 1, Math.max(max, thoughtOffset));
+                drawNow();
+                return;
+            }
             logOffset += 1;
             drawNow();
             return;
         }
         if (name === 'DOWN') {
+            if (matches.includes('SHIFT_DOWN')) {
+                thoughtOffset = Math.max(0, thoughtOffset - 1);
+                drawNow();
+                return;
+            }
             logOffset = Math.max(0, logOffset - 1);
             drawNow();
             return;
@@ -201,7 +218,7 @@ export function createTuiApp({
             return;
         }
         if (text === '/help') {
-            state = { ...state, notice: 'Text steers the next role turn · /skip [name] skips a stage or step · /quit stops safely' };
+            state = { ...state, notice: 'Text steers the next role turn · /skip [name] skips a stage or step · Shift+↑/↓ scrolls the thought · /quit stops safely' };
             requestRender();
             return;
         }
@@ -272,8 +289,14 @@ export function createTuiApp({
                 cwd,
                 env,
                 onFrame(frame) {
-                    dispatch({ type: 'frame', frame });
                     const event = frame?.type === 'event' ? frame.event : null;
+                    // A new turn of the thought follows its end again: the scroll of the
+                    // last thought had its use, the new one starts from the bottom.
+                    if ((event?.type === 'reasoning.delta' || event?.type === 'text.delta')
+                        && state.stream?.fresh) {
+                        thoughtOffset = 0;
+                    }
+                    dispatch({ type: 'frame', frame });
                     if (event?.type === 'summary') {
                         const status = String(event.payload?.status ?? event.report?.status ?? '');
                         if (status === 'completed' || status === 'paused') {
