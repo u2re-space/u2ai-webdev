@@ -1355,7 +1355,7 @@ The sections of the file:
 | `reasoning`, `limits`, `models` | The effort, the profile of the stages, the summaries, the budgets of the run and the ceilings of the models. |
 | `tools` | The tools the roles may call. |
 | `browser` | The eye of the run: the engine (`auto`, `ego`, `chrome`), the path of the browser, the timeout, the frame of the picture, and the eye of the styles (`stylingVision`, `stylingVisionRounds`). |
-| `stack` | The stack the generator writes for: the framework, the markup, the styles, the script, the icons. |
+| `stack` | The stack the generator writes for: the framework (vanilla, react, vue, svelte, next, astro, vite, lure, ssre), the markup, the styles, the script, the icons. |
 | `agent` | The knobs of the run: `fidelity`, `creativity`, `platform`, `kind`, `approve`, `extract`. |
 | `pace` | The dials of the team: `speed`, `quality` and the per-stage dials. |
 | `stages` | Every stage: `enabled`, `maxTurns` and `timeoutMs` (the budget of the stage; it wins over `limits.stageTimeoutMs`). The stage `review` also has `repair` and `repairRounds`. |
@@ -1956,6 +1956,12 @@ ai-webdev run landing "repeat the mockup" --fidelity 90 --creativity 10
 
 # a React project with TypeScript and Lucide
 ai-webdev run "a small app" --frontend-framework react --frontend-script-language typescript --icon-set lucide
+
+# the fest-live stack: the reactive DOM of @fest-lib/lure on the client
+ai-webdev run "a dashboard" --frontend-framework lure
+
+# the fest-live stack on the server: @fest-lib/ssre renders the pages, Fastify serves them
+ai-webdev run "a shop with a cart" --frontend-framework ssre --kind backend
 
 # only the plan and the architecture
 ai-webdev plan "a shop with a cart" --route plan,architect

@@ -38,7 +38,7 @@ export const ENUMS = Object.freeze({
   /** The script language the generator may write. */
   scriptLanguages: Object.freeze(['javascript', 'typescript']),
   /** The frameworks the scaffold may set up. */
-  frontendFrameworks: Object.freeze(['vanilla', 'react', 'vue', 'svelte', 'next', 'astro', 'vite']),
+  frontendFrameworks: Object.freeze(['vanilla', 'react', 'vue', 'svelte', 'next', 'astro', 'vite', 'lure', 'ssre']),
   /** The icon sets the iconifier may pull. */
   iconSets: Object.freeze(['auto', 'phosphor', 'lucide']),
   /** The external CLIs this package may call. */

@@ -65,7 +65,7 @@ Options of the run:
   --creativity <0..100>       How far the result may go from the reference.
   --platform <id>             The web platform of the result (chromium).
   --kind <kind>               landing | site | backend | app | component
-  --frontend-framework <name> vanilla | react | vue | svelte | next | astro | vite
+  --frontend-framework <name> vanilla | react | vue | svelte | next | astro | vite | lure | ssre
   --frontend-markup-language <name>   html | jsx | tsx | vue | svelte
   --frontend-style-language <name>    css | scss | less
   --frontend-script-language <name>   javascript | typescript

@@ -80,7 +80,9 @@ ${INPUTS_IN_CONTEXT}
 - The page has a canvas: the element with the class \`page\` inside the \`body\`. The styles give it
   the width of the design and scale it into the window; the markup writes the element.
 - The stack of the project is given. Do not invent a framework, a bundler or a library that the
-  plan does not ask for.
+  plan does not ask for. With the framework \`lure\` the components are @fest-lib/lure modules
+  over the refs of @fest-lib/object; with \`ssre\` the pages are server-rendered by
+  @fest-lib/ssre over a hub.
 - A reference image and \`DESIGN.md\` are sufficient inputs. Inspect the image directly and infer
   its hierarchy, proportions, palette and spacing; do not request or run a measurer.
 - Keep the structure as small as the task allows. A module that holds one function and is used

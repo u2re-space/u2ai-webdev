@@ -36,6 +36,16 @@ export const FRAMEWORKS = Object.freeze({
     next: { libs: ['next', 'react', 'react-dom'], plugins: [], defaultScript: 'typescript', entry: 'app/page.tsx' },
     astro: { libs: ['astro'], plugins: ['@astrojs/react'], defaultScript: 'typescript', entry: 'src/pages/index.astro' },
     vite: { libs: [], plugins: [], defaultScript: 'javascript', entry: 'index.html' },
+    // The fest-live reactive stack: @fest-lib/lure over core/dom/object/uniform/style-lib.
+    lure: {
+        libs: ['@fest-lib/core', '@fest-lib/dom', '@fest-lib/object', '@fest-lib/uniform', '@fest-lib/style-lib', '@fest-lib/lure'],
+        plugins: [], defaultScript: 'typescript', entry: 'index.html',
+    },
+    // The backend-first sibling: @fest-lib/ssre renders HTML on the server (Fastify by default).
+    ssre: {
+        libs: ['@fest-lib/ssre', 'fastify'],
+        plugins: [], defaultScript: 'typescript', entry: 'server.ts',
+    },
 });
 
 /** The files of a kind, before the stack changes them. */
@@ -84,6 +94,15 @@ export function filesForStack({ kind, framework = null, scriptLanguage = null, s
 
     const styles = files.indexOf('src/styles.scss');
     if (styles !== -1) files[styles] = `src/styles.${styleExt}`;
+
+    if (fw === 'ssre') {
+        // The server renders the HTML; the scaffold drops the static page and the client
+        // entry and names the server entry after the script language instead.
+        const without = files.filter((file) => !['index.html', 'src/main.js', 'vite.config.js'].includes(file));
+        const server = without.indexOf('server.js');
+        if (server !== -1) without[server] = script === 'typescript' ? 'server.ts' : 'server.js';
+        return without;
+    }
 
     if (fw === 'react') {
         const at = index === -1 ? files.length : index + 1;
@@ -153,6 +172,15 @@ export const SCAFFOLD_VERSIONS = Object.freeze({
     '@vitejs/plugin-vue': '^5.2.0',
     '@vitejs/plugin-svelte': '^5.0.0',
     '@sveltejs/vite-plugin-svelte': '^5.0.0',
+    tsx: '^4.19.0',
+    // The fest-live stack; the versions are the ones published on npm (checked 2026-11).
+    '@fest-lib/core': '^0.1.40',
+    '@fest-lib/dom': '^0.1.63',
+    '@fest-lib/object': '^0.1.53',
+    '@fest-lib/uniform': '^0.1.41',
+    '@fest-lib/style-lib': '^0.1.36',
+    '@fest-lib/lure': '^0.1.92',
+    '@fest-lib/ssre': '^0.1.21',
 });
 
 /**
@@ -198,6 +226,11 @@ export function buildPackageManifest({
         ? { dev: 'vite', build: 'vite build', preview: 'vite preview' }
         : { start: 'node server.js' };
     if (script === 'typescript') scripts.typecheck = 'tsc --noEmit';
+    if (fw === 'ssre') {
+        // The server runs straight from the source: tsx for TypeScript, node for JavaScript.
+        scripts.start = script === 'typescript' ? 'tsx server.ts' : 'node server.js';
+        scripts.dev = scripts.start;
+    }
 
     const dependencies = {};
     const devDependencies = {};
@@ -211,6 +244,7 @@ export function buildPackageManifest({
     if (web && style === 'scss') devDependencies.sass = scaffoldVersion('sass');
     if (web && style === 'less') devDependencies.less = scaffoldVersion('less');
     if (script === 'typescript') devDependencies.typescript = scaffoldVersion('typescript');
+    if (fw === 'ssre' && script === 'typescript') devDependencies.tsx = scaffoldVersion('tsx');
 
     for (const library of libraries) {
         if (!library?.include || !library?.name) continue;
@@ -253,7 +287,9 @@ export function stackText(kind, platform, libraries = [], options = {}) {
     const styleName = style === 'scss' ? 'SCSS' : style === 'less' ? 'Less' : 'CSS';
 
     const parts = [];
-    if (kind === 'backend') {
+    if (fw === 'ssre') {
+        parts.push(`Node.js 26, ESM, @fest-lib/ssre over Fastify, bind 127.0.0.1, port PORT or 3000.${script === 'typescript' ? ' The server runs straight from TypeScript through tsx.' : ''}`);
+    } else if (kind === 'backend') {
         parts.push(`Node.js 26, ESM, server.js on node:http, bind 127.0.0.1, port PORT or 3000.${included.has('fastify') ? ' The server uses fastify.' : ' No dependency unless a recommendation includes one.'}`);
     } else {
         parts.push(`Node.js 26, ESM, Vite, ${styleName}, ECMAScript ${platform?.ecma?.edition ?? 2026} (${platform?.id ?? 'chromium'}, experimental flags off).${kind === 'app' ? ' server.js serves dist/ after vite build.' : ' No Node server.'}`);
@@ -264,6 +300,8 @@ export function stackText(kind, platform, libraries = [], options = {}) {
     else if (fw === 'svelte') parts.push('The interface is Svelte components (.svelte) with the Vite plugin.');
     else if (fw === 'next') parts.push('The interface is Next.js: the file system is the router, the server components are the default.');
     else if (fw === 'astro') parts.push('The interface is Astro: the pages are .astro files under src/pages, the islands are the interactive parts.');
+    else if (fw === 'lure') parts.push('The interface is @fest-lib/lure: the DOM is built with the factories E/H/M/Q/T/C and the reactive refs of @fest-lib/object; the styles are plain CSS through @fest-lib/style-lib. Read the fest-lib skill before the first component.');
+    else if (fw === 'ssre') parts.push('The interface is @fest-lib/ssre: the HTML is rendered on the server with E/H/M over a hub of @fest-lib/object refs, Fastify serves the pages, the live updates go over the channel (SSE by default). Read the fest-lib skill before the first page.');
 
     if (script === 'typescript') parts.push('The modules are TypeScript.');
     if (mark === 'jsx' || mark === 'tsx') parts.push('The markup is written inside the components, not in a separate template.');
@@ -303,6 +341,15 @@ const KNOWN = Object.freeze({
     '@fastify/cors': { kind: 'runtime', docs: 'https://github.com/fastify/fastify-cors' },
     express: { kind: 'runtime', docs: 'https://expressjs.com/' },
     hono: { kind: 'runtime', docs: 'https://hono.dev/docs/' },
+    '@fest-lib/core': { kind: 'runtime', docs: 'https://github.com/fest-live/core.ts' },
+    '@fest-lib/dom': { kind: 'runtime', docs: 'https://github.com/fest-live/dom.ts' },
+    '@fest-lib/object': { kind: 'runtime', docs: 'https://github.com/fest-live/object.ts' },
+    '@fest-lib/uniform': { kind: 'runtime', docs: 'https://github.com/fest-live/uniform.ts' },
+    '@fest-lib/style-lib': { kind: 'runtime', docs: 'https://github.com/fest-live/style.ts' },
+    '@fest-lib/lure': { kind: 'runtime', docs: 'https://github.com/fest-live/lur.e' },
+    '@fest-lib/ssre': { kind: 'runtime', docs: 'https://github.com/fest-live/ssr.e' },
+    '@fest-lib/icon': { kind: 'icons', docs: 'https://github.com/fest-live/icon.ts' },
+    '@fest-lib/image': { kind: 'runtime', docs: 'https://github.com/fest-live/image.ts' },
 });
 
 /** The packs of the stylesheets, matched by the words of the task. */
@@ -325,6 +372,13 @@ const SERVERS = Object.freeze([
     { test: /\bfastify\b/i, name: 'fastify' },
     { test: /\bexpress\b/i, name: 'express' },
     { test: /\bhono\b/i, name: 'hono' },
+]);
+
+/** The fest-live stack, matched by the words of the task: lure on the client, ssre on the server. */
+const FEST_PACKS = Object.freeze([
+    { test: /\blure\b/i, name: '@fest-lib/lure' },
+    { test: /\bssre\b/i, name: '@fest-lib/ssre' },
+    { test: /\bfest[-\s]?lib\b|\bfest\.live\b/i, name: '@fest-lib/lure' },
 ]);
 
 /**
@@ -370,6 +424,9 @@ export function recommendStack({ kind, prompt = '', references = {} } = {}) {
     }
     const icon = ICON_PACKS.find((pack) => pack.test.test(hay));
     if (icon) add(icon.name, 'Matched the icon set of the design.', true);
+    for (const pack of FEST_PACKS) {
+        if (pack.test.test(hay)) add(pack.name, 'Named the fest-live stack.', true);
+    }
 
     if (kind === 'backend') {
         const server = SERVERS.find((pack) => pack.test.test(hay));
@@ -398,15 +455,22 @@ export function kindRules(kind, recommendations = { libraries: [] }, options = {
     const web = kind === 'landing' || kind === 'site' || kind === 'app';
 
     const lines = [];
-    if (kind === 'backend') {
+    if (kind === 'backend' || fw === 'ssre') {
         lines.push('Node.js 26, ESM. Bind 127.0.0.1. The port comes from PORT or 3000.');
-        lines.push(included.has('fastify') ? 'Use fastify and the packages marked include.' : 'Use node:http. Do not add a server library unless the recommendation includes one.');
+        if (fw === 'ssre') {
+            lines.push('The pages are rendered by @fest-lib/ssre: a hub of refs, renderPage or the Fastify plugin ssrePlugin, the live updates over the channel (SSE by default). Read the fest-lib skill before the first page.');
+            lines.push('The markup is written with the factories E/H/M as TypeScript modules; there is no index.html and no vite build.');
+        } else {
+            lines.push(included.has('fastify') ? 'Use fastify and the packages marked include.' : 'Use node:http. Do not add a server library unless the recommendation includes one.');
+        }
     } else if (web) {
         if (fw === 'react') lines.push('Vite, React JSX/TSX, ESM, Node.js 26.');
         else if (fw === 'vue') lines.push('Vite, Vue single-file components, ESM, Node.js 26.');
         else if (fw === 'svelte') lines.push('Vite, Svelte components, ESM, Node.js 26.');
         else if (fw === 'next') lines.push('Next.js, the App Router, TypeScript, Node.js 26.');
         else if (fw === 'astro') lines.push('Astro, the pages under src/pages, TypeScript, Node.js 26.');
+        else if (fw === 'lure') lines.push('Vite, @fest-lib/lure (the factories E/H/M/Q/T/C, the refs of @fest-lib/object), TypeScript, ESM, Node.js 26. The styles are plain CSS or @fest-lib/style-lib; read the fest-lib skill before the first component.');
+        else if (fw === 'ssre') lines.push('Node.js 26, @fest-lib/ssre over Fastify, TypeScript, ESM. The pages are rendered on the server over a hub of refs; read the fest-lib skill before the first page.');
         else lines.push('Vite, SCSS, ESM, Node.js 26.');
         lines.push(kind === 'app' ? 'server.js serves dist/ after vite build.' : 'No Node server.');
         lines.push('vite.config.js is already written with the build targets of the platform profile. Do not plan a step to create it.');
@@ -517,6 +581,18 @@ export function preparedScaffoldFiles({
         files['vite.config.js'] = lines.join('\n');
         files['.rules/stack.md'] = `# Stack\n\n${stackText(kind, platform, recommendations.libraries ?? [], { framework, scriptLanguage, styleLanguage, markupLanguage: markup })}\n`;
         files['.rules/files.md'] = '# Files\n\nRead the existing files before you change them. A scaffold writes only the missing paths.\n';
+    }
+    if (framework === 'ssre') {
+        // The server renders the HTML: no vite config and no static page. The entry is the
+        // server itself, and the run learns the wiring from the stack rules.
+        delete files['vite.config.js'];
+        delete files['index.html'];
+        if (files['package.json']) {
+            const manifest = JSON.parse(files['package.json']);
+            delete manifest.devDependencies?.vite;
+            delete manifest.dependencies?.vite;
+            files['package.json'] = `${JSON.stringify(manifest, null, 2)}\n`;
+        }
     }
 
     return files;

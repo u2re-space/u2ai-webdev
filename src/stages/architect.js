@@ -46,6 +46,11 @@ function allowed(value, allowedValues, fallback, where, warnings) {
     const text = String(value ?? '').trim().toLowerCase();
     if (!text) return fallback;
     if (allowedValues.includes(text)) return text;
+    // The scanner and the model may name a framework by its package (`@fest-lib/lure`)
+    // or by its repository (`lur.e`); the alias is resolved before the fallback.
+    const aliases = { 'lur.e': 'lure', 'lure.e': 'lure', '@fest-lib/lure': 'lure', 'fest-lib/lure': 'lure', 'lure.js': 'lure',
+        'ssr.e': 'ssre', 'ssre.e': 'ssre', '@fest-lib/ssre': 'ssre', 'fest-lib/ssre': 'ssre', '@fest-lib/ssr.e': 'ssre' };
+    if (aliases[text]) return aliases[text];
     warnings.push(`${where}: "${text}" не входит в список (${allowedValues.join(', ')}), взято "${fallback}".`);
     return fallback;
 }

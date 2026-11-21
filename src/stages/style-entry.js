@@ -50,7 +50,7 @@ export const WIRINGS = Object.freeze({
 });
 
 /** Фреймворки, которые приносят стили сборщиком. */
-const BUNDLED_FRAMEWORKS = Object.freeze(['vite', 'react', 'vue', 'svelte', 'next', 'astro']);
+const BUNDLED_FRAMEWORKS = Object.freeze(['vite', 'react', 'vue', 'svelte', 'next', 'astro', 'lure']);
 
 /** Расширение каждого языка. */
 const EXTENSION_OF = Object.freeze({
@@ -255,6 +255,7 @@ export async function styleWiring({ root = null, config = null, architecture = n
         // Манифест есть и сборщика в нём нет: страница грузит скомпилированный css.
         if (await hasManifest(root)) return WIRINGS.LINKED;
     }
+    if (framework === 'ssre') return WIRINGS.LINKED;
     return BUNDLED_FRAMEWORKS.includes(framework) ? WIRINGS.BUNDLED : WIRINGS.LINKED;
 }
 

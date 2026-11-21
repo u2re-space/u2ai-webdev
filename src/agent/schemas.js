@@ -133,7 +133,7 @@ export const SCHEMAS = Object.freeze({
     architecture: strictObject({
         summary: str('The shape of the project, in two or three sentences.'),
         stack: strictObject({
-            framework: str('The framework: vanilla, react, vue, svelte, next, astro, vite.'),
+            framework: str('The framework: vanilla, react, vue, svelte, next, astro, vite, lure, ssre.'),
             markup: str('The markup language: html, jsx, tsx, vue, svelte.'),
             style: str('The style language: css, scss, less.'),
             script: str('The script language: javascript, typescript.'),

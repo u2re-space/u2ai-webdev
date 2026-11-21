@@ -72,6 +72,10 @@ ${INPUTS_IN_CONTEXT}
   that starts from nothing.
 - The stack is what the project uses now, not what it should use: read the manifest, the
   config of the bundler and the imports of the entry points.
+- The dependencies of the manifest name the stack too: @fest-lib/lure (with its peers
+  @fest-lib/core, @fest-lib/dom, @fest-lib/object, @fest-lib/uniform,
+  @fest-lib/style-lib) is the framework "lure"; @fest-lib/ssre (over Fastify) is the
+  framework "ssre". Name the framework by these short names in the survey.
 - The conventions are the rules of the project: what the AGENTS.md, the .rules and the
   existing code say about the naming, the structure and the style. Name where each rule
   comes from.
