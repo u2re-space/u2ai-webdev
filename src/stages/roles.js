@@ -112,6 +112,16 @@ export function stageForRole(role) {
 }
 
 /**
+ * Слова, что называют движение.
+ *
+ * Шаг, который говорит о движении, — это работа роли `animator`, даже когда его файлы
+ * лежат рядом со стилями: и переход, и появление, и reduced motion пишутся в ту же
+ * таблицу стилей. Без этого шаг движения попадал в стадию стилей и делил её бюджет.
+ * @type {RegExp}
+ */
+const MOTION_WORDS = /\b(motion|animation|animate|transition|transitions|keyframe|keyframes|reduced-motion)\b/i;
+
+/**
  * Роль шага, угаданная по его файлам.
  *
  * Угадывает та роль, которой принадлежит первый файл шага: разметка — разметке, стили —
@@ -147,11 +157,12 @@ export function roleForFiles(files = []) {
  *
  * @param {string} role роль, которую назвал планировщик
  * @param {string[]} files файлы шага
+ * @param {object} [step] сам шаг: его имя и название говорят о движении
  * @returns {{ role: string|null, dropped: boolean, warning: string|null }}
  * @exports
  * @ai.hint pure
  */
-export function planRole(role = '', files = []) {
+export function planRole(role = '', files = [], step = {}) {
     const named = String(role ?? '').trim().toLowerCase();
     const list = (Array.isArray(files) ? files : [])
         .map((item) => String(item ?? '').trim().replace(/\\/g, '/'))
@@ -165,6 +176,18 @@ export function planRole(role = '', files = []) {
             dropped: true,
             warning: `шаг состоит только из файлов окружения (${environment.join(', ')}) — их готовит `
                 + 'стадия setup, шаг убран из плана.',
+        };
+    }
+
+    // Шаг, который говорит о движении, — работа роли `animator`, даже когда он назван
+    // `styler` и лежит в той же таблице стилей: у движения своя стадия и свой бюджет.
+    const title = `${step?.id ?? ''} ${step?.title ?? ''}`;
+    if (MOTION_WORDS.test(title)) {
+        return {
+            role: 'animator',
+            dropped: false,
+            warning: `Шаг о движении (${step?.title ?? step?.id ?? ''}) отдан роли "animator" — `
+                + 'у движения своя стадия.',
         };
     }
 
@@ -208,12 +231,15 @@ export function foreignFiles(role = '', files = []) {
         .map((item) => String(item ?? '').trim().replace(/\\/g, '/'))
         .filter(Boolean);
     if (!who || !list.length) return [];
+    // Роль `animator` пишет в ту же таблицу стилей, что и `styler`: движение живёт в
+    // стилях, и файл стилей не чужой файлу движения.
+    const styler = who === 'animator' ? 'styler' : who;
     const out = [];
     for (const rel of list) {
         const owner = roleForFiles([rel]);
         // Файл без вида (папка, файл неизвестного вида) остаётся за шагом: его роль не
         // знает, и отдать его некому.
-        if (!owner || owner === who) continue;
+        if (!owner || owner === who || owner === styler) continue;
         out.push(rel);
     }
     return out;

@@ -22,7 +22,7 @@ import { collectInputs } from '../src/inputs/index.js';
 import { normalizeArchitecture, architectureText, architectStage } from '../src/stages/architect.js';
 import { detectPackageManager, applySetup, setupReadiness, setupStage, installDependencies, ensureStyleCompiler } from '../src/stages/setup.js';
 import { runId, runDirectory, sanitizeId } from '../src/stages/workspace.js';
-import { LIVE_ROLES, stageForRole } from '../src/stages/roles.js';
+import { LIVE_ROLES, stageForRole, foreignFiles } from '../src/stages/roles.js';
 import { role as markupRole } from '../src/stages/markup.js';
 import { role as codingRole } from '../src/stages/coding.js';
 import { role as stylingRole } from '../src/stages/styling.js';
@@ -194,6 +194,30 @@ test('a step that named only foreign files is given to the role that owns them',
     assert.equal(plan.steps[0].role, 'markup');
     assert.deepEqual(plan.steps[0].files, ['index.html']);
     assert.ok(plan.warnings.some((item) => /принадлежат роли "markup"/.test(item)), plan.warnings.join(' | '));
+});
+
+test('a step that names the motion belongs to the animator', () => {
+    // Шаг о движении лежит в той же таблице стилей, но это работа роли `animator`:
+    // у движения своя стадия и свой бюджет.
+    const plan = normalizePlan({
+        summary: 'A landing.',
+        steps: [
+            { id: 'style-1', title: 'Styles', role: 'styler', files: ['src/styles.scss'] },
+            { id: 'motion', title: 'Add limited transitions and the reduced motion', role: 'styler', files: ['src/_motion.scss'] },
+        ],
+    });
+
+    const motion = plan.steps.find((step) => step.id === 'motion');
+    assert.equal(motion.role, 'animator');
+    assert.deepEqual(motion.files, ['src/_motion.scss']);
+    assert.ok(plan.warnings.some((item) => /отдан роли "animator"/.test(item)), plan.warnings.join(' | '));
+});
+
+test('the styles of the project are not foreign files for the animator', () => {
+    // Движение пишется в ту же таблицу стилей, что и раскладка: файл стилей не чужой.
+    assert.deepEqual(foreignFiles('animator', ['src/styles.scss', 'src/_motion.scss']), []);
+    // А разметка — чужая.
+    assert.deepEqual(foreignFiles('animator', ['index.html']), ['index.html']);
 });
 
 test('a step of the environment leaves the plan, whoever the role is', () => {    const plan = normalizePlan({

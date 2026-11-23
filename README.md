@@ -2155,11 +2155,19 @@ directory or a file that is not there.
   the name of the stage: a run that hangs says so instead of waiting for ever. A stage that needs
   more time asks for it: `stages.<id>.timeoutMs` wins over the budget of the run. The vector
   graphics ask for half an hour: a drawing is a long turn.
+- A stage with many steps gets a budget for all of them: the budget of a stage is multiplied
+  by the number of its steps (up to three). The styles of a whole landing are three steps, and
+  fifteen minutes for all three is not enough — the last step of a stage never starts, and the
+  run stands still.
 - A stage that fails does not always stop the run. The stages of the page itself — the markup,
   the styles, the code, the build — stop it: the rest of the chain would work against a page
   that does not exist. The decorations — the crops of the reference, the vector graphics, the
   assets, the motion, the icons, the look at the page — do not: the files that landed on the
   disk stay, the run goes on, and the review says what is missing. The run ends as `partial`.
+- The motion of the page is the work of the role `animator`, not of the `styler`: a step that
+  names the transition, the entrance or the reduced motion belongs to the `animator`, and it
+  goes to the stage `animation` with its own budget. The styler writes the layout, the tokens
+  and the states; the animator changes the same stylesheet — but it is a separate job.
 - The vector graphics are drawn one graphic per step: a step with three drawings is a turn
   longer than the budget of the stage, and the budget kills the stage after the pictures are
   already on the disk.

@@ -821,6 +821,47 @@ test('a stage of the page itself still stops the run', async () => {
     assert.equal(result.stages.length, 1);
 });
 
+test('a stage with many steps gets a budget for all of them', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-budget-steps-'));
+    // Три шага стиліста делят бюджет стадии: пятнадцати минут на все три не хватает.
+    const plan = {
+        steps: [
+            { id: 'style-1', title: 'Styles', role: 'styler', dependsOn: [], files: ['src/styles.scss'] },
+            { id: 'style-2', title: 'Rooms', role: 'styler', dependsOn: ['style-1'], files: ['src/rooms.scss'] },
+            { id: 'style-3', title: 'Devices', role: 'styler', dependsOn: ['style-2'], files: ['src/devices.scss'] },
+        ],
+    };
+    const stages = [
+        {
+            name: 'styling',
+            title: 'Styles',
+            dependsOn: [],
+            run: async ({ signal }) => await new Promise((resolve, reject) => {
+                const timer = setTimeout(resolve, 30_000);
+                signal?.addEventListener('abort', () => {
+                    clearTimeout(timer);
+                    reject(new Error('работа стадии отменена'));
+                }, { once: true });
+            }),
+        },
+    ];
+
+    const started = Date.now();
+    const result = await runPipeline({
+        client: { responses: { create: async () => ({ output: [] }) } },
+        config: { ...CONFIG, limits: { ...CONFIG.limits, stageTimeoutMs: 120 } },
+        root,
+        task: 'Make a landing.',
+        runId: 'run-1',
+        stages,
+        plan,
+    });
+
+    // Три шага — тройной бюджет: 120 мс на шаг, 360 мс на стадию.
+    assert.ok(Date.now() - started >= 300, `стадия умерла раньше: ${Date.now() - started} мс`);
+    assert.match(result.error, /не закончилась/);
+});
+
 test('a stage may ask for a budget of its own', async () => {    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-timeout-own-'));
     const stages = [
         {

@@ -77,6 +77,13 @@ ${INPUTS_IN_CONTEXT}
 - One graphic is one step of the \`editor\`: the model draws one picture at a time, and a step
   with three drawings is a turn longer than the budget of the stage. Three graphics are three
   steps.
+- The motion of the page is the work of the \`animator\`, not of the \`styler\`: a step that
+  names the transition, the entrance or the reduced motion belongs to the \`animator\`. The
+  \`styler\` writes the layout, the tokens and the states of the page — the movement is a
+  separate job, and it has its own stage.
+- The steps of one role share the budget of their stage: five steps of one styler are five
+  turns inside fifteen minutes, and every step has to be smaller than that. Split the work: a
+  step that writes half of the project is two steps.
 - The role of a step is one of: ${LIVE_ROLE_NAMES.map((name) => `\`${name}\``).join(', ')}. The
   stages of the run take the steps of these roles and of no others, so a step with any other
   role is never done. \`markup\` writes the markup, \`coder\` writes the scripts and the modules,

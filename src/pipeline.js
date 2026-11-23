@@ -212,7 +212,7 @@ export async function runStage(stage, args, timeoutMs = 0, controller = null) {
  *   stageNames?: string[]|null, requested?: string[]|null, stopAfter?: string|null,
  *   signal?: AbortSignal|null,
  *   notify?: (event: object) => void, env?: object, inputs?: object|null, resume?: boolean,
- *   stages?: object[]|null, input?: object|null }} request
+ *   stages?: object[]|null, input?: object|null, plan?: object|null }} request
  * @returns {Promise<{ status: string, runId: string, stages: object[], progress: object,
  *   file: string|null, warnings: string[], error: string|null }>}
  * @exports
@@ -234,6 +234,7 @@ export async function runPipeline({
     resume = false,
     stages: override = null,
     input = null,
+    plan = null,
 } = {}) {
     const run = id || makeRunId();
     const selected = override
@@ -295,7 +296,7 @@ export async function runPipeline({
         memory: null,
         memoryText: '',
         apply: filesAllowed(config),
-        plan: null,
+        plan: plan ?? null,
         scan: null,
         architecture: null,
         setup: null,
@@ -428,16 +429,45 @@ export async function runPipeline({
     ]);
 
     /**
-     * The budget of one stage. A stage may ask for a budget of its own: the review with a
-     * repair reads every step, repairs what it finds and reads the repaired steps again,
-     * and that takes longer than the stages that write the files.
-     * @param {string} name
+     * Сколько шагов плана делает одна стадия.
+     *
+     * Стадия берёт шаги своей роли: `markup` — шаги `markup`, `styling` — шаги `styler`.
+     * Стадия без шагов своей роли (обрезки, ассеты, сборка) делает один шаг работы.
+     * @param {string} name имя стадии
+     * @param {object|null} plan план прогона
      * @returns {number}
      * @ai.hint pure
      */
-    const budgetOf = (name) => {
+    const stepsOfStage = (name, plan = null) => {
+        const role = roleByStage[name];
+        if (!role) return 1;
+        const steps = Array.isArray(plan?.steps) ? plan.steps : [];
+        const mine = steps.filter((step) => String(step?.role ?? '').trim().toLowerCase() === role);
+        return Math.max(1, mine.length);
+    };
+
+    /**
+     * The budget of one stage. A stage may ask for a budget of its own: the review with a
+     * repair reads every step, repairs what it finds and reads the repaired steps again,
+     * and that takes longer than the stages that write the files.
+     *
+     * A stage with many steps of one role needs a budget for all of them: the styles of a
+     * whole landing are three шага, и пятнадцати минут на все три не хватает. Бюджет
+     * стадии умножается на число её шагов — иначе последний шаг стадии никогда не
+     * начинается, а прогон стоит.
+     * @param {string} name
+     * @param {object|null} [plan] the plan of the run
+     * @returns {number}
+     * @ai.hint pure
+     */
+    const budgetOf = (name, plan = null) => {
         const own = config?.stages?.[name]?.timeoutMs;
-        return Number.isSafeInteger(own) && own > 0 ? own : stageTimeoutMs;
+        const base = Number.isSafeInteger(own) && own > 0 ? own : stageTimeoutMs;
+        if (base <= 0) return base;
+        const steps = stepsOfStage(name, plan);
+        // Три шага — тройной бюджет, но не больше: стадия с двадцатью шагами не должна
+        // съесть весь прогон.
+        return base * Math.min(steps, 3);
     };
 
     // Очередь стадий. План может изменить порядок стадий, которые делают его шаги, а план
@@ -448,6 +478,8 @@ export async function runPipeline({
     const pendingSkips = new Set();
     const roleStages = { ...LIVE_ROLES };
     const stageByRole = Object.fromEntries(Object.entries(roleStages).map(([role, stage]) => [stage, role]));
+    // Стадия — и роль, чьи шаги она делает: по ней считается бюджет стадии.
+    const roleByStage = { ...stageByRole };
     const drainNamedSkips = () => {
         for (const item of input?.takePendingSkips?.({ namedOnly: true }) ?? []) {
             const name = String(item?.target ?? '').toLowerCase();
@@ -564,7 +596,7 @@ export async function runPipeline({
         const onAbort = () => controller.abort();
         if (signal?.aborted) controller.abort();
         else signal?.addEventListener('abort', onAbort, { once: true });
-        const budget = budgetOf(stage.name);
+        const budget = budgetOf(stage.name, ctx.plan);
         ctx.signal = controller.signal;
         ctx.deadline = budget > 0 ? Date.now() + budget : null;
         let result = null;

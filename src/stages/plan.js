@@ -138,7 +138,7 @@ export function normalizePlan(plan = {}) {
         // The role of the step decides who does it. A role that no stage takes is a promise
         // the run cannot keep: the step is either given to the role that owns its files or
         // it leaves the plan.
-        const resolved = planRole(item.role, item.files);
+        const resolved = planRole(item.role, item.files, item);
         if (resolved.warning) warnings.push(`Шаг ${id}: ${resolved.warning}`);
         if (resolved.dropped) continue;
         // Чужой файл — не работа этого шага: разметка принадлежит разметке, и шаг
