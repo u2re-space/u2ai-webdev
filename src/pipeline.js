@@ -32,6 +32,7 @@
 import { runId as makeRunId } from './stages/workspace.js';
 import { enabledStages } from './stages/index.js';
 import { planOrder } from './stages/plan-order.js';
+import { LIVE_ROLES } from './stages/roles.js';
 import { readPlan } from './stages/plan.js';
 import { readScan } from './stages/scan.js';
 import { readArchitecture } from './stages/architect.js';
@@ -41,6 +42,7 @@ import { readStepReports } from './stages/step.js';
 import { readInputs } from './stages/collect.js';
 import { collectInputs, mergeInputs } from './inputs/index.js';
 import { readPictures } from './stages/pictures.js';
+import { readAssets } from './stages/assets.js';
 import { publishRun } from './stages/publish.js';
 import { createProgress, recordStep, readProgress, writeProgress } from './agent/work-plan.js';
 import { openMemory, memoryContext, memoryFile } from './memory.js';
@@ -299,6 +301,7 @@ export async function runPipeline({
         setup: null,
         build: null,
         pictures: [],
+        assets: [],
         shots: [],
         pageLogs: [],
         reports: [],
@@ -366,6 +369,12 @@ export async function runPipeline({
         if (ctx.pictures.length && ctx.inputs) {
             ctx.inputs = { ...ctx.inputs, pictures: ctx.pictures };
         }
+        // The placed assets too: the stage of the assets is skipped in a continued run, and
+        // the markup after it links the final paths of the pictures.
+        ctx.assets = await readAssets(root, config, run);
+        if (ctx.assets.length && ctx.inputs) {
+            ctx.inputs = { ...ctx.inputs, assets: ctx.assets };
+        }
         // The flags of this run may name what the earlier run did not know: the essence of
         // the task (`--input`) and the picture of the task (`--image`). The inputs are
         // collected again — the collection is deterministic — and the new parts are merged
@@ -417,7 +426,7 @@ export async function runPipeline({
     let position = 0;
     let ordered = false;
     const pendingSkips = new Set();
-    const roleStages = { markup: 'markup', coder: 'coding', styler: 'styling', editor: 'vector', iconifier: 'iconify' };
+    const roleStages = { ...LIVE_ROLES };
     const stageByRole = Object.fromEntries(Object.entries(roleStages).map(([role, stage]) => [stage, role]));
     const drainNamedSkips = () => {
         for (const item of input?.takePendingSkips?.({ namedOnly: true }) ?? []) {

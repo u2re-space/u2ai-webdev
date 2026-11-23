@@ -25,8 +25,8 @@ export const ENUMS = Object.freeze({
   /** Pipeline stages in execution order. */
   stages: Object.freeze([
     'collect', 'scan', 'plan', 'architect', 'pictures', 'setup',
-    'markup', 'styling', 'coding', 'build', 'sight',
-    'vector', 'iconify',
+    'vector', 'assets', 'markup', 'styling', 'animation', 'coding',
+    'iconify', 'build', 'sight',
     'review', 'audit', 'learn',
   ]),
   /** The scopes of the records of the memory. */
@@ -62,7 +62,8 @@ export const ENUMS = Object.freeze({
 /** The roles that always exist; user roles are validated against the schema only. */
 export const BUILTIN_ROLE_NAMES = Object.freeze([
   'scanner', 'planner', 'architect', 'director', 'coder', 'markup', 'styler',
-  'iconifier', 'installer', 'editor', 'reviewer', 'auditor', 'learner',
+  'animator', 'illustrator', 'iconifier', 'installer', 'editor', 'reviewer',
+  'auditor', 'learner',
 ]);
 
 /** Alias spellings accepted in backend `supports` maps. */

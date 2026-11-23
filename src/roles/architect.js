@@ -23,7 +23,7 @@ export const schema = 'architecture';
 /** The tools the role may call. */
 export const tools = [
     'list_files', 'read_file', 'search_files',
-    'read_skill', 'web_guidance',
+    'read_skill', 'web_guidance', 'call_ai_memory',
 ];
 
 /** How many turns the role may spend. */

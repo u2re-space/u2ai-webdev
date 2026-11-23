@@ -27,6 +27,7 @@ export const schema = 'markup';
 /** The tools the role may call. */
 export const tools = [
     'list_files', 'read_file', 'write_file', 'replace_text', 'search_files', 'read_skill', 'web_guidance',
+    'call_ai_memory',
     'delegate_role',
     ...economyTools(),
 ];

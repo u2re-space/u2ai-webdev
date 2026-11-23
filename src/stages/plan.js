@@ -50,9 +50,9 @@ export const PLAN_CORRECTION = [
     'Then submit the plan with the tool `plan`: at least two concrete steps, each with an id,',
     'a title, the role that does it, the files it touches and the criteria that can be checked',
     'without a human.',
-    'The role of a step is one of: `markup`, `coder`, `styler`, `editor`, `iconifier`. The stages',
-    'of the run take the steps of these roles and of no others: a step with any other role is',
-    'never done.',
+    'The role of a step is one of: `markup`, `coder`, `styler`, `animator`, `editor`,',
+    '`illustrator`, `iconifier`. The stages of the run take the steps of these roles and of no',
+    'others: a step with any other role is never done.',
     'Do not answer in prose and do not describe what you are going to do later — the steps are',
     'the work.',
 ].join('\n');

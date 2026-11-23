@@ -15,8 +15,9 @@ import { createInputState } from './input-state.js';
 const STAGE_TITLES = Object.freeze({
     collect: 'Collect context', scan: 'Scan', plan: 'Plan', pictures: 'Prepare pictures',
     architect: 'Architecture',
-    setup: 'Setup', markup: 'Markup', coding: 'Code', styling: 'Styles', build: 'Build',
-    sight: 'Visual check', vector: 'Vector', iconify: 'Icons', review: 'Review', audit: 'Audit', learn: 'Learn',
+    setup: 'Setup', vector: 'Vector', assets: 'Assets', markup: 'Markup', styling: 'Styles',
+    animation: 'Animation', coding: 'Code', build: 'Build',
+    sight: 'Visual check', iconify: 'Icons', review: 'Review', audit: 'Audit', learn: 'Learn',
 });
 
 /**

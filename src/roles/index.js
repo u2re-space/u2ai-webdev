@@ -45,7 +45,9 @@ import { effortFor } from '../agent/pace.js';
 import { getModelProfile, maxOutputFor, snapEffort } from '../model/profiles.js';
 import { familyOf, rankPath, resolveModelRef } from '../model/refs.js';
 import { houseModelRef } from '../model/trust.js';
+import { stageForRole } from '../stages/roles.js';
 import { pageFrameContractFor } from './page-frame.js';
+import { memoryNote } from './memory-note.js';
 import { PHASES, chunkText, chunksFor } from './chunks.js';
 
 import * as untrusted from './untrusted.js';
@@ -56,6 +58,8 @@ import * as director from './director.js';
 import * as coder from './coder.js';
 import * as markup from './markup.js';
 import * as styler from './styler.js';
+import * as animator from './animator.js';
+import * as illustrator from './illustrator.js';
 import * as iconifier from './iconifier.js';
 import * as installer from './installer.js';
 import * as editor from './editor.js';
@@ -75,6 +79,8 @@ export const ROLES = Object.freeze({
     coder,
     markup,
     styler,
+    animator,
+    illustrator,
     iconifier,
     installer,
     editor,
@@ -459,6 +465,9 @@ export async function buildInstructions({ role, config = {}, context = {}, root 
     const list = buildSkillInstructions(skills);
     if (list) blocks.push(list);
 
+    // The memory of the project: the roles that have the tool ask it before they decide.
+    if (definition.tools.includes('call_ai_memory')) blocks.push(memoryNote());
+
     // The brief of the context of the run: what this run already knows.
     const brief = typeof runContext?.brief === 'function' ? runContext.brief() : '';
     if (brief) blocks.push(brief);
@@ -539,7 +548,8 @@ export async function pictureParts(root, text) {
  * @param {{ client: object, config?: object, role: string, input?: string, parts?: object[],
  *   context?: object, root?: string, env?: object, toolset?: object, maxTurns?: number,
  *   signal?: AbortSignal|null, notify?: (event: object) => void, runContext?: object|null,
- *   stage?: string|null, schemaChannel?: string|null, depth?: number, inputChannel?: object|null }} request
+ *   stage?: string|null, schemaChannel?: string|null, depth?: number, inputChannel?: object|null,
+ *   phase?: 'work'|'polish' }} request
  * @returns {Promise<{ role: string, text: string, data: object|null, toolCalls: object[],
  *   turns: number, usage: object|null, model: string|null, stopped: string }>}
  * @exports
@@ -564,18 +574,22 @@ export async function runRole({
     schemaChannel: forcedChannel = null,
     depth = 0,
     inputChannel = null,
+    phase: initialPhase = 'work',
 }) {
     if (!client?.responses) throw new Error('Клиент API не передан.');
     inputChannel ??= runContext?.input ?? null;
     const key = String(role ?? '').trim().toLowerCase();
     const roleStage = stage ?? key;
-    const definition = resolveRole(key, config, { stage: roleStage });
+    const definition = resolveRole(key, config, { stage: roleStage, phase: initialPhase });
     if (!definition) throw new Error(`Неизвестная роль: ${role}`);
     // The model of the turn. The role works on the head of its ladder — the model of the
     // house for this kind of work — and polishes what is already on the disk with the tail
     // of the ladder. The phase is recomputed for every turn: a role that has to write again
     // goes back to the head, so the model of the house is never lost for good.
-    let phase = 'work';
+    //
+    // The call may start in the polish: the fix of what is already on the disk is the work
+    // of the tail of the ladder — the junior model of the family.
+    let phase = initialPhase === 'polish' ? 'polish' : 'work';
     let currentModel = definition.model;
     let currentEffort = definition.effort;
     const modelFor = (want) => {
@@ -878,7 +892,7 @@ export async function runRole({
         const { parsed, work, schemaUsed, prematureSchemaAnswer } = await ask();
         deferredSteering = inputChannel?.takeSteering?.() ?? [];
         const skip = inputChannel?.takeSkip?.({
-            stage: roleStage === 'coder' ? 'coding' : roleStage === 'styler' ? 'styling' : roleStage === 'editor' ? 'vector' : roleStage,
+            stage: stageForRole(roleStage) ?? roleStage,
             step: context?.step?.id ?? '',
         }) ?? inputChannel?.takeCurrentSkip?.();
         if (skip) {

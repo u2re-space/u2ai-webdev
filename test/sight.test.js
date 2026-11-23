@@ -163,11 +163,10 @@ test('the stage of the sight tells the operator the model that works', async () 
         await sightStage({ client, config, root, task: 'A page.', input });
 
         const models = seen.map((item) => item.model).filter(Boolean);
-        // The styler of the house works on the head of its ladder, and the panel says so.
-        assert.equal(models[0], 'openai/gpt-6.2-sol', `the panel says ${models.join(', ')}`);
-        // The work of the stage is one answer of the schema: there is no polish of the
-        // files on the disk, so the panel does not step down to the tail.
-        assert.ok(!models.includes('openai/gpt-6.1-terra'), `the panel says ${models.join(', ')}`);
+        // Стили уже написаны: починка стилей — это полировка, а полировка идёт на
+        // хвосте лестницы, младшей моделью семейства.
+        assert.equal(models[0], 'openai/gpt-6.1-terra', `the panel says ${models.join(', ')}`);
+        assert.ok(models.includes('openai/gpt-6.1-terra'), `the panel says ${models.join(', ')}`);
     } finally {
         await import('node:fs/promises').then((fs) => fs.rm(root, { recursive: true, force: true }));
     }

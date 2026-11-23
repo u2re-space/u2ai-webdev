@@ -26,7 +26,9 @@ import { LIVE_ROLES, stageForRole } from '../src/stages/roles.js';
 import { role as markupRole } from '../src/stages/markup.js';
 import { role as codingRole } from '../src/stages/coding.js';
 import { role as stylingRole } from '../src/stages/styling.js';
+import { role as animationRole } from '../src/stages/animation.js';
 import { role as vectorRole } from '../src/stages/vector.js';
+import { role as assetsRole } from '../src/stages/assets.js';
 import { role as iconifyRole } from '../src/stages/iconify.js';
 import { openRegistry } from '../src/registry.js';
 import { ROLES } from '../src/roles/index.js';
@@ -36,7 +38,9 @@ const modules = {
     markup: { role: markupRole },
     coding: { role: codingRole },
     styling: { role: stylingRole },
+    animation: { role: animationRole },
     vector: { role: vectorRole },
+    assets: { role: assetsRole },
     iconify: { role: iconifyRole },
 };
 

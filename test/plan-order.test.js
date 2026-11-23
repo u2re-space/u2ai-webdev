@@ -10,7 +10,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { STAGES } from '../src/stages/index.js';
-import { PLAN_STAGES, planEdges, planOrder, placeIconifyStage, placeVectorStage } from '../src/stages/plan-order.js';
+import {
+    PLAN_STAGES,
+    planEdges,
+    planOrder,
+    placeIconifyStage,
+    placeVectorStage,
+    placeAnimationAfterStyles,
+    placeAssetsAfterVector,
+} from '../src/stages/plan-order.js';
 
 /**
  * The plan of a landing where the graphics come before the page: the page links the files
@@ -189,4 +197,55 @@ test('the vector stage of a continued run comes before the build', () => {
     assert.equal(placed.reason, 'build');
     assert.ok(placed.names.indexOf('vector') < placed.names.indexOf('build'));
     assert.ok(placed.names.indexOf('coding') < placed.names.indexOf('vector'));
+});
+
+test('the animation stands after the styles, even when the plan says the opposite', () => {
+    // The plan asks for the motion before the styles: the floor of the stage wins.
+    const plan = {
+        steps: [
+            { id: 'style-1', title: 'Styles', role: 'styler', dependsOn: ['motion'], files: ['src/styles/main.scss'] },
+            { id: 'motion', title: 'Motion', role: 'animator', dependsOn: [], files: ['src/styles/main.scss'] },
+        ],
+    };
+    const { stages, warnings } = planOrder([...STAGES], plan);
+    const names = stages.map((stage) => stage.name);
+    assert.ok(names.indexOf('styling') < names.indexOf('animation'), names.join(' → '));
+    assert.ok(warnings.some((item) => /Стадия анимации перенесена после стилиста/.test(item)));
+});
+
+test('the motion floor keeps the animation after the styles', () => {
+    const placed = placeAnimationAfterStyles(['markup', 'animation', 'styling', 'coding']);
+    assert.equal(placed.moved, true);
+    assert.ok(placed.names.indexOf('animation') > placed.names.indexOf('styling'));
+    assert.ok(placed.names.indexOf('animation') < placed.names.indexOf('coding'));
+
+    // The animation after the styles stays where it is.
+    const kept = placeAnimationAfterStyles(['markup', 'styling', 'animation', 'coding']);
+    assert.equal(kept.moved, false);
+    assert.deepEqual(kept.names, ['markup', 'styling', 'animation', 'coding']);
+});
+
+test('the assets are placed after the vector, even when the plan says the opposite', () => {
+    // The plan asks for the assets before the vector: the floor of the stage wins.
+    const plan = {
+        steps: [
+            { id: 'art', title: 'Wordmark', role: 'editor', dependsOn: ['place'], files: ['assets/logo.svg'] },
+            { id: 'place', title: 'Place the pictures', role: 'illustrator', dependsOn: [], files: ['assets/logo.png'] },
+        ],
+    };
+    const { stages, warnings } = planOrder([...STAGES], plan);
+    const names = stages.map((stage) => stage.name);
+    assert.ok(names.indexOf('vector') < names.indexOf('assets'), names.join(' → '));
+    assert.ok(warnings.some((item) => /Стадия ассетов перенесена после вектора/.test(item)));
+});
+
+test('the assets floor keeps the assets after the vector', () => {
+    const placed = placeAssetsAfterVector(['setup', 'assets', 'vector', 'markup']);
+    assert.equal(placed.moved, true);
+    assert.ok(placed.names.indexOf('assets') > placed.names.indexOf('vector'));
+
+    // The assets after the vector stay where they are.
+    const kept = placeAssetsAfterVector(['setup', 'vector', 'assets', 'markup']);
+    assert.equal(kept.moved, false);
+    assert.deepEqual(kept.names, ['setup', 'vector', 'assets', 'markup']);
 });

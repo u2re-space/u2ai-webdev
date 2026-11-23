@@ -33,6 +33,7 @@ import { checkFiles } from '../agent/syntax.js';
 import { checkMarkupStyles, renamedClasses } from '../agent/markup-styles.js';
 import { readReferences } from '../inputs/references.js';
 import { architectureText } from './architect.js';
+import { LIVE_ROLES } from './roles.js';
 import { stylesOf } from './style-entry.js';
 import { projectFiles } from './project-files.js';
 import { applyFiles, filesByTool, LOOKS_AT_DESIGN } from './step.js';
@@ -269,11 +270,7 @@ export function issueOwner(plan, issue = {}) {
  * @type {Readonly<Record<string, string>>}
  */
 const STAGE_OF_ROLE = Object.freeze({
-    coder: 'coding',
-    markup: 'markup',
-    styler: 'styling',
-    editor: 'vector',
-    iconifier: 'iconify',
+    ...LIVE_ROLES,
     installer: 'setup',
 });
 
@@ -405,6 +402,10 @@ export async function repairIssues({
             notify,
             runContext,
             stage: 'repair',
+            // Правка стилей — это полировка того, что стилист уже написал: её делает
+            // хвост лестницы, младшая модель семейства. Правка кода и разметки остаётся
+            // за головой лестницы.
+            phase: group.role === 'styler' ? 'polish' : 'work',
             inputChannel: input,
             // The signal of the repair: the budget of the stage ends it, and the repair
             // reports what it did not manage to fix.

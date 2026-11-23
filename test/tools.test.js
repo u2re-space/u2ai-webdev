@@ -58,6 +58,72 @@ test('read_file attaches an image as a visual input instead of rejecting it as b
     assert.doesNotMatch(result, /Бинарный файл/);
 });
 
+test('the search shows the lines around a hit and drops the excluded files', async () => {
+    const { root, tools } = await workspace();
+    await writeFile(path.join(root, 'src', 'a.js'), 'one\ntwo\ntarget\nfour\nfive\n', 'utf8');
+    await writeFile(path.join(root, 'src', 'b.js'), 'target\n', 'utf8');
+    await writeFile(path.join(root, 'src', 'b.min.js'), 'target\n', 'utf8');
+
+    const around = await tools.execute('search_files', { query: 'target', context: 1 });
+    assert.match(around, /src\/a\.js:3: target/);
+    // The lines around the hit are marked with a dash: they are the context, not the hit.
+    assert.match(around, /src\/a\.js:2- two/);
+    assert.match(around, /src\/a\.js:4- four/);
+
+    const dropped = await tools.execute('search_files', { query: 'target', exclude: ['*.min.js'] });
+    assert.doesNotMatch(dropped, /b\.min\.js/);
+    assert.match(dropped, /b\.js/);
+});
+
+test('the search respects the case when it is asked to', async () => {
+    const { root, tools } = await workspace();
+    await writeFile(path.join(root, 'src', 'a.js'), 'Target\n', 'utf8');
+
+    const loose = await tools.execute('search_files', { query: 'target' });
+    assert.match(loose, /a\.js/);
+    const strict = await tools.execute('search_files', { query: 'target', caseSensitive: true });
+    assert.match(strict, /Совпадений не найдено/);
+});
+
+test('a name of the house that is a tool is answered with a pointer, not a refusal', async () => {
+    const { root, tools } = await workspace();
+    // `ai-image` is a sibling CLI and a tool (`call_ai_image`), not a skill pack.
+    const answer = await tools.execute('read_skill', { name: 'ai-image' });
+    assert.match(answer, /не скилл, а инструмент/);
+    assert.match(answer, /call_ai_image/);
+
+    // The same for the other CLIs of the house.
+    const memory = await tools.execute('read_skill', { name: 'ai-memory' });
+    assert.match(memory, /call_ai_memory/);
+
+    // A name that is neither a pack nor a tool gets the list of the packs.
+    const other = await tools.execute('read_skill', { name: 'demo' });
+    assert.match(other, /Скилл не найден: demo/);
+    assert.match(other, /Установленные пакеты/);
+});
+
+test('the memory of the project is asked through the program', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-memory-'));
+    const config = structuredClone(defaults);
+    // The program of the memory is not on every machine: the tool says so and does not throw.
+    config.memory.program.command = 'ai-memory-not-installed';
+    const tools = createToolset({ root, config });
+
+    const answer = await tools.execute('call_ai_memory', {
+        tool: 'memory_query',
+        args: JSON.stringify({ query: 'the stages', limit: 3 }),
+    });
+    assert.match(answer, /Программа памяти не ответила/);
+
+    // The tool is in the catalogue and it is switched on by default.
+    assert.ok(TOOL_SPECS.call_ai_memory);
+    assert.equal(TOOL_SPECS.call_ai_memory.configKey, 'external_memory');
+    assert.equal(defaults.tools.external_memory, true);
+    // The name of the tool is required: without it there is nothing to call.
+    const empty = await tools.execute('call_ai_memory', { tool: '' });
+    assert.match(empty, /not named/);
+});
+
 test('the tool of ImageMagick runs the program and keeps the paths inside the project', async () => {
     const { root, tools } = await workspace();
     // The program is not installed on every machine: the tool says so and does nothing.

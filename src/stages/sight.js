@@ -300,8 +300,12 @@ export async function sightStage({
                 notify,
                 runContext,
                 stage: 'sight',
-                // The operator sees the model that works: the styler of the house answers on
-                // the head of its ladder, and the panel of the shell has to say so.
+                // The styles are already on the disk: the fix of them is the polish of the
+                // styler, and the polish is the work of the tail of the ladder — младшая
+                // модель семейства правит то, что старшая написала.
+                phase: 'polish',
+                // The operator sees the model that works: the panel of the shell says the
+                // model of the turn, and the turn is the polish of the styles.
                 inputChannel: input,
                 requireFiles: true,
             });

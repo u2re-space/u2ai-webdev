@@ -23,6 +23,7 @@ export const schema = 'plan';
 /** The tools the role may call. */
 export const tools = [
     'list_files', 'read_file', 'search_files', 'read_skill',
+    'call_ai_memory',
 ];
 
 /** How many turns the role may spend. */
@@ -76,8 +77,9 @@ ${INPUTS_IN_CONTEXT}
 - The role of a step is one of: ${LIVE_ROLE_NAMES.map((name) => `\`${name}\``).join(', ')}. The
   stages of the run take the steps of these roles and of no others, so a step with any other
   role is never done. \`markup\` writes the markup, \`coder\` writes the scripts and the modules,
-  \`styler\` writes the styles, \`editor\` draws the vector graphics, \`iconifier\` chooses the
-  icons.
+  \`styler\` writes the styles, \`animator\` writes the motion of the styles, \`editor\` draws the
+  vector graphics, \`illustrator\` puts the pictures of the project on their places,
+  \`iconifier\` chooses the icons.
 - The environment, the structure of the project, preparation of any existing picture crops and
   the review are not steps: the stages of the run handle them by themselves. Name prepared
   pictures only when they exist and the step uses them. A step for \`package.json\`, for the

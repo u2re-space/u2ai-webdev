@@ -203,11 +203,13 @@ export function globMatcher(pattern) {
  * `search_files` uses this when the project map is missing or does not cover the requested path.
  * With `inContent` the query is a grep over the text of the files and the hits are
  * `path:line: text`. Without it the query is matched against the path of the files and the
- * hits are the paths themselves. `glob` limits the files by their name, `regex` turns the
- * query into a regular expression.
+ * hits are the paths themselves. `glob` limits the files by their name, `exclude` drops the
+ * files whose path matches one of its patterns, `context` adds the lines around a hit, and
+ * `caseSensitive` makes the plain text match respect the case.
  * `includeNoisy` allows a direct search inside node_modules, dist, and similar directories.
  * @param {{ root: string, query: string, dir?: string, regex?: boolean, inContent?: boolean,
- *   glob?: string, maxResults?: number, maxFileBytes?: number, includeNoisy?: boolean }} options
+ *   glob?: string, exclude?: string[], context?: number, caseSensitive?: boolean,
+ *   maxResults?: number, maxFileBytes?: number, includeNoisy?: boolean }} options
  * @returns {Promise<{ text: string, count: number, scanned: number, truncated: boolean }>}
  * @exports
  * @ai.hint io
@@ -219,6 +221,9 @@ export async function searchFiles({
     regex = false,
     inContent = true,
     glob = '',
+    exclude = [],
+    context = 0,
+    caseSensitive = false,
     maxResults = 60,
     maxFileBytes = 1024 * 1024,
     includeNoisy = false,
@@ -228,13 +233,26 @@ export async function searchFiles({
     const names = globMatcher(glob);
     // A pattern without a slash names the files, a pattern with a slash names the paths.
     const onName = !String(glob ?? '').trim().includes('/');
+    // The patterns that drop a file: the same rule as the glob, one pattern per element.
+    const dropped = (Array.isArray(exclude) ? exclude : [])
+        .map((item) => String(item ?? '').trim())
+        .filter(Boolean)
+        .map((item) => ({ pattern: globMatcher(item), onName: !item.includes('/') }));
+    const skipFile = (relative, name) => dropped.some((item) => (
+        item.pattern && item.pattern.test(item.onName ? name : relative)
+    ));
     let matcher;
     if (regex) {
-        try { matcher = new RegExp(query, 'i'); } catch (error) { throw new Error(`Некорректное регулярное выражение: ${error.message}`); }
+        try { matcher = new RegExp(query, caseSensitive ? '' : 'i'); } catch (error) { throw new Error(`Некорректное регулярное выражение: ${error.message}`); }
     }
+    const needle = caseSensitive ? query : query.toLowerCase();
     const results = [];
     let scanned = 0, truncated = false;
     const byName = !inContent;
+    // The lines around a hit: the hit itself is `path:line: text`, the lines around it are
+    // `path:line- text` — the dash says that the line is the context, not the hit.
+    const around = Number.isSafeInteger(context) && context > 0 ? context : 0;
+    const limit = Number.isSafeInteger(maxResults) && maxResults > 0 ? maxResults : 60;
     /** Scan the files under this directory until `maxResults` hits. */
     async function walk(current, prefix) {
         if (truncated) return;
@@ -245,6 +263,7 @@ export async function searchFiles({
             if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') return;
             throw error;
         }
+        entries.sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0));
         for (const entry of entries) {
             if (truncated) return;
             const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
@@ -255,16 +274,19 @@ export async function searchFiles({
                 await walk(path.join(current, entry.name), relative);
             } else if (entry.isFile()) {
                 if (/^\.env|\.(pem|key|p12|pfx)$/i.test(entry.name)) continue;
+                if (skipFile(relative, entry.name)) continue;
                 const full = path.join(current, entry.name);
                 // The glob cuts the files before they are read: a search of the names does
                 // not open a file at all.
                 if (names && !names.test(onName ? entry.name : relative)) continue;
                 if (byName) {
-                    const hit = matcher ? matcher.test(relative) : relative.toLowerCase().includes(query.toLowerCase());
+                    const hit = matcher ? matcher.test(relative) : (caseSensitive
+                        ? relative.includes(query)
+                        : relative.toLowerCase().includes(needle));
                     if (!hit) continue;
                     scanned++;
                     results.push(relative);
-                    if (results.length >= maxResults) { truncated = true; break; }
+                    if (results.length >= limit) { truncated = true; break; }
                     continue;
                 }
                 const info = await statOrNull(full);
@@ -281,12 +303,23 @@ export async function searchFiles({
                 try { text = utf8.decode(bytes); } catch { continue; }
                 scanned++;
                 const lines = text.split(/\r?\n/);
+                const hits = [];
                 for (let i = 0; i < lines.length; i++) {
                     const line = lines[i];
-                    const hit = regex ? matcher.test(line) : line.toLowerCase().includes(query.toLowerCase());
+                    const hit = matcher ? matcher.test(line) : (caseSensitive
+                        ? line.includes(query)
+                        : line.toLowerCase().includes(needle));
                     if (!hit) continue;
-                    results.push(`${relative}:${i + 1}: ${line.trim().slice(0, 240)}`);
-                    if (results.length >= maxResults) { truncated = true; break; }
+                    hits.push(i);
+                }
+                for (const index of hits) {
+                    const from = around ? Math.max(0, index - around) : index;
+                    const to = around ? Math.min(lines.length - 1, index + around) : index;
+                    for (let i = from; i <= to; i++) {
+                        const mark = i === index ? ':' : '-';
+                        results.push(`${relative}:${i + 1}${mark} ${lines[i].trim().slice(0, 240)}`);
+                    }
+                    if (results.length >= limit) { truncated = true; break; }
                 }
             }
         }
@@ -295,7 +328,7 @@ export async function searchFiles({
     const empty = byName
         ? `Файлов по запросу нет (просмотрено файлов: ${scanned}).`
         : `Совпадений не найдено (просмотрено файлов: ${scanned}).`;
-    return { text: results.length ? `${results.join('\n')}${truncated ? `\n…результаты усечены (${maxResults})` : ''}` : empty,
+    return { text: results.length ? `${results.join('\n')}${truncated ? `\n…результаты усечены (${limit})` : ''}` : empty,
         count: results.length, scanned, truncated };
 }
 

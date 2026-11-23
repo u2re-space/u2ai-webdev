@@ -30,9 +30,11 @@ import { listProjectBackups, restoreProjectBackup } from './project-backup.js';
 import { generateSvg, downloadFont, downloadIcons } from './assets.js';
 import { searchIcons } from './icon-sets.js';
 import { runBridge } from './bridges.js';
-import { readSkill } from './skills.js';
+import { readSkill, readSkillFile, discoverSkills } from './skills.js';
+import { toolForName } from './tool-pointer.js';
 import { guidanceSearchText, guidanceRetrieveText, GUIDANCE_SOURCE } from './guidance.js';
 import { runProgram as runProgramIn } from './programs.js';
+import { memoryArgs, memoryConnection, callMemoryProgram } from './memory-program.js';
 import { compareWithReference } from './image-compare.js';
 import { firstPageId } from './devtools.js';
 import { isInside, resolveInside } from './paths.js';
@@ -567,6 +569,30 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
     }
 
     /**
+     * The answer of the tools of the skills when the pack is not there.
+     *
+     * A role that asks for a skill that is not a skill gets a pointer, not a refusal: the
+     * CLIs of the house (`ai-image`, `ai-measure`, `ai-decompose`, `ai-memory`) are tools,
+     * and the tool that does the work is named in the answer. A name that is neither a pack
+     * nor a tool gets the list of the packs that are installed.
+     * @param {string} name
+     * @returns {Promise<string>}
+     */
+    async function skillNotFound(name) {
+        const tool = toolForName(name);
+        if (tool) {
+            return `«${name}» — не скилл, а инструмент дома: позови \`${tool}\`. `
+                + 'Скиллы читаются инструментом `read_skill`, и только они.';
+        }
+        const packs = await discoverSkills(root, { extraDirs: skillDirs(), env });
+        const names = packs.map((pack) => pack.name).filter(Boolean).slice(0, 20);
+        return `Скилл не найден: ${name}.`
+            + (names.length
+                ? `\nУстановленные пакеты: ${names.join(', ')}.`
+                : '\nПакетов скиллов нет: положите SKILL.md в .agents/skills/<name>/.');
+    }
+
+    /**
      * The text of a file, from the map of the run.
      *
      * The map is used only when the file has not changed since the map was built: the moment
@@ -994,9 +1020,19 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
             case 'search_files': {
                 const query = String(args.query ?? '');
                 const scope = String(args.scope ?? (args.inContent === 0 || args.inContent === false || args.inContent === '0' ? 'path' : 'content'));
+                const exclude = parseArgsList(args.exclude);
+                const context = Number.isSafeInteger(Number(args.context)) && Number(args.context) > 0
+                    ? Number(args.context)
+                    : 0;
+                const caseSensitive = Boolean(args.caseSensitive);
+                const maxResults = Number.isSafeInteger(Number(args.maxResults)) && Number(args.maxResults) > 0
+                    ? Number(args.maxResults)
+                    : 60;
                 // The map answers the search without touching the disk; only the files it did
-                // not read in full are looked at again.
-                if (map?.enabled && query.trim()) {
+                // not read in full are looked at again. The map knows neither the context
+                // around a hit nor the excluded files: such a request goes to the disk.
+                const plain = !context && !exclude.length && !caseSensitive;
+                if (map?.enabled && query.trim() && plain) {
                     const located = await resolveInside(root, String(args.path ?? '.'), { allowRoot: true });
                     const found = map.search({
                         query,
@@ -1004,7 +1040,7 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                         scope,
                         regex: Boolean(args.regex),
                         glob: String(args.glob ?? ''),
-                        maxResults: 60,
+                        maxResults,
                     });
                     const hits = found.text ? found.text.split('\n') : [];
                     const matcher = Boolean(args.regex) ? new RegExp(query, 'i') : null;
@@ -1014,7 +1050,9 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                         const hit = matcher ? matcher.test(body.text) : body.text.toLowerCase().includes(query.toLowerCase());
                         if (hit) hits.push(rel);
                     }
-                    return hits.length ? hits.join('\n') : 'Совпадений не найдено.';
+                    // The map does not know every file of the project: when it is silent, the
+                    // disk answers.
+                    if (hits.length) return hits.join('\n');
                 }
                 const found = await searchFiles({
                     root,
@@ -1023,6 +1061,10 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                     regex: Boolean(args.regex),
                     inContent: scope !== 'path' && scope !== 'symbol',
                     glob: String(args.glob ?? ''),
+                    exclude,
+                    context,
+                    caseSensitive,
+                    maxResults,
                 });
                 return found.text;
             }
@@ -1067,14 +1109,23 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                 );
             }
             case 'read_skill': {
+                const file = String(args.file ?? '').trim();
+                if (file) {
+                    const part = await readSkillFile(String(args.name ?? ''), file, root, {
+                        extraDirs: skillDirs(),
+                        env,
+                    });
+                    if (!part) return `Файл не найден в скилле: ${args.name}/${file}`;
+                    return `# ${part.name}/${file}\n\n${part.body}`;
+                }
                 const skill = await readSkill(String(args.name ?? ''), root, { extraDirs: skillDirs(), env });
-                if (!skill) return `Скилл не найден: ${args.name}`;
+                if (!skill) return await skillNotFound(String(args.name ?? ''));
                 const head = skill.description ? `${skill.description}\n\n` : '';
                 return `# ${skill.name}\n\n${head}${skill.body}`;
             }
             case 'run_skill': {
                 const skill = await readSkill(String(args.name ?? ''), root, { extraDirs: skillDirs(), env });
-                if (!skill) return `Скилл не найден: ${args.name}`;
+                if (!skill) return await skillNotFound(String(args.name ?? ''));
                 const command = skill.metadata?.command;
                 if (!command) return `Скилл "${skill.name}" не объявляет команду.`;
                 const parts = String(command).trim().split(/\s+/);
@@ -1263,6 +1314,23 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                 return await callMeasure(args);
             case 'call_ai_image':
                 return await callBridge('ai-image', args);
+            case 'call_ai_memory': {
+                const name = String(args.tool ?? '').trim();
+                if (!name) {
+                    return 'The tool of the memory is not named: name it (memory_query, '
+                        + 'memory_read_page, memory_recent, memory_briefing).';
+                }
+                const payload = memoryArgs(args.args);
+                // The memory is asked where it already is: the MCP server of the memory, if
+                // one is connected, and the program itself otherwise.
+                const connection = memoryConnection(mcpTools);
+                if (connection) {
+                    const entry = { name: connection.name, connection, tool: name };
+                    const answer = await callMcp(entry, payload, { signal });
+                    return await mcpAnswer(root, entry, answer);
+                }
+                return await callMemoryProgram({ tool: name, args: payload, root, env, config });
+            }
             case 'magick': {
                 const list = parseArgsList(args.args);
                 if (!list.length) {

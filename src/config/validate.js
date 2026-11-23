@@ -286,6 +286,16 @@ function validateMemory(memory, fail) {
   for (const key of ['files', 'tasks']) {
     if (typeof memory[key] !== 'boolean') fail(`${where}.${key}: true | false`);
   }
+  const program = memory.program;
+  if (!isRecord(program)) fail(`${where}.program должен быть объектом`);
+  for (const key of Object.keys(program)) {
+    if (!['enabled', 'command', 'timeoutMs'].includes(key)) {
+      fail(`${where}.program.${key}: неизвестное поле (допустимо: enabled | command | timeoutMs)`);
+    }
+  }
+  if (typeof program.enabled !== 'boolean') fail(`${where}.program.enabled: true | false`);
+  if (typeof program.command !== 'string' || !program.command.trim()) fail(`${where}.program.command: непустая строка`);
+  if (!(Number.isSafeInteger(program.timeoutMs) && program.timeoutMs > 0)) fail(`${where}.program.timeoutMs: целое > 0`);
 }
 
 /**
@@ -403,6 +413,7 @@ function validatePictures(pictures, fail) {
     fail(`${where}.quality: непустая строка или null`);
   }
   if (typeof pictures.dir !== 'string' || !pictures.dir.trim()) fail(`${where}.dir: непустая строка`);
+  if (typeof pictures.assetsDir !== 'string' || !pictures.assetsDir.trim()) fail(`${where}.assetsDir: непустая строка`);
   if (!(Number.isSafeInteger(pictures.max) && pictures.max > 0)) fail(`${where}.max: целое > 0`);
 }
 

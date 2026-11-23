@@ -28,6 +28,8 @@ export const STAGE_EFFORT = Object.freeze({
     coder: 'high',
     markup: 'xhigh',
     styler: 'xhigh',
+    animator: 'high',
+    illustrator: 'high',
     iconifier: 'high',
     installer: 'high',
     editor: 'high',
@@ -131,6 +133,12 @@ export const defaults = {
       // letters of a wordmark are the work of the best model of the family. A cheaper model
       // draws a floppy disk well and a wordmark with letters that do not spell anything.
       editor: 'family:gpt',
+      // The motion is the work of the head of the family too: a wrong easing or a wrong
+      // property costs more than the seconds of the thinking that prevented it.
+      animator: 'family:gpt',
+      // The assets are the work of the head of the family: the place of a picture and its
+      // format are decisions that are expensive to undo.
+      illustrator: 'family:gpt',
     },
     /**
      * The ladders of the ranks of the models of the house in their families.
@@ -153,6 +161,10 @@ export const defaults = {
         // The editor writes the SVG and then answers for it: the whole session of the
         // editor is the work of the model of the house.
         editor: [1],
+        // The animator and the illustrator answer once and write: there is nothing for them
+        // to polish on the disk, so they stay on the head of the ladder.
+        animator: [1],
+        illustrator: [1],
       },
     },
   },
@@ -311,6 +323,8 @@ export const defaults = {
     external_measure: true,
     /** Call the external `ai-image` CLI. */
     external_image: true,
+    /** Ask the external `ai-memory` program about the memory of the project. */
+    external_memory: true,
     /** Run ImageMagick on the pictures of the project. */
     image_magick: true,
     /** Call any CLI of the house with the flags of its own command line. */
@@ -391,6 +405,12 @@ export const defaults = {
     markup: { enabled: true, maxTurns: 16, timeoutMs: null },
     coding: { enabled: true, maxTurns: 24, timeoutMs: null },
     styling: { enabled: true, maxTurns: 16, timeoutMs: null },
+    // The motion of the result: the rules of the animation come after the styles and
+    // before the code.
+    animation: { enabled: true, maxTurns: 14, timeoutMs: null },
+    // The assets of the project: the pictures are put on their places after the vector
+    // graphics and before the markup links them.
+    assets: { enabled: true, maxTurns: 10, timeoutMs: null },
     build: { enabled: true, maxTurns: 1, timeoutMs: null },
     // The stage of the sight looks at the page and asks the styler to fix it, and it does
     // that twice: it needs more time than the stages that write the files.
@@ -615,6 +635,13 @@ export const defaults = {
     quality: 'high',
     /** Where the prepared pictures land, relative to the project. */
     dir: 'assets/import',
+    /**
+     * The asset directory of the project: the final place of the pictures.
+     *
+     * The prepared cut-outs land in `pictures.dir`, and the stage of the assets puts them
+     * under this directory, in the format the page loads.
+     */
+    assetsDir: 'assets',
     /** How many pictures one run prepares. */
     max: 6,
   },
@@ -669,6 +696,15 @@ export const defaults = {
     files: true,
     /** Keep the finished tasks. */
     tasks: true,
+    /**
+     * The external program of the long-term memory: `ai-memory`.
+     *
+     * The roles ask the memory of the project before they decide: the decisions that were
+     * already made, the rules of the project and the open questions. The program is asked
+     * through its MCP server when one is connected, and through the program itself
+     * otherwise.
+     */
+    program: { enabled: true, command: 'ai-memory', timeoutMs: 60_000 },
   },
 
   // --- components ---------------------------------------------------------------
@@ -714,6 +750,8 @@ export const defaults = {
     coder: {},
     markup: {},
     styler: {},
+    animator: {},
+    illustrator: {},
     iconifier: {},
     installer: {},
     editor: {},
@@ -787,6 +825,11 @@ export const defaults = {
       ],
       iconifier: ['phosphorIcons', 'lucideIcons', 'googleFonts'],
       editor: ['svg', 'mdnCss', 'phosphorIcons', 'lucideIcons'],
+      animator: [
+        'cssAnimation', 'cssMotion', 'cssTransform', 'cssNesting', 'cssSelectors',
+        'cssColors', 'mdnCss',
+      ],
+      illustrator: ['cssImages', 'mdnCss', 'phosphorIcons', 'lucideIcons'],
       reviewer: ['mdnCss', 'cssTricks'],
       auditor: ['mdnCss'],
     },

@@ -40,6 +40,7 @@ import { readReferences } from '../inputs/references.js';
 import { listStyleFiles } from './build.js';
 import { projectFiles } from './project-files.js';
 import { runId, runFile, writeJsonFile, readJsonFile } from './workspace.js';
+import { stageForRole } from './roles.js';
 
 /** The directory inside the run that holds the reports of the steps. */
 export const STEPS_DIR = 'steps';
@@ -859,7 +860,7 @@ export async function runStepStage({
     let usage = null;
 
     for (const step of steps) {
-        const stageName = role === 'coder' ? 'coding' : role === 'styler' ? 'styling' : role === 'editor' ? 'vector' : role;
+        const stageName = stageForRole(role) ?? role;
         input?.setLocation?.({ stage: stageName, role, step: step.id });
         const skip = input?.takeSkip?.({ stage: stageName, step: step.id })
             || input?.takeActiveStepSkip?.(step.id)

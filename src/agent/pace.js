@@ -26,6 +26,8 @@ export const STAGE_OF_ROLE = Object.freeze({
     coder: 'codeQuality',
     markup: 'codeQuality',
     styler: 'codeQuality',
+    animator: 'decorQuality',
+    illustrator: 'decorQuality',
     editor: 'decorQuality',
     architect: 'architectQuality',
     iconifier: 'iconifierQuality',

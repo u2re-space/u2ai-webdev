@@ -343,6 +343,20 @@ export function inputContext(collected = {}) {
         blocks.push(lines.join('\n'));
     }
 
+    const assets = Array.isArray(collected.assets) ? collected.assets : [];
+    if (assets.length) {
+        const lines = [
+            '# The assets of the project',
+            'These are the pictures of the result, on their final places: the paths below are',
+            'the ones the page links. Do not invent another path for them.',
+        ];
+        for (const item of assets) {
+            const use = item.use ? ` — ${item.use}` : '';
+            lines.push(`- ${item.name} [${item.kind ?? 'picture'}] → ${item.file}${use}`);
+        }
+        blocks.push(lines.join('\n'));
+    }
+
     const palette = collected.palette;
     if (palette?.present) {
         const lines = ['# Palette'];

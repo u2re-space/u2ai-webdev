@@ -121,7 +121,7 @@ export const SCHEMAS = Object.freeze({
         steps: arr(strictObject({
             id: str('The id of the step, unique inside the plan.'),
             title: str('What the step does, in one line.'),
-            role: str('The role that does the step: markup, coder, styler, editor, iconifier.'),
+            role: str('The role that does the step: markup, coder, styler, animator, editor, illustrator, iconifier.'),
             dependsOn: arr(str('The id of a step that must be done before this one.'), 'The ids of the steps this one waits for.'),
             files: arr(str('The path of a file the step touches.'), 'The files the step touches.'),
             criteria: arr(str('A criterion of readiness, written so that it can be checked.'), 'How one knows that the step is done.'),

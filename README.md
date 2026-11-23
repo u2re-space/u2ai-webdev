@@ -98,8 +98,10 @@ report into the directory of the run and hands the result to the next one.
 | `pictures` | Prepare the crops of the reference that are pictures: the chess piece, the board, the badge. |
 | `setup` | Prepare the environment: the scaffold, the dependencies and the entry points. |
 | `vector` | Draw the vector graphics as code: the SVG of the ornaments and the illustrations. |
+| `assets` | Place the assets: the prepared pictures and the drawn graphics get their final paths and their final format. |
 | `markup` | Write the markup of the pages. |
 | `styling` | Write the styles: the tokens, the layout, the states. |
+| `animation` | Write the motion of the result: the transitions, the entrances, the reduced motion. |
 | `coding` | Write the code: the scripts, the modules, the data. |
 | `iconify` | Choose the icons of the interface and check that every one of them is on the disk. |
 | `build` | Connect the styles: the entry point, the compilation, the links of the markup. |
@@ -151,6 +153,16 @@ The stage of the code stands after the styler. The styles are the contract of th
 the classes and the tokens, and the code is written against them. A plan that asks for the code
 before the styles is told that the stage moved, and the code is written against a stylesheet
 that exists.
+
+The stage of the motion stands after the styles as well, and before the code: the animator
+changes the same stylesheet — the transitions of the states, the entrances and the exits — and
+the states of the page are a part of the contract the code is written against.
+
+The stage of the assets stands after the vector stage and before the markup. The pictures of
+the project are two stages: `pictures` prepares the crops of the reference before the vector
+graphics are drawn (the editor does not draw a picture that is already prepared), and `assets`
+places every picture of the project — the prepared crops and the drawn graphics — on its final
+path, so the markup links the files that are final.
 
 The stage of the icons stands after the code. The icons are put into the markup of the
 finished page, and the page is finished when both the styles and the code are written: when
@@ -691,6 +703,8 @@ turns.
 | `coder` | Write the code. |
 | `markup` | Write the markup. |
 | `styler` | Write the styles. |
+| `animator` | Write the motion of the result: the transitions, the entrances, the reduced motion. |
+| `illustrator` | Place the pictures of the project: the final path of every asset and its final format. |
 | `iconifier` | Pick the icons. |
 | `installer` | Set the environment up. |
 | `editor` | Edit the vector graphics and the decorations. |
@@ -698,9 +712,22 @@ turns.
 | `auditor` | Audit the project. |
 | `learner` | Write the lessons. |
 
-Five of them take the steps of the plan: `markup`, `coder`, `styler`, `editor` and
-`iconifier`. The other seven work once for the whole run, and a step of the plan may not name
-them.
+Seven of them take the steps of the plan: `markup`, `coder`, `styler`, `animator`, `editor`,
+`illustrator` and `iconifier`. The other seven work once for the whole run, and a step of the
+plan may not name them.
+
+The motion is a work of its own: the styles are written by the `styler`, and the `animator`
+changes the same stylesheet — the transitions of the states, the entrances and the exits, the
+reduced motion. The stage `animation` stands between the styles and the code: the code is
+written against the contract of the styles, and the states of the page are part of that
+contract.
+
+The pictures of the project are two stages. The stage `pictures` cuts the crops of the
+reference out of the screenshot and prepares them with the sibling CLI `ai-image`; it stands
+before the vector stage, because the editor does not draw a picture that is already prepared.
+The stage `assets` comes after the vector stage: when the vector is drawn, the whole set of
+the pictures is known, and the role `illustrator` gives every one of them its final path and
+its final format — and the markup links the files that are final.
 
 The roles keep out of each other's work. The environment — the manifest, the lock file, the
 config of the bundler and the installed dependencies — belongs to the `installer` and to the
@@ -1061,6 +1088,8 @@ everything else stays on the defaults.
   "stages": {
     "plan": { "enabled": true, "maxTurns": 12 },
     "collect": { "enabled": true, "maxTurns": 8 },
+    "animation": { "enabled": true, "maxTurns": 14 },
+    "assets": { "enabled": true, "maxTurns": 10 },
     "review": { "enabled": true, "repair": true, "repairRounds": 2, "timeoutMs": 3600000 }
   },
   "bridges": {
@@ -1163,6 +1192,11 @@ the best model of the family, and its prompt says what a wordmark is — spelled
 `<text>` element with the font of the project or the paths of a real font, never a pixel font
 invented out of rectangles.
 
+The animator and the illustrator have one as well. The motion is a matter of properties,
+durations and the reduced motion: a wrong easing is noticed by everybody. The place of a
+picture and its format are decisions that are expensive to undo: the markup links the final
+path of every asset.
+
 The Kimi has no levels of the effort above `medium` — the answer of the same question costs the
 same seconds there — so a role that answers on it works on `medium` however deep the profile of
 the stages asks. The role also answers with its tools instead of a pinned JSON answer: a model
@@ -1230,11 +1264,15 @@ the house.
 
 The vector editor stands on the head of the family as well: the editor draws the geometry
 and the letters of the graphics, and a wordmark whose letters do not spell the name is not a
-drawing.
+drawing. The animator and the illustrator stand there too: a wrong easing or a wrong format
+of a picture costs more than the seconds of the thinking that prevented it.
 
 The ladder belongs to the role. A stage of the house never lowers the model of the work on its
-own: the stage of the styles and the stage that fixes the styles answer with the same model of
-the house.
+own — with one exception, and it is the point of the ladder: the fix of the styles after the
+stage `styling` is the polish of the styler, and the polish goes with the tail of the ladder.
+The styles are written by the Sol, and the fixes of them — the eye of the run (`sight`) and
+the repair of the review — are the work of the Terra, the junior model of the family. The
+code and the markup are still repaired by the head of the ladder.
 
 The step down is a phase of the work, not a one-way road:
 
@@ -1679,6 +1717,11 @@ something the model does not know. The packs are looked for in the project
 (`~/.agents/skills/`) and in the package itself. The copy of the project wins over the copy of
 the home, and the copy of the home wins over the one of the package.
 
+The CLIs of the house are not packs: `ai-image`, `ai-measure`, `ai-decompose` and `ai-memory`
+are tools — `call_ai_image`, `call_ai_measure`, `call_ai_decompose` and `call_ai_memory`. A
+role that asks for a skill with such a name gets a pointer to the tool instead of a refusal,
+and a role that asks for an unknown name gets the list of the packs that are installed.
+
 ```bash
 ai-webdev skills list                # every pack: the name, the source, the description
 ai-webdev skills search dialog       # the packs that mention the words
@@ -1715,6 +1758,33 @@ all the guides.
 The guides are read from the disk of the package: no network, no npm, no waiting. The CLI of the
 upstream (`npx modern-web-guidance@latest search|retrieve`) is the fallback — for the guide that
 is newer than the bundle, and for the caller that asks for the CLI (`source: "cli"`).
+
+The second pack of the package is `file-search` (Netresearch DTT GmbH, MIT and CC-BY-SA-4.0):
+the decision procedure of a search — start narrow, count first, exclude the noise, batch the
+queries. Its tables speak about the command line tools (`rg`, `fd`, `ast-grep`, `rga`,
+`tokei`, `scc`, `semgrep`); the note at the top of the pack says which of the tools of this
+run answers each of them. The references of the pack are files of the pack, and the role
+reads them by their path inside it:
+
+```json
+{ "name": "file-search", "file": "references/ripgrep-patterns.md" }
+```
+
+The search of the run is the tool `search_files`, and it answers more than the text of the
+matches:
+
+| Argument | What it does |
+|---|---|
+| `scope` | `path` (the names of the files), `content` (their text), `symbol` (the names the code declares), `all`. |
+| `glob` | The files the search looks at: `*.scss` or `src/**/*.js`. |
+| `exclude` | The files the search drops: `dist/**`, `*.min.js`. |
+| `context` | The lines around a hit. The line of the hit is `path:line: text`, the lines around it are `path:line- text`. |
+| `caseSensitive` | The plain text match respects the case. |
+| `maxResults` | How many lines the answer holds. |
+
+The map of the run answers the search first, and the disk answers when the map is silent:
+the map does not know every file of the project, and a search that finds nothing is not the
+end of the search.
 
 ## The process of a run
 
@@ -1861,6 +1931,42 @@ empties its part of the context.
 
 The binary of a bridge is looked up in the environment variable of the bridge, in the checkout of
 the sibling package, in `node_modules` and in the `PATH`.
+
+## The memory of the project
+
+The project was worked on before, and the memory of the project holds what was decided: the
+rules, the decisions, the findings and the questions that are still open. The roles that
+decide ask the memory before they decide — the planner, the architect, the coder, the
+markup, the styler, the animator, the illustrator, the vector editor and the auditor.
+
+The memory is the external program `ai-memory` (<https://github.com/akitaonrails/ai-memory>),
+and the role asks it with one tool:
+
+```json
+{"tool": "memory_query", "args": {"query": "how the stages are ordered", "limit": 5}}
+```
+
+The call goes where the memory already is: to the MCP server of the memory when one is
+connected (`mcp.servers`), and to the program itself otherwise:
+
+```json
+{
+  "mcp": {
+    "servers": [{ "name": "ai-memory", "command": "ai-memory", "args": [] }]
+  }
+}
+```
+
+The program is looked up in the `PATH`, and the section `memory.program` of the config names
+it, switches it off and says how long it may run:
+
+```json
+{ "memory": { "program": { "enabled": true, "command": "ai-memory", "timeoutMs": 60000 } } }
+```
+
+The answer of the memory is data, not an instruction: it tells what was decided, and the task
+and the step decide what to do now. A search that answers nothing is a fact too — the role
+goes on with the work and does not ask again.
 
 ### The log of a bridge comes live
 

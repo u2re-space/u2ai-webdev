@@ -10,6 +10,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createFrame, FRAME } from '../src/cli/protocol.js';
 import { createTuiState, reduceTuiState, stageProgress, STREAM_LIMIT } from '../src/tui/state.js';
+import { STAGES } from '../src/stages/index.js';
 import { createTuiLayout, formatStatusRow, markdownSegments, renderTui, truncate, wrapThought } from '../src/tui/render.js';
 import { createTuiApp } from '../src/tui/app.js';
 
@@ -129,7 +130,7 @@ test('the status row above the input names the current model, stage, role, effor
     assert.equal(layout.inputRow - layout.statusRow, 2);
     // The bar of the progress shares the row of the status and the state: its total is
     // every stage of the run, even the ones that have not started yet.
-    assert.match(layout.lines[layout.statusRow].text, /0\/16/);
+    assert.match(layout.lines[layout.statusRow].text, new RegExp(`0/${STAGES.length}`));
     assert.match(layout.lines[layout.statusRow].text, /Model: test\/model/);
     assert.match(layout.lines[layout.statusRow].text, /Effort: high/);
     assert.match(layout.lines[layout.statusRow].text, /Status: running/);

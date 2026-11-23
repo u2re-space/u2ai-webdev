@@ -14,7 +14,7 @@ import path from 'node:path';
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 
 import {
-    parseFrontmatter, loadSkillPacks, skillsForRole, discoverSkills, readSkill,
+    parseFrontmatter, loadSkillPacks, skillsForRole, discoverSkills, readSkill, readSkillFile,
     buildSkillInstructions, filterSkillsByKeywords, defaultSkillsDir,
 } from '../src/agent/skills.js';
 import { documentationFor, documentationForRole, DOCUMENTATION } from '../src/agent/docs.js';
@@ -93,6 +93,39 @@ test('the skill packs of the project are discovered and read', async () => {
 
     assert.equal(filterSkillsByKeywords(skills, ['demo']).length, 1);
     assert.equal(filterSkillsByKeywords(skills, ['absent']).length, 0);
+});
+
+test('a file of a skill pack is read by its path inside the pack', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-pack-file-'));
+    const home = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-pack-home-'));
+    const env = { HOME: home, USERPROFILE: home };
+    const pack = path.join(root, '.agents', 'skills', 'demo');
+    await mkdir(path.join(pack, 'references'), { recursive: true });
+    await writeFile(path.join(pack, 'SKILL.md'), '---\nname: demo\ndescription: a demo pack\n---\n\nThe steps.');
+    await writeFile(path.join(pack, 'references', 'guide.md'), 'The table of the flags.');
+
+    const part = await readSkillFile('demo', 'references/guide.md', root, { env });
+    assert.match(part.body, /The table of the flags/);
+    assert.equal(await readSkillFile('demo', 'missing.md', root, { env }), null);
+    // The file of the pack stays inside the pack.
+    assert.equal(await readSkillFile('demo', '../secrets.md', root, { env }), null);
+    assert.equal(await readSkillFile('demo', '/etc/passwd', root, { env }), null);
+});
+
+test('the pack of the file search comes with the package', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-search-pack-'));
+    const home = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-search-home-'));
+    const env = { HOME: home, USERPROFILE: home };
+
+    const skills = await discoverSkills(root, { env });
+    const pack = skills.find((skill) => skill.name === 'file-search');
+    assert.ok(pack, 'the pack of the file search is not there');
+    assert.match(pack.description, /searching codebases/i);
+
+    // The references of the pack are files of the pack: the role reads them by their path.
+    const guide = await readSkillFile('file-search', 'references/ripgrep-patterns.md', root, { env });
+    assert.ok(guide, 'the reference of the pack is not readable');
+    assert.match(guide.body, /rg/);
 });
 
 test('the documentation of a role comes from the config', () => {

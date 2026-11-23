@@ -34,7 +34,7 @@ export const tools = [
     'list_files', 'read_file', 'write_file', 'replace_text', 'search_files',
     'find_line', 'patch_file',
     'generate_svg', 'call_ai_image', 'magick', 'ai_cli', 'ai_cli_help', 'read_skill',
-    'web_guidance', 'screenshot', 'compare_images',
+    'web_guidance', 'call_ai_memory', 'screenshot', 'compare_images',
     devToolsMarker(),
 ];
 

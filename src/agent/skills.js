@@ -21,7 +21,8 @@
  * @depends node:path, node:fs/promises
  * @usedBy agent/tools, roles/index, stages/collect
  * @exports FRONTMATTER_RE, defaultSkillsDir, parseFrontmatter, loadSkillPacks, skillsForRole,
- *          listSkillPacks, discoverSkills, buildSkillInstructions, readSkill, filterSkillsByKeywords,
+ *          listSkillPacks, discoverSkills, buildSkillInstructions, readSkill, readSkillFile,
+ *          filterSkillsByKeywords,
  *          skillDirectoryGroups, skillDirectories, skillCatalog, removeSkillPack
  * @ai.tags skills, prompts
  * @ai.hint io
@@ -332,6 +333,9 @@ export function buildSkillInstructions(skills = []) {
         '',
         'These skill packs are installed. Read one with the `read_skill` tool before you use',
         'what it describes; a pack may name the commands, the standards and the steps of a task.',
+        'The CLIs of the house are not packs: `ai-image`, `ai-measure`, `ai-decompose` and',
+        '`ai-memory` are tools — `call_ai_image`, `call_ai_measure`, `call_ai_decompose` and',
+        '`call_ai_memory`.',
         '',
         ...list.map((skill) => `- **\`${skill.name}\`**: ${skill.description || 'no description'}`),
     ];
@@ -363,6 +367,39 @@ export async function readSkill(name, root, { extraDirs = [], env = process.env 
                 path: file,
                 metadata: parsed.metadata,
             };
+        } catch { /* try the next directory */ }
+    }
+    return null;
+}
+
+/**
+ * One file of a skill pack.
+ *
+ * A pack is not one file: the references of a pack are files beside it, and the model reads
+ * them by their path inside the pack. The file stays inside the pack: the path may not climb
+ * out of it.
+ *
+ * @param {string} name the name of the pack
+ * @param {string} file the path of the file inside the pack
+ * @param {string} root the project directory
+ * @param {{ extraDirs?: string[], env?: object }} [options]
+ * @returns {Promise<{ name: string, path: string, body: string }|null>}
+ * @exports
+ * @ai.hint io
+ */
+export async function readSkillFile(name, file, root, { extraDirs = [], env = process.env } = {}) {
+    const wanted = String(name ?? '').trim();
+    const rel = String(file ?? '').trim().replace(/\\/g, '/');
+    if (!wanted || !rel) return null;
+    if (rel.startsWith('/') || rel.split('/').includes('..')) return null;
+    for (const dir of [...skillDirectories(root, env), ...extraDirs]) {
+        const base = path.join(dir, wanted);
+        const target = path.join(base, rel);
+        // The file of the pack lies inside the pack.
+        if (!target.startsWith(base + path.sep)) continue;
+        try {
+            const raw = await readFile(target, 'utf8');
+            return { name: wanted, path: target, body: raw };
         } catch { /* try the next directory */ }
     }
     return null;

@@ -63,14 +63,14 @@ function schemaAnswer(name, data) {
     };
 }
 
-test('the stage that fixes the styles starts at the head of the ladder', () => {
+test('the fix of the styles is the polish of the styler', () => {
     const config = configFor();
-    // The sight stage and the repair of the review fix the styles: they must answer with the
-    // model of the house, not with the cheap tail of the ladder.
-    assert.equal(resolveRole('styler', config, { stage: 'sight' }).model, 'openai/gpt-6.2-sol');
-    assert.equal(resolveRole('styler', config, { stage: 'repair' }).model, 'openai/gpt-6.2-sol');
+    // The styles are written by the head of the ladder. The fix of them, after the styling
+    // stage, is the polish: the work of the tail, of the junior model of the family.
     assert.equal(resolveRole('styler', config, { stage: 'styling' }).model, 'openai/gpt-6.2-sol');
     assert.equal(resolveRole('styler', config, { stage: 'styler' }).model, 'openai/gpt-6.2-sol');
+    assert.equal(resolveRole('styler', config, { stage: 'sight', phase: 'polish' }).model, 'openai/gpt-6.1-terra');
+    assert.equal(resolveRole('styler', config, { stage: 'repair', phase: 'polish' }).model, 'openai/gpt-6.1-terra');
 });
 
 test('the phase of the work decides the rank of the family', () => {

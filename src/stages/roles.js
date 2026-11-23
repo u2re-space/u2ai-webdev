@@ -38,8 +38,10 @@ export const LIVE_ROLES = Object.freeze({
     markup: 'markup',
     coder: 'coding',
     styler: 'styling',
+    animator: 'animation',
     editor: 'vector',
     iconifier: 'iconify',
+    illustrator: 'assets',
 });
 
 /** Имена живых ролей. */

@@ -32,9 +32,11 @@ import { setupStage } from './setup.js';
 import { markupStage } from './markup.js';
 import { codingStage } from './coding.js';
 import { stylingStage } from './styling.js';
+import { animationStage } from './animation.js';
 import { buildStage } from './build.js';
 import { sightStage } from './sight.js';
 import { vectorStage } from './vector.js';
+import { assetsStage } from './assets.js';
 import { iconifyStage } from './iconify.js';
 import { reviewStage } from './review.js';
 import { auditStage } from './audit.js';
@@ -146,6 +148,22 @@ export const STAGES = Object.freeze([
         apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
     },
     {
+        name: 'assets',
+        title: 'Place the assets',
+        // The assets are placed after the vector graphics: when the vector is drawn, the whole
+        // set of the pictures is known, and the markup links the files that are final.
+        dependsOn: ['vector', 'pictures'],
+        run: assetsStage,
+        args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
+        apply: (ctx, result) => {
+            ctx.assets = result?.assets ?? [];
+            if (!ctx.inputs || !ctx.assets.length) return;
+            // The roles after this stage see the final paths of the pictures: the markup
+            // links them, and the styles name them.
+            ctx.inputs = { ...ctx.inputs, assets: ctx.assets };
+        },
+    },
+    {
         name: 'markup',
         title: 'Write the markup',
         dependsOn: ['setup'],
@@ -163,6 +181,17 @@ export const STAGES = Object.freeze([
         run: stylingStage,
         args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
         verify: workOnDisk('styler'),
+        apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
+    },
+    {
+        name: 'animation',
+        title: 'Animate the result',
+        // The motion comes after the styles and before the code: the code is written against
+        // the contract of the styles, and the states of the page are part of that contract.
+        dependsOn: ['styling'],
+        run: animationStage,
+        args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
+        verify: workOnDisk('animator'),
         apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
     },
     {

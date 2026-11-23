@@ -19,7 +19,8 @@
  *
  * @depends stages/roles
  * @usedBy pipeline
- * @exports PLAN_STAGES, planEdges, planOrder, placeVectorStage, placeIconifyStage, placeStylesBeforeCode
+ * @exports PLAN_STAGES, planEdges, planOrder, placeVectorStage, placeIconifyStage,
+ *          placeStylesBeforeCode, placeAnimationAfterStyles, placeAssetsAfterVector
  * @ai.tags stages, plan, order
  * @ai.hint pure
  * @changed 2026-11-15 Порядок стадий, которые делают шаги плана, задаёт сам план.
@@ -81,6 +82,56 @@ export function planEdges(plan) {
 }
 
 /**
+ * Поставить стадию анимации после стилиста.
+ *
+ * Движение живёт в стилях: анимация правит ту же таблицу, что и стили, и править её
+ * раньше стилей нечего. Анимация стоит прямо после стилей и до кода: код пишется по
+ * контракту стилей, и состояния страницы — часть этого контракта.
+ *
+ * @param {string[]} names имена стадий в порядке прогона
+ * @returns {{ names: string[], moved: boolean }}
+ * @exports
+ * @ai.hint pure
+ */
+export function placeAnimationAfterStyles(names = []) {
+    const list = Array.isArray(names) ? [...names] : [];
+    const animation = list.indexOf(ANIMATION_STAGE);
+    const styling = list.indexOf(STYLING_STAGE);
+    if (animation < 0 || styling < 0) return { names: list, moved: false };
+    if (animation > styling) return { names: list, moved: false };
+    // Анимация раньше стилей: она встаёт прямо после стилиста.
+    list.splice(animation, 1);
+    const target = list.indexOf(STYLING_STAGE);
+    list.splice(target < 0 ? list.length : target + 1, 0, ANIMATION_STAGE);
+    return { names: list, moved: true };
+}
+
+/**
+ * Поставить стадию ассетов после вектора.
+ *
+ * Ассеты раскладываются по местам, когда известно всё множество картинок: вырезки
+ * референса и нарисованный вектор. Разметка подключает уже окончательные файлы, поэтому
+ * стадия ассетов стоит между вектором и разметкой.
+ *
+ * @param {string[]} names имена стадий в порядке прогона
+ * @returns {{ names: string[], moved: boolean }}
+ * @exports
+ * @ai.hint pure
+ */
+export function placeAssetsAfterVector(names = []) {
+    const list = Array.isArray(names) ? [...names] : [];
+    const assets = list.indexOf(ASSETS_STAGE);
+    const vector = list.indexOf(ASSETS_AFTER);
+    if (assets < 0 || vector < 0) return { names: list, moved: false };
+    if (assets > vector) return { names: list, moved: false };
+    // Ассеты раньше вектора: они встают прямо после него.
+    list.splice(assets, 1);
+    const target = list.indexOf(ASSETS_AFTER);
+    list.splice(target < 0 ? list.length : target + 1, 0, ASSETS_STAGE);
+    return { names: list, moved: true };
+}
+
+/**
  * Стадия вектора и её место в цепочке.
  *
  * Ассеты рисует редактор, и разметка их подключает. Ставить стадию вектора между
@@ -100,6 +151,9 @@ const ICONIFY_STAGE = 'iconify';
 const ICONIFY_AFTER = 'styling';
 const STYLING_STAGE = 'styling';
 const CODING_STAGE = 'coding';
+const ANIMATION_STAGE = 'animation';
+const ASSETS_STAGE = 'assets';
+const ASSETS_AFTER = 'vector';
 
 /**
  * Поставить стадию кода после стилиста.
@@ -299,8 +353,22 @@ export function planOrder(stages = [], plan = null) {
             + 'имена классов и токены, — и код пишется по этому контракту.');
     }
 
+    // Стадия ассетов: после вектора, до разметки.
+    const withAssets = placeAssetsAfterVector(withStyles.names);
+    if (withAssets.moved) {
+        warnings.push('Стадия ассетов перенесена после вектора: картинки раскладываются по '
+            + 'местам, когда известно всё множество — вырезки референса и нарисованный вектор.');
+    }
+
+    // Стадия анимации: после стилиста.
+    const withAnimation = placeAnimationAfterStyles(withAssets.names);
+    if (withAnimation.moved) {
+        warnings.push('Стадия анимации перенесена после стилиста: движение живёт в стилях, '
+            + 'и править их раньше стилей нечего.');
+    }
+
     // Стадия иконок: не раньше кода и не раньше стилей.
-    const withIcons = placeIconifyStage(withStyles.names);
+    const withIcons = placeIconifyStage(withAnimation.names);
     if (withIcons.moved) {
         warnings.push('Стадия иконок перенесена после кода: иконки ложатся в разметку готовой '
             + 'страницы, а страница готова, когда написаны и стили, и код.');

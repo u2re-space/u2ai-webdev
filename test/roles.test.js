@@ -137,14 +137,15 @@ function codeData() {
 test('every built-in role is in the registry', () => {
     for (const name of [
         'scanner', 'planner', 'architect', 'director', 'coder', 'markup', 'styler',
-        'iconifier', 'installer', 'editor', 'reviewer', 'auditor', 'learner',
+        'animator', 'illustrator', 'iconifier', 'installer', 'editor', 'reviewer',
+        'auditor', 'learner',
     ]) {
         assert.ok(ROLES[name], `the role ${name} is missing`);
         assert.equal(ROLES[name].name, name);
         assert.ok(Array.isArray(ROLES[name].tools));
         assert.ok(Number.isInteger(ROLES[name].maxTurns));
     }
-    assert.equal(ROLE_NAMES.length, 13);
+    assert.equal(ROLE_NAMES.length, 15);
 });
 
 test('the scanner reads the project and does not plan', () => {
