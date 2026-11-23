@@ -862,6 +862,41 @@ test('a stage with many steps gets a budget for all of them', async () => {
     assert.match(result.error, /не закончилась/);
 });
 
+test('a stopped run says where it stood', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-where-'));
+    const controller = new AbortController();
+    const stages = [
+        {
+            name: 'coding',
+            title: 'Code',
+            dependsOn: [],
+            run: async ({ signal }) => {
+                // The operator stops the run while the stage works.
+                setTimeout(() => controller.abort(new DOMException('The operation was aborted.', 'AbortError')), 30);
+                await new Promise((resolve, reject) => {
+                    signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+                });
+                return { ok: true };
+            },
+        },
+    ];
+
+    const result = await runPipeline({
+        client: { responses: { create: async () => ({ output: [] }) } },
+        config: CONFIG,
+        root,
+        task: 'Make a landing.',
+        runId: 'run-1',
+        stages,
+        signal: controller.signal,
+    });
+
+    assert.equal(result.status, 'paused');
+    // Прогон говорит, на чём он стоял: «он завис» — это не ответ.
+    assert.ok(result.warnings.some((item) => /Прогон остановлен на стадии coding/.test(item)),
+        result.warnings.join(' | '));
+});
+
 test('a stage may ask for a budget of its own', async () => {    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-timeout-own-'));
     const stages = [
         {

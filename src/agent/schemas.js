@@ -151,6 +151,11 @@ export const SCHEMAS = Object.freeze({
             value: str('The value of the token.'),
             kind: str('One of: color, size, font, space, radius, shadow, duration.'),
         }), 'The design tokens the project needs.'),
+        states: arr(strictObject({
+            name: str('The name of the state, as it is written in the code and in the class: `is-loading`, `is-open`, `is-error`.'),
+            selector: str('The class or the attribute of the state: `.is-loading`, `[aria-busy="true"]`.'),
+            meaning: str('What the state means, in one line.'),
+        }), 'The states of the interface: the classes the scripts put on the nodes and the styles dress them. The styles and the scripts are written against this list, not against each other.'),
         notes: str('The decisions that the modules do not show, and why they were made.'),
     }),
 

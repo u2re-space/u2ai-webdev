@@ -233,7 +233,7 @@ export async function createClient({ config, env = process.env, signal = null, o
      */
     async function send(backend, path, {
         method = 'POST', body = null, rawBody = null, contentType = 'application/json',
-        signal: callSignal = null, stream = false, onEvent = null,
+        signal: callSignal = null, stream = false, onEvent = null, idleTimeoutMs = null,
     } = {}) {
         const root = normalizeBaseURL(backend.baseURL);
         const url = new URL(path, root);
@@ -257,6 +257,9 @@ export async function createClient({ config, env = process.env, signal = null, o
                     headers,
                     body: rawBody !== null ? rawBody : (body !== null ? JSON.stringify(body) : undefined),
                     signal: callSignal ?? signal,
+                    // The limit of the turn: a host that says nothing longer than that is not
+                    // asked again — the turn is lost, and the stage says which.
+                    ...(Number.isSafeInteger(idleTimeoutMs) && idleTimeoutMs > 0 ? { idleTimeout: idleTimeoutMs } : {}),
                 });
             } catch (error) {
                 const wrapped = error instanceof ApiError
@@ -317,10 +320,12 @@ export async function createClient({ config, env = process.env, signal = null, o
     async function callBackend(backend, path, {
         method = 'POST', body = null, rawBody = null, contentType = 'application/json',
         signal: callSignal = null, stream = false, onEvent: callEvent = null, model = null,
+        idleTimeoutMs = null,
     } = {}) {
         announce({ type: 'request.start', backend: backend.baseURL, path, model });
         const { res } = await send(backend, path, {
             method, body, rawBody, contentType, signal: callSignal, stream, onEvent: callEvent,
+            idleTimeoutMs,
         });
         return stream
             ? await readStream(res.body, { kind: stream === 'chat' ? 'chat' : 'responses', model, onEvent: callEvent })
@@ -355,7 +360,7 @@ export async function createClient({ config, env = process.env, signal = null, o
     async function call(path, {
         method = 'POST', body = null, rawBody = null, contentType = 'application/json',
         kind = 'text', model = null, signal: callSignal = null, stream = false,
-        onEvent: callEvent = null, supports = null,
+        onEvent: callEvent = null, supports = null, idleTimeoutMs = null,
     } = {}) {
         const chain = resolveBackends(config, { kind, model, env });
         if (!chain.length) {
@@ -398,6 +403,7 @@ export async function createClient({ config, env = process.env, signal = null, o
                 try {
                     const answer = await callBackend(backend, path, {
                         method, body, rawBody, contentType, signal: callSignal, stream, onEvent: onStreamEvent, model,
+                        idleTimeoutMs,
                     });
                     record.attempts.push({ backend: backend.baseURL, ok: true, durationMs: Date.now() - attemptStarted });
                     record.response = redactBody(answer);
@@ -458,7 +464,7 @@ export async function createClient({ config, env = process.env, signal = null, o
         effort = null, summary = null,
         mode = null, maxOutputTokens = null, temperature = null, store = false, truncation = null,
         verbosity = null, stream = false, signal: callSignal = null, onEvent: callEvent = null,
-        previousResponseId = null, toolChoice = null, parallelToolCalls = null,
+        previousResponseId = null, toolChoice = null, parallelToolCalls = null, idleTimeoutMs = null,
     } = {}) {
         // The channel of the schema comes from the profile of the model: a model that is
         // pinned to a JSON answer never calls a tool, and the profile knows which models
@@ -481,6 +487,7 @@ export async function createClient({ config, env = process.env, signal = null, o
             const answer = await call('responses', {
                 method: 'POST', body, kind: 'text', model: wantedModel, signal: callSignal,
                 stream: stream ? 'responses' : false, onEvent: callEvent, supports: 'responses',
+                idleTimeoutMs,
             });
             return answer;
         } catch (error) {
@@ -494,6 +501,7 @@ export async function createClient({ config, env = process.env, signal = null, o
                     const answer = await call('responses', {
                         method: 'POST', body: stripped, kind: 'text', model: wantedModel, signal: callSignal,
                         stream: stream ? 'responses' : false, onEvent: callEvent, supports: 'responses',
+                        idleTimeoutMs,
                     });
                     return answer;
                 }

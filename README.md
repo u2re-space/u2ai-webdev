@@ -168,6 +168,19 @@ scripts, so the live page is empty while the styler works. The styler is told so
 page and a missing script are not defects of the styles — and the browser is started only when
 the code is there, for the stage `sight`.
 
+## The contract of the states
+
+The styles and the scripts must not need each other to learn a name. The architect names the
+states of the interface once — `is-loading`, `is-open`, `is-error`, with the selector that
+carries each and what it means — and both roles are written against that list: the scripts put
+the states on the nodes, the styles dress them. Without the list the two roles read each
+other's files to find the names, and each of them waits for the other: the styles wait for the
+scripts, the scripts wait for the styles, and the run stands still. With the list, neither
+waits.
+
+The list is the answer to the question that no order can fix: **styles and code cannot wait
+for each other, so they must not learn from each other — they learn from the contract.**
+
 The stage of the motion stands after the styles as well, and before the code: the animator
 changes the same stylesheet — the transitions of the states, the entrances and the exits — and
 the states of the page are a part of the contract the code is written against.
@@ -2177,6 +2190,11 @@ directory or a file that is not there.
   the name of the stage: a run that hangs says so instead of waiting for ever. A stage that needs
   more time asks for it: `stages.<id>.timeoutMs` wins over the budget of the run. The vector
   graphics ask for half an hour: a drawing is a long turn.
+- A turn has a limit of its own — a quarter of the budget of the stage. A host that says
+  nothing longer than that loses the turn, and the stage names the turn: one hung turn does
+  not eat the whole stage.
+- A stopped run says where it stood: the stage, the step, the turn and the tool. «It hung» is
+  not an answer — the step and the turn are.
 - A stage with many steps gets a budget for all of them: the budget of a stage is multiplied
   by the number of its steps (up to three). The styles of a whole landing are three steps, and
   fifteen minutes for all three is not enough — the last step of a stage never starts, and the

@@ -62,6 +62,12 @@ export const CODE_RULES = [CORE, HTML, `#### The boundaries of the work
   stylesheets yet, use the class names of the markup and the tokens of the architect. Do not
   change the stylesheets: the styles are the styler's work, and a name that changes under the
   written code breaks the page.
+- The states of the interface are named in the brief of the architect, and that list is the contract
+  between you and the styler: put on the node exactly those states, with exactly those selectors,
+  and no others. A state the list does not name is a class the styles will never dress; a state of
+  the list that you do not put is a state the page never shows. The styles and the scripts are
+  written against the list, and neither of them waits for the other: the styles of a page with a
+  state are written before the scripts are, and the scripts follow the list, not the stylesheet.
 - The production build of the project is the work of the stage \`build\`, which runs after the
   styles and after the code. A build that fails because the styles are not there yet is not
   your defect: do not chase it and do not start a loop of build-and-fix. The harness compiles

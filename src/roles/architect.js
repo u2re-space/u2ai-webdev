@@ -74,6 +74,13 @@ ${INPUTS_IN_CONTEXT}
 - The tokens are named once, in one place: the colours, the sizes, the fonts, the spaces, the
   radii, the shadows, the durations. The names are short and say what they are (\`--color-text\`,
   not \`--c-t\`).
+- The states of the interface are named once, too, and this is the contract between the scripts
+  and the styles: the scripts put the state on the node (\`is-loading\`, \`is-open\`,
+  \`is-error\`, \`is-disabled\`), and the styles dress it. Name every state the interface has,
+  with the selector that carries it, and what it means. Without this list the styles and the
+  scripts have to read each other's files to learn the names, and each of them waits for the
+  other: the styles wait for the scripts, the scripts wait for the styles, and the run stands
+  still. With the list, both are written against it, and neither waits for the other.
 - The width of the design is a token too: \`${PAGE_WIDTH_TOKEN}\` says how wide the page really is
   in CSS pixels. Treat the reference image's pixel dimensions as a useful estimate, not as a
   measured CSS width; infer a practical canvas width from the visible typography and layout.

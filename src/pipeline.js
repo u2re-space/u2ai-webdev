@@ -474,6 +474,28 @@ export async function runPipeline({
         return base * Math.min(steps, 3);
     };
 
+    /**
+     * Где именно прогон встал: стадия, шаг, ход и инструмент.
+     *
+     * Прогон, который остановили, должен сказать, на чём он стоял. «Он завис» — это не
+     * ответ: шаг и ход — ответ.
+     * @param {string} stage имя стадии
+     * @param {object} ctx контекст прогона
+     * @returns {string} короткое описание места, или пустая строка
+     */
+    const lastPlace = (stage, context) => {
+        const reports = Array.isArray(context?.reports) ? context.reports : [];
+        const last = reports[reports.length - 1] ?? null;
+        const step = String(last?.step?.id ?? '').trim();
+        const turn = Number.isInteger(last?.turns) ? last.turns : null;
+        const tool = String(last?.last?.tool ?? '').trim();
+        const bits = [];
+        if (step) bits.push(`шаг ${step}`);
+        if (turn) bits.push(`ход ${turn}`);
+        if (tool) bits.push(`инструмент ${tool}`);
+        return bits.length ? bits.join(', ') : '';
+    };
+
     // Очередь стадий. План может изменить порядок стадий, которые делают его шаги, а план
     // известен только после стадии `plan`: очередь пересобирается, когда план прочитан.
     const queue = [...list];
@@ -611,6 +633,10 @@ export async function runPipeline({
         const budget = budgetOf(stage.name, ctx.plan);
         ctx.signal = controller.signal;
         ctx.deadline = budget > 0 ? Date.now() + budget : null;
+        // The limit of one turn: a part of the budget of the stage. A host that says nothing
+        // longer than that loses the turn, and the stage says which turn it was — instead of
+        // the whole stage standing still until the budget is over.
+        ctx.turnTimeoutMs = budget > 0 ? Math.max(60_000, Math.round(budget / 4)) : null;
         let result = null;
         try {
             const args = typeof stage.args === 'function' ? { ...ctx, ...stage.args(ctx) } : ctx;
@@ -625,10 +651,16 @@ export async function runPipeline({
             if (signal?.aborted) {
                 paused = true;
                 status = 'paused';
+                // Где именно прогон встал: стадия, шаг, ход и инструмент. «Он завис» —
+                // это не ответ, а шаг и ход — ответ.
+                const where = lastPlace(stage.name, ctx);
                 progress = recordStep(progress, { stage: stage.name, status: 'pending', report: error });
                 await writeProgress(root, config, run, progress);
                 reports.push({ name: stage.name, status: 'paused', result: null, warnings: [error] });
                 notify({ type: 'stage.done', stage: stage.name, status: 'paused', result: null });
+                warnings.push(where
+                    ? `Прогон остановлен на стадии ${stage.name}: ${where}.`
+                    : `Прогон остановлен на стадии ${stage.name}.`);
                 break;
             }
             progress = recordStep(progress, {

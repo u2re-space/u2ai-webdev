@@ -220,6 +220,31 @@ test('the styles of the project are not foreign files for the animator', () => {
     assert.deepEqual(foreignFiles('animator', ['index.html']), ['index.html']);
 });
 
+test('the architecture keeps the states of the interface', () => {
+    // Контракт между скриптами и стилями: без него стили и код узнают имена друг друга,
+    // читая файлы друг друга, и ждут друг друга.
+    const architecture = normalizeArchitecture({
+        summary: 'An app.',
+        stack: { framework: 'lure', markup: 'html', style: 'scss', script: 'javascript', iconSet: 'auto' },
+        modules: [],
+        tokens: [{ name: 'color-text', value: '#241D16', kind: 'color' }],
+        states: [
+            { name: 'is-loading', selector: '.is-loading', meaning: 'the data is on the way' },
+            { name: 'is-open', selector: '.is-open', meaning: 'the panel is open' },
+        ],
+        notes: '',
+    });
+
+    assert.equal(architecture.states.length, 2);
+    assert.equal(architecture.states[0].name, 'is-loading');
+    assert.equal(architecture.states[1].selector, '.is-open');
+    // The brief of the architect carries the contract to the roles.
+    const brief = architectureText(architecture);
+    assert.match(brief, /## The states of the interface/);
+    assert.match(brief, /is-loading/);
+    assert.match(brief, /the panel is open/);
+});
+
 test('a step of the environment leaves the plan, whoever the role is', () => {    const plan = normalizePlan({
         summary: 'A landing.',
         steps: [

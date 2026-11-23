@@ -853,6 +853,12 @@ export async function runRole({
             // them in one turn, and not one turn per file.
             parallelToolCalls: true,
             signal,
+            // The limit of the turn: a host that says nothing longer than that loses the turn,
+            // and the stage says which turn it was — instead of the whole stage standing
+            // still until the budget of the stage is over.
+            ...(Number.isSafeInteger(context?.turnTimeoutMs) && context.turnTimeoutMs > 0
+                ? { idleTimeoutMs: context.turnTimeoutMs }
+                : {}),
             // The answer comes as a stream: a model that thinks for minutes shows its
             // reasoning while it thinks, and a host that says nothing is told apart from a
             // model that is thinking. The silence of the terminal is not the hang of the run.
@@ -1309,7 +1315,25 @@ export async function runRole({
         usage: answer.usage ?? null,
         model: answer.model ?? definition.model,
         stopped,
+        /** The last thing the role did: the step, the turn and the tool it called. */
+        last: lastAction(),
     };
+
+    /**
+     * The last thing the role did: the step, the turn and the tool it called.
+     *
+     * Роль, которая умерла молча, должна сказать, где именно: прогон, который встал,
+     * обязан назвать шаг, ход и инструмент. Иначе «он завис» — это всё, что известно.
+     * @returns {{ step: string|null, turn: number, tool: string|null }}
+     */
+    function lastAction() {
+        const last = calls[calls.length - 1] ?? null;
+        return {
+            step: String(context?.step?.id ?? '').trim() || null,
+            turn: turns,
+            tool: last ? String(last.name ?? '') : null,
+        };
+    }
 }
 
 /**

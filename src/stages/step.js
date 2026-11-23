@@ -809,11 +809,27 @@ export async function runStepStage({
     runContext = null,
     signal = null,
     input = null,
+    turnTimeoutMs: turnLimit = null,
 } = {}) {
     if (!client?.responses) throw new Error('Клиент API не передан.');
     const run = id ?? runId();
     const steps = stepsForRole(plan, role);
     const warnings = [];
+
+    // The limit of one turn: a part of the budget of the stage.
+    //
+    // A turn that hangs must not eat the whole stage: the host says nothing, the turn is
+    // lost, and the stage says which turn it was — instead of standing still until the
+    // budget of the stage is over.
+    const stageName = stageForRole(role) ?? role;
+    const own = Number.isSafeInteger(config?.stages?.[stageName]?.timeoutMs)
+        ? config.stages[stageName].timeoutMs
+        : null;
+    const base = own && own > 0
+        ? own
+        : (Number.isSafeInteger(config?.limits?.stageTimeoutMs) ? config.limits.stageTimeoutMs : 0);
+    const budget = base > 0 ? base * Math.min(Math.max(steps.length, 1), 3) : 0;
+    const turnTimeoutMs = turnLimit ?? (budget > 0 ? Math.max(60_000, Math.round(budget / 4)) : null);
 
     if (!steps.length) {
         // The plan is the work: a stage whose role has no step has nothing to do. It is
@@ -851,7 +867,6 @@ export async function runStepStage({
     let usage = null;
 
     for (const step of steps) {
-        const stageName = stageForRole(role) ?? role;
         input?.setLocation?.({ stage: stageName, role, step: step.id });
         const skip = input?.takeSkip?.({ stage: stageName, step: step.id })
             || input?.takeActiveStepSkip?.(step.id)
@@ -937,6 +952,7 @@ export async function runStepStage({
                 pageUrl: runContext?.browserUrl ?? null,
                 vectorOnly: Boolean(extra?.vectorOnly),
                 scope: bounds,
+                turnTimeoutMs,
                 ...extra,
             },
             root,
@@ -1130,6 +1146,8 @@ export async function runStepStage({
             },
             turns: result.turns + (repair?.turns ?? 0),
             stopped: answer.stopped,
+            /** Where the role stopped: the step, the turn and the tool it called. */
+            last: answer.last ?? null,
         };
         if (!answer.data) {
             warnings.push(`Шаг ${step.id}: роль ${role} не вернула ответ (${roleReason(answer)}).`);

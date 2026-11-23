@@ -171,6 +171,10 @@ ${devToolsNote({
    page that stays on the loading screen is the work of the coder, not a defect of the styles: say it
    in the report and go on with the styles. A role that waits for a file of another role waits for
    ever.
+ - The states of the interface are named in the brief of the architect, and that list is the contract
+   between you and the coder: dress every state of that list, and only those states. The styles of a
+   state that the list does not name are a guess — and a guess here is a class the scripts will
+   never put on anything.
  - The page you see is not the page of the finished project. On a page with a state — an app, a PWA, a
    router — the scripts are written after the styles, so the page is empty or half-drawn while you
    work. An empty page, a loading screen and a missing script are not defects of the styles: judge

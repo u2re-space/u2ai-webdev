@@ -114,11 +114,26 @@ export function normalizeArchitecture(data = {}, config = {}, plan = null) {
         };
     }).filter((token) => token.name);
 
+    // The states of the interface: the contract between the scripts and the styles. Без него
+    // стили и скрипты узнают имена друг друга, читая файлы друг друга, — и ждут друг
+    // друга, пока один из них не написан.
+    const states = (Array.isArray(source.states) ? source.states : []).map((state) => {
+        const item = state && typeof state === 'object' ? state : {};
+        const name = String(item.name ?? '').trim();
+        if (!name) warnings.push('Состояние без имени пропущен.');
+        return {
+            name,
+            selector: String(item.selector ?? '').trim(),
+            meaning: String(item.meaning ?? '').trim(),
+        };
+    }).filter((state) => state.name);
+
     return {
         summary: String(source.summary ?? '').trim(),
         stack: normalizedStack,
         modules,
         tokens,
+        states,
         notes: String(source.notes ?? '').trim(),
         styles,
         warnings,
@@ -176,6 +191,19 @@ export function architectureText(architecture = {}) {
     if (architecture.tokens?.length) {
         out.push('## The tokens');
         for (const token of architecture.tokens) out.push(`- --${token.name}: ${token.value} (${token.kind})`);
+        out.push('');
+    }
+
+    if (architecture.states?.length) {
+        out.push('## The states of the interface');
+        out.push('- These are the states of the interface: the scripts put them on the nodes, and the');
+        out.push('  styles dress them. Both are written against this list, not against each other:');
+        out.push('  the styles do not wait for the scripts, and the scripts do not wait for the styles.');
+        for (const state of architecture.states) {
+            const selector = state.selector ? ` (${state.selector})` : '';
+            const meaning = state.meaning ? ` — ${state.meaning}` : '';
+            out.push(`- ${state.name}${selector}${meaning}`);
+        }
         out.push('');
     }
 
