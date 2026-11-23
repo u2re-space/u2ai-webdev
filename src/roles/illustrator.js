@@ -103,6 +103,15 @@ ${vectors}
   asks for a picture that fits the design, not a perfect one. If two drawings in a row did not
   satisfy you, take the better of the two and say in the report what is not right — the run
   will not wait for the tenth attempt.
+- If the program refuses the drawing, it says why — the primitive it did not understand or the
+  file it did not open. Change the drawing; do not run the same command again. A picture of the
+  project may well be a vector one: write the file as SVG (it is text, and the page shows it) and
+  convert it afterwards. The plain forms of \`magick\` that work are: a background —
+  \`["-size", "1440x810", "xc:#101828", "out.svg"]\`, a shape — \`["-size", "1440x810", "xc:none",
+  "-draw", "rectangle 40,40 400,300", "out.svg"]\`, a label — \`["-size", "1440x810", "xc:none",
+  "-draw", "text 40,120 \\"Laravel\\"", "out.svg"]\`, and a gradient — \`["-size", "1440x810",
+  "gradient:#f6c584-#cc662f", "out.svg"]\`. If you cannot draw the picture at all, say so in the
+  report and go on: a step that ends with a word beats a step that never ends.
 - The bytes of a picture are not text: \`read_file\` will not show you what the picture looks
   like. Look at it with \`magick\` (\`identify\`, or convert it and look at the reference), and do
   not read the file as lines — the noise you get that way is not the picture.

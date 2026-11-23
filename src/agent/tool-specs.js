@@ -644,7 +644,13 @@ export const TOOL_SPECS = Object.freeze({
             + 'GIF, and reads the size of a picture (`magick identify -format "%wx%h" file.png`). '
             + 'Every path of the command stays inside the working directory, and the file it writes '
             + 'lands there too. The program must be installed on the machine: without it the tool '
-            + 'says so and does nothing.',
+            + 'says so and does nothing. '
+            + 'The arguments are a JSON array of strings: `["-size", "800x600", "xc:#101828", "out.png"]`. '
+            + 'The `-draw` of a primitive needs the MVG syntax of the program: `rectangle 0,0 100,100`, '
+            + '`circle 50,50 50,10`, `fill #101828`, `stroke none`; a gradient is '
+            + '`gradient:angle` or `radial-gradient:#fff-#000` and the text is `text 10,20 "label"`. '
+            + 'If the program refuses the drawing, it says why in the answer — read it before trying '
+            + 'the same drawing again.',
         parameters: {
             type: 'object',
             properties: {

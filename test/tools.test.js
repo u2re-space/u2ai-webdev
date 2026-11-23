@@ -181,6 +181,21 @@ test('a picture is not read as text', async () => {
     assert.match(answer, /Изображение|не текст/);
 });
 
+test('the refusal of ImageMagick names the reason', async () => {
+    const { root, tools } = await workspace();
+    // Рисунок, который ImageMagick не понимает: инструмент обязан сказать, что именно
+    // не так. «Код 1» без текста оставляет роль гадать.
+    const answer = await tools.execute('magick', {
+        args: ['-size', '10x10', 'xc:none', '-draw', 'push defs\npush gradient wall linear 0,0 1,1', 'out.svg'],
+    });
+
+    assert.match(answer, /did not finish/);
+    // Текст ошибки программы — в ответе, а не только код.
+    assert.match(answer, /magick|primitive|draw/i);
+    // И подсказка: что делать дальше.
+    assert.match(answer, /do not run the same command again|Ask the program/);
+});
+
 test('the memory of the project is asked through the program', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-memory-'));
     const config = structuredClone(defaults);

@@ -2237,6 +2237,12 @@ directory or a file that is not there.
   A role that reads it as text gets noise, decides the file is broken and redraws it — for
   ever. The binary is looked at with `magick` (`identify`), and the text of a file that is
   not text is refused with that answer.
+- A refusal of ImageMagick is named in full: the message of the program says which primitive
+  or which file it refused. «Code 1» without the text leaves the role guessing, and guessing
+  is what a run does for fifteen minutes. The drawings that work are the plain ones —
+  `xc:#101828` for a background, `rectangle 0,0 100,100` for a shape, `text 10,60 "label"`
+  for a label, `gradient:#a-#b` for a gradient — and the old `push defs` syntax is not one of
+  them.
 - A call repeated twice in a row is a loop, not work, and the role is told so: the same
   arguments twice mean that the previous answer did not satisfy it, and repeating it will
   not. A file the role comes back to three times in a row is the same thing: take the best

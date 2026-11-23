@@ -1432,8 +1432,16 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                     timeoutMs: Number.isSafeInteger(Number(args.timeoutMs)) ? Number(args.timeoutMs) : 60_000,
                 });
                 if (!result.ok) {
-                    const why = result.reason ?? result.stderr?.trim().slice(0, 400) ?? '';
-                    return `ImageMagick did not finish: ${why || `the code is ${result.code}`}.`;
+                    // Текст ошибки ImageMagick — это и есть причина: «unable to open image»
+                    // или «no decode delegate». Код без текста оставляет роль гадать.
+                    const log = String(result.stderr ?? '').trim().slice(0, 600);
+                    const why = log || result.reason || `the code is ${result.code}`;
+                    const hint = log
+                        ? ' Read the message: it names the primitive or the file it refused. '
+                            + 'Change the drawing — do not run the same command again.'
+                        : ` Ask the program what it supports: run it with ["-version"] and with `
+                            + '["-list", "format"] to see the formats.';
+                    return `ImageMagick did not finish: ${why}.${hint}`;
                 }
                 const out = String(result.stdout ?? '').trim();
                 const err = String(result.stderr ?? '').trim();
