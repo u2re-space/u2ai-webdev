@@ -343,6 +343,15 @@ export const defaults = {
     scriptLanguage: 'javascript',
     /** The icon set the iconifier pulls. */
     iconSet: 'auto',
+    /**
+     * The page has a state: a SPA, a PWA, a router, an application.
+     *
+     * Такая страница рисуется скриптом: без него на экране пусто. Стили такой страницы
+     * пишутся по контракту архитектора, а скрипты состояния — по тому же контракту, и
+     * ждать друг друга они не могут. `auto` — по виду задачи и по фреймворку: `app` и
+     * `site` — страницы с состоянием, `landing` — нет.
+     */
+    stateful: 'auto',
   },
 
   // --- generation knobs ------------------------------------------------------

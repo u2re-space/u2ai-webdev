@@ -154,6 +154,20 @@ the classes and the tokens, and the code is written against them. A plan that as
 before the styles is told that the stage moved, and the code is written against a stylesheet
 that exists.
 
+A page with a state — an app, a PWA, a router — is the exception: it is drawn by the scripts,
+so without them the screen is empty. There the order is the other way round: the markup, then
+the scripts of the state, then the styles, then the rest of the code. The styles and the scripts
+of the state are written against one contract — the one the architect named — and they do not
+wait for each other. `stack.stateful` says it outright (`true` / `false`), and `auto` decides it
+by the kind of the task and by the framework: `app` and `site` have a state, `landing` does
+not, and a framework that renders itself (`react`, `vue`, `svelte`, `next`, `astro`, `lure`,
+`ssre`) has one by its nature.
+
+The browser follows the same rule: on a page with a state the styles are written before the
+scripts, so the live page is empty while the styler works. The styler is told so — an empty
+page and a missing script are not defects of the styles — and the browser is started only when
+the code is there, for the stage `sight`.
+
 The stage of the motion stands after the styles as well, and before the code: the animator
 changes the same stylesheet — the transitions of the states, the entrances and the exits — and
 the states of the page are a part of the contract the code is written against.

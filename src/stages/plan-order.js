@@ -32,6 +32,7 @@
  */
 
 import { LIVE_ROLES, stageForRole } from './roles.js';
+import { isStateful } from './stateful.js';
 
 /** Стадии, которые исполняют шаги плана. */
 export const PLAN_STAGES = Object.freeze(new Set(Object.values(LIVE_ROLES)));
@@ -212,6 +213,61 @@ export function placeStylesBeforeCode(names = []) {
 }
 
 /**
+ * Разорвать круг между стилями и скриптами.
+ *
+ * Страница с состоянием — SPA, PWA, роутер — рисуется скриптом: без него на экране
+ * пусто, и стилист, который смотрит на страницу, видит пустоту и думает, что виноваты
+ * стили. Он начинает их править, а правка не помогает: скрипта всё ещё нет.
+ *
+ * Стили не ждут скрипта: они пишутся по контракту, который назвал архитектор. Скрипт
+ * состояния — тоже не ждёт стилей: он тоже пишется по этому контракту. Ожидание нужно
+ * только между разметкой и обоими.
+ *
+ * @param {string[]} names имена стадий в порядке прогона
+ * @returns {{ names: string[], moved: boolean }}
+ * @exports
+ * @ai.hint pure
+ */
+export function breakStylesCodeCycle(names = []) {
+    const list = Array.isArray(names) ? [...names] : [];
+    const styling = list.indexOf(STYLING_STAGE);
+    const coding = list.indexOf(CODING_STAGE);
+    if (styling < 0 || coding < 0) return { names: list, moved: false };
+    // Код уже после стилей — порядок верный: ждать тут нечего.
+    if (coding > styling) return { names: list, moved: false };
+    // Код раньше стилей: он встаёт прямо перед стилистом — и больше не ждёт его.
+    list.splice(coding, 1);
+    const target = list.indexOf(STYLING_STAGE);
+    list.splice(target < 0 ? list.length : target, 0, CODING_STAGE);
+    return { names: list, moved: true };
+}
+
+/**
+ * Поставить стадию кода перед стадией стилей — для страницы с состоянием.
+ *
+ * Страница с состоянием рисуется скриптом: без него на экране пусто. Стили такой
+ * страницы пишутся по контракту архитектора, а скрипты состояния — по тому же контракту,
+ * и ждать друг друга они не могут. Код встаёт перед стилями, и круг разрывается.
+ *
+ * @param {string[]} names имена стадий в порядке прогона
+ * @returns {{ names: string[], moved: boolean }}
+ * @exports
+ * @ai.hint pure
+ */
+export function placeCodeBeforeStyles(names = []) {
+    const list = Array.isArray(names) ? [...names] : [];
+    const styling = list.indexOf(STYLING_STAGE);
+    const coding = list.indexOf(CODING_STAGE);
+    if (styling < 0 || coding < 0) return { names: list, moved: false };
+    // Код уже перед стилями — так и надо.
+    if (coding < styling) return { names: list, moved: false };
+    list.splice(coding, 1);
+    const target = list.indexOf(STYLING_STAGE);
+    list.splice(target < 0 ? list.length : target, 0, CODING_STAGE);
+    return { names: list, moved: true };
+}
+
+/**
  * Поставить стадию вектора на её место: до разметки, до сборки или в конец цепочки.
  *
  * @param {string[]} names имена стадий в порядке прогона
@@ -295,11 +351,12 @@ export function placeIconifyStage(names = []) {
  *
  * @param {object[]} stages стадии прогона в порядке реестра
  * @param {object|null} plan план прогона
+ * @param {{ config?: object|null }} [options] конфигурация прогона: вид страницы
  * @returns {{ stages: object[], warnings: string[] }}
  * @exports
  * @ai.hint pure
  */
-export function planOrder(stages = [], plan = null) {
+export function planOrder(stages = [], plan = null, { config = null } = {}) {
     const list = Array.isArray(stages) ? [...stages] : [];
     const warnings = [];
     if (list.length < 2) return { stages: list, warnings };
@@ -412,8 +469,19 @@ export function planOrder(stages = [], plan = null) {
             + 'страницы, а страница готова, когда написаны и стили, и код.');
     }
 
+    // Страница с состоянием (SPA, PWA, роутер): скрипты идут до стилей, иначе стилист
+    // смотрит на пустую страницу и начинает чинить то, что не сломано.
+    const stateful = isStateful({ config });
+    const withState = stateful
+        ? placeCodeBeforeStyles(withIcons.names)
+        : { names: withIcons.names, moved: false };
+    if (withState.moved) {
+        warnings.push('Стадия кода перенесена перед стадией стилей: страница с состоянием '
+            + 'рисуется скриптом, и без него стилист смотрит на пустую страницу.');
+    }
+
     const byName = new Map(list.map((stage) => [stage.name, stage]));
-    const ordered = withIcons.names.map((name) => byName.get(name));
+    const ordered = withState.names.map((name) => byName.get(name));
     // Стадии шагов в новом порядке — их видно в отчёте прогона.
     const steps = ordered.map((stage) => stage.name).filter((name) => planStages.has(name));
     const before = names.filter((name) => planStages.has(name));

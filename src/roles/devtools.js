@@ -52,6 +52,10 @@ export function devToolsNote({ url = null, width = null } = {}) {
     } else {
         lines.push('- No live project URL was provided. Do not guess localhost or call URL navigation without a URL;');
         lines.push('  inspect the files and build, and report if live browser inspection is necessary but unavailable.');
+        lines.push('- The page of a project with a state — an app, a PWA, a router — is drawn by the');
+        lines.push('  scripts, and the scripts are written after the styles: the page is empty while you');
+        lines.push('  work. Do not judge the styles by an empty page: judge them by the rules you wrote');
+        lines.push('  and by the reference. The page is judged in the stage of the sight, after the code.');
     }
     lines.push(
         '- Take the snapshot of the page after navigation: the identifier of an element (`uid`) comes from',

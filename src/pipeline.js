@@ -33,6 +33,7 @@ import { runId as makeRunId } from './stages/workspace.js';
 import { enabledStages } from './stages/index.js';
 import { planOrder } from './stages/plan-order.js';
 import { LIVE_ROLES, withoutForeignFiles } from './stages/roles.js';
+import { isStateful } from './stages/stateful.js';
 import { readPlan } from './stages/plan.js';
 import { readScan } from './stages/scan.js';
 import { readArchitecture } from './stages/architect.js';
@@ -342,6 +343,9 @@ export async function runPipeline({
     let progress = createProgress({ id: run, task, stages: list });
     const done = new Map((progress.stages ?? []).map((stage) => [stage.name, stage]));
     let livePage = null;
+    // Страница с состоянием: стили идут до кода, и браузер поднимается только когда
+    // скрипты уже написаны (см. стадию `styling` ниже).
+    const statefulPage = isStateful({ config });
 
     if (resume) {
         const stored = await readProgress(root, config, run);
@@ -506,7 +510,7 @@ export async function runPipeline({
             // делается после него.
             ordered = true;
             const rest = queue.slice(position);
-            const planned = planOrder(rest, ctx.plan);
+            const planned = planOrder(rest, ctx.plan, { config });
             queue.splice(position, rest.length, ...planned.stages);
             warnings.push(...planned.warnings);
         }
@@ -563,8 +567,16 @@ export async function runPipeline({
         // DevTools connects before the project is set up and therefore starts on about:blank.
         // Start the project's own dev script only when a stage is about to hand work to a
         // browser-aware role, then give that role the ready address to navigate to.
+        //
+        // На странице с состоянием (SPA, PWA, роутер) стили идут ДО кода: скриптов ещё
+        // нет, и страница, на которую поведут стилиста, пустая. Он увидит пустоту и
+        // начнёт чинить то, что не сломано, — поэтому браузер поднимается только когда
+        // скрипты уже написаны.
         const hasDevTools = (ctx.mcp ?? []).some((connection) => connection.name === 'chrome-devtools');
-        if (!livePage && hasDevTools && ['coding', 'styling'].includes(stage.name)) {
+        const browserStages = statefulPage
+            ? ['coding', 'sight']
+            : ['coding', 'styling'];
+        if (!livePage && hasDevTools && browserStages.includes(stage.name)) {
             try {
                 livePage = await ensurePage({
                     root,

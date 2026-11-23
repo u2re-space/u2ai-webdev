@@ -20,6 +20,7 @@ import {
     placeAssetsAfterVector,
     placeAssetsBeforeMarkup,
 } from '../src/stages/plan-order.js';
+import { isStateful } from '../src/stages/stateful.js';
 
 /**
  * The plan of a landing where the graphics come before the page: the page links the files
@@ -240,8 +241,44 @@ test('the assets are placed after the vector, even when the plan says the opposi
     assert.ok(warnings.some((item) => /Стадия ассетов перенесена после вектора/.test(item)));
 });
 
-test('the assets floor keeps the assets after the vector', () => {
-    const placed = placeAssetsAfterVector(['setup', 'assets', 'vector', 'markup']);
+test('a page with a state gets the code before the styles', () => {
+    // Страница с состоянием рисуется скриптом: без него стилист смотрит на пустую
+    // страницу и начинает чинить то, что не сломано.
+    const plan = {
+        steps: [
+            { id: 'markup-1', title: 'Markup', role: 'markup', dependsOn: [], files: ['index.html'] },
+            { id: 'style-1', title: 'Styles', role: 'styler', dependsOn: ['markup-1'], files: ['src/styles.scss'] },
+            { id: 'data-1', title: 'Model', role: 'coder', dependsOn: ['markup-1'], files: ['src/model.js'] },
+        ],
+    };
+
+    const plain = planOrder([...STAGES], plan, { config: { stack: { frontendFramework: 'vanilla' }, agent: { kind: 'landing' } } });
+    const plainNames = plain.stages.map((stage) => stage.name);
+    // Обычная страница: стили идут раньше кода.
+    assert.ok(plainNames.indexOf('styling') < plainNames.indexOf('coding'), plainNames.join(' → '));
+
+    const app = planOrder([...STAGES], plan, { config: { stack: { frontendFramework: 'lure' }, agent: { kind: 'app' } } });
+    const appNames = app.stages.map((stage) => stage.name);
+    // Страница с состоянием: код идёт раньше стилей.
+    assert.ok(appNames.indexOf('coding') < appNames.indexOf('styling'), appNames.join(' → '));
+    assert.ok(app.warnings.some((item) => /Стадия кода перенесена перед стадией стилей/.test(item)),
+        app.warnings.join(' | '));
+});
+
+test('the page with a state is known by the kind and by the framework', () => {
+    assert.equal(isStateful({ config: { agent: { kind: 'app' } } }), true);
+    assert.equal(isStateful({ config: { agent: { kind: 'site' } } }), true);
+    assert.equal(isStateful({ config: { agent: { kind: 'landing' } } }), false);
+    assert.equal(isStateful({ config: { agent: { kind: 'component' } } }), false);
+    // Фреймворк, который рисует сам, — страница с состоянием по природе.
+    assert.equal(isStateful({ config: { stack: { frontendFramework: 'react' } } }), true);
+    assert.equal(isStateful({ config: { stack: { frontendFramework: 'vanilla' } } }), false);
+    // Config says it outright.
+    assert.equal(isStateful({ config: { stack: { stateful: true }, agent: { kind: 'landing' } } }), true);
+    assert.equal(isStateful({ config: { stack: { stateful: false }, agent: { kind: 'app' } } }), false);
+});
+
+test('the assets floor keeps the assets after the vector', () => {    const placed = placeAssetsAfterVector(['setup', 'assets', 'vector', 'markup']);
     assert.equal(placed.moved, true);
     assert.ok(placed.names.indexOf('assets') > placed.names.indexOf('vector'));
 

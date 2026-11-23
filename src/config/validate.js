@@ -226,6 +226,9 @@ function validateStack(stack, fail) {
   if (!ENUMS.styleLanguages.includes(stack.styleLanguage)) fail(`${where}.styleLanguage: ${ENUMS.styleLanguages.join(' | ')}`);
   if (!ENUMS.scriptLanguages.includes(stack.scriptLanguage)) fail(`${where}.scriptLanguage: ${ENUMS.scriptLanguages.join(' | ')}`);
   if (!ENUMS.iconSets.includes(stack.iconSet)) fail(`${where}.iconSet: ${ENUMS.iconSets.join(' | ')}`);
+  if (![true, false, 'auto'].includes(stack.stateful)) {
+    fail(`${where}.stateful: true | false | auto`);
+  }
 }
 
 /**

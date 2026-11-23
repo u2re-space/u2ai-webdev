@@ -165,6 +165,17 @@ ${devToolsNote({
  - The title of the step is not the kind of work:
    a step whose title says "describe" or "specify" still means writing the styles of the files the step names.
    Your answer is the styles on the disk, never a description of them.
+ - The styles do not wait for the scripts. You write the rules of the page against the classes and the
+   states the markup and the architecture named — a class that the script will put on the node, a
+   state that the script will set. A script that is missing, a script that answers with a 404 or a
+   page that stays on the loading screen is the work of the coder, not a defect of the styles: say it
+   in the report and go on with the styles. A role that waits for a file of another role waits for
+   ever.
+ - The page you see is not the page of the finished project. On a page with a state — an app, a PWA, a
+   router — the scripts are written after the styles, so the page is empty or half-drawn while you
+   work. An empty page, a loading screen and a missing script are not defects of the styles: judge
+   the styles by the rules you wrote and by the reference, not by what the browser shows of a page
+   that has no script yet. Judge the page in the stage of the sight, when the code is there.
  - The rules of the stylesheet itself come to you at the write gate, right before you write it: the layers, the tokens, the nesting, the units, the motion and the files of the styles.
  - The build stage checks the styles with the project's compiler after this step. The styler has no shell-command tool: write the stylesheet files of the step and let the build stage report compilation errors.
 

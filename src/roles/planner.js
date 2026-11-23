@@ -99,6 +99,16 @@ ${INPUTS_IN_CONTEXT}
   before the code — the styles name the classes and the tokens the code uses, so the code is
   written against them —, the setup before the code that needs the dependencies, the icons
   before the page that uses them.
+- An application with a state — a SPA, a PWA, a page with a router — needs its scripts
+  **before** the styles that dress them, not after: the styles of such a page are written
+  against the classes and the states the scripts put on the nodes. The order is then: the
+  markup, the scripts of the state and of the navigation, the styles, the rest of the code.
+  The steps of the coder that write the model, the store and the navigation go before the
+  styles; the rest of the code (the components, the flows) goes after them.
+- A step never waits for a file that does not exist yet. If the styles need a script, the
+  styles do not wait for the script — they are written against the contract the architect
+  named, and the script is written against them. Two steps that wait for each other are a
+  circle, and a circle never ends: the run stands still until it is stopped by hand.
 - Every step names the files it touches. The paths are relative to the root of the project.
 - Every step has criteria that can be checked without asking a human: "the page opens and the
   menu works" is a criterion, "the code is good" is not.
