@@ -407,6 +407,18 @@ export async function runPipeline({
         ? config.limits.stageTimeoutMs
         : 0;
 
+    // The stages that are not the page: the crops of the reference, the vector graphics, the
+    // assets, the motion, the icons and the look at the page. Their failure does not stop the
+    // run — the files that landed on the disk stay, and the review says what is missing. The
+    // stages of the page itself (the markup, the styles, the code, the build) still stop it:
+    // the rest of the chain would work against a page that does not exist. The tail of the
+    // run (the review, the audit, the lessons) is non-fatal as well: the project is written,
+    // and a run without a verdict is partial, not lost.
+    const NON_FATAL_STAGES = new Set([
+        'pictures', 'vector', 'assets', 'animation', 'iconify', 'sight',
+        'review', 'audit', 'learn',
+    ]);
+
     /**
      * The budget of one stage. A stage may ask for a budget of its own: the review with a
      * repair reads every step, repairs what it finds and reads the repaired steps again,
@@ -574,11 +586,21 @@ export async function runPipeline({
             });
             await writeProgress(root, config, run, progress);
             reports.push({ name: stage.name, status: 'failed', result: null, warnings: [error] });
-            status = 'failed';
             // The failed stage goes into the context of the run: the next run reads what
             // happened and does not look for the answer again.
             await runContext?.stage?.(stage.name, 'failed', error);
-            break;
+            if (!NON_FATAL_STAGES.has(stage.name)) {
+                status = 'failed';
+                break;
+            }
+            // The decorations are not the page: картинка, иконка или анимация, которая не
+            // дорисовалась, не отменяет разметку, стили и код. Файлы, что успели лечь на
+            // диск, остаются, прогон идёт дальше, а ревью говорит, чего не хватает.
+            status = 'partial';
+            warnings.push(`Стадия ${stage.name} не закончилась (${error}) — прогон идёт дальше: `
+                + 'то, что успело лечь на диск, остаётся.');
+            notify({ type: 'stage.done', stage: stage.name, status: 'failed', result: null });
+            continue;
         } finally {
             signal?.removeEventListener('abort', onAbort);
         }

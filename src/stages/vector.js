@@ -9,13 +9,15 @@
  *   A broken SVG is reported, not fixed silently: a picture that does not open is a fact the
  *   user has to know.
  *
+/**
  * @depends roles/index, stages/architect, stages/step, vector/svg, agent/fs-tools
  * @usedBy stages/index, pipeline
- * @exports polishSvgFiles, preparedVectorPlan, role, vectorStage
+ * @exports polishSvgFiles, preparedVectorPlan, splitVectorSteps, role, vectorStage
  * @ai.tags stages, vector, svg
  * @ai.hint io
  * @ai.hint legacy-0.2
  * @changed 2026-11-13 Ported from the monolith: вектор правится текстом.
+ * @changed 2026-11-23 Один рисунок — один шаг: ход модели не держит три SVG сразу.
  */
 
 import path from 'node:path';
@@ -28,6 +30,49 @@ import { optimizeSvg, validateSvg } from '../vector/svg.js';
 
 /** Роль, чьи шаги исполняет эта стадия. */
 export const role = 'editor';
+
+/**
+ * Шаги редактора — по одному рисунку на шаг.
+ *
+ * Три SVG в одном шаге — это один ход модели: она рисует все три разом, и такой ход
+ * дольше бюджета стадии — прогон падает на картинках, которые уже на диске. По рисунку
+ * на шаг — и ход, и бюджет делятся на части, а нарисованное остаётся, даже когда
+ * бюджет кончился.
+ *
+ * @param {object|null} plan
+ * @returns {object} план с шагами редактора, поделёнными по рисункам
+ * @exports
+ * @ai.hint pure
+ */
+export function splitVectorSteps(plan = null) {
+    const steps = Array.isArray(plan?.steps) ? plan.steps : [];
+    if (!steps.length) return plan;
+    const out = [];
+    for (const step of steps) {
+        const who = String(step?.role ?? '').trim().toLowerCase();
+        if (who !== 'editor') {
+            out.push(step);
+            continue;
+        }
+        const files = Array.isArray(step?.files) ? step.files : [];
+        const vectors = files.filter((file) => String(file ?? '').trim().toLowerCase().endsWith('.svg'));
+        if (vectors.length < 2) {
+            out.push(step);
+            continue;
+        }
+        const rest = files.filter((file) => !vectors.includes(file));
+        vectors.forEach((file, index) => {
+            const name = path.posix.basename(String(file).replace(/\\/g, '/'));
+            out.push({
+                ...step,
+                id: `${step.id}-${index + 1}`,
+                title: `${step.title} — ${name}`,
+                files: index === 0 ? [...rest, file] : [file],
+            });
+        });
+    }
+    return { ...plan, steps: out };
+}
 
 /**
  * Check and tidy the SVG files of a step.
@@ -169,13 +214,15 @@ export async function vectorStage({
     // Картинка, вырезанная из референса, — это и есть ассет: нарисованный по памяти SVG
     // того же имени не выполняется.
     const prepared = preparedVectorPlan(plan, inputs?.pictures ?? []);
+    // Один рисунок — один шаг: ход модели не держит три SVG сразу.
+    const work = splitVectorSteps(prepared.plan);
     const result = await runStepStage({
         client,
         config,
         root,
         task,
         role: 'editor',
-        plan: prepared.plan,
+        plan: work,
         brief,
         inputs,
         runId: id,

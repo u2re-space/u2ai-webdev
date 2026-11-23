@@ -14,7 +14,7 @@ import path from 'node:path';
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 
 import { svgFileName, parseSvg, validateSvg, optimizeSvg, svgSummary } from '../src/vector/svg.js';
-import { polishSvgFiles, preparedVectorPlan, vectorStage } from '../src/stages/vector.js';
+import { polishSvgFiles, preparedVectorPlan, splitVectorSteps, vectorStage } from '../src/stages/vector.js';
 import { iconifyStage, iconFiles } from '../src/stages/iconify.js';
 
 const SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">\n  <path d="M4 4h16v16H4z" fill="none"/>\n</svg>\n';
@@ -173,6 +173,43 @@ test('the plan of the vector leaves out the SVG of a prepared picture', () => {
     // Шаг, у которого не осталось файлов, выпадает целиком; остальные файлы шага остаются.
     assert.deepEqual(prepared.plan.steps.map((step) => step.id), ['vector-2', 'markup-1']);
     assert.deepEqual(prepared.plan.steps[0].files, ['assets/ornament.svg']);
+});
+
+test('one graphic is one step: the model does not draw three SVG in one turn', () => {
+    const plan = {
+        steps: [
+            {
+                id: 'graphics',
+                title: 'Graphics',
+                role: 'editor',
+                files: ['public/images/mark.svg', 'public/images/stack.svg', 'public/images/dashboard.svg'],
+                criteria: ['drawn'],
+            },
+            { id: 'markup-1', role: 'markup', files: ['index.html'] },
+        ],
+    };
+
+    const split = splitVectorSteps(plan);
+    const steps = split.steps;
+    assert.equal(steps.length, 4);
+    // По рисунку на шаг: ход модели держит один SVG, а не три.
+    assert.deepEqual(steps.slice(0, 3).map((step) => step.files), [
+        ['public/images/mark.svg'],
+        ['public/images/stack.svg'],
+        ['public/images/dashboard.svg'],
+    ]);
+    assert.deepEqual(steps.slice(0, 3).map((step) => step.id), ['graphics-1', 'graphics-2', 'graphics-3']);
+    // Шаг чужой роли не тронут.
+    assert.equal(steps[3].id, 'markup-1');
+    // Критерий шага остаётся у каждой части.
+    assert.deepEqual(steps[1].criteria, ['drawn']);
+});
+
+test('a step with one graphic is not split', () => {
+    const plan = { steps: [{ id: 'art', role: 'editor', files: ['assets/logo.svg'] }] };
+    assert.equal(splitVectorSteps(plan).steps.length, 1);
+    assert.equal(splitVectorSteps(plan).steps[0].id, 'art');
+    assert.equal(splitVectorSteps(null), null);
 });
 
 test('the stage of the vector does not draw a picture that is already prepared', async () => {

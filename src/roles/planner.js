@@ -74,6 +74,9 @@ ${INPUTS_IN_CONTEXT}
   for a measurement sheet or a drawn copy of a visible logo or photograph.
 - One step is one role's work. The steps are small enough to be done in one sitting and large
   enough to be worth a step. A step that needs two roles is two steps.
+- One graphic is one step of the \`editor\`: the model draws one picture at a time, and a step
+  with three drawings is a turn longer than the budget of the stage. Three graphics are three
+  steps.
 - The role of a step is one of: ${LIVE_ROLE_NAMES.map((name) => `\`${name}\``).join(', ')}. The
   stages of the run take the steps of these roles and of no others, so a step with any other
   role is never done. \`markup\` writes the markup, \`coder\` writes the scripts and the modules,

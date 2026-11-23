@@ -415,7 +415,10 @@ export const defaults = {
     // The stage of the sight looks at the page and asks the styler to fix it, and it does
     // that twice: it needs more time than the stages that write the files.
     sight: { enabled: true, maxTurns: 16, timeoutMs: 30 * 60_000 },
-    vector: { enabled: true, maxTurns: 8, timeoutMs: null },
+    // The vector graphics are drawn as text, and a drawing takes time: the editor draws one
+    // graphic per step, but a step is still a long turn. The stage asks for a budget of its
+    // own, and the run goes on even when the budget is over.
+    vector: { enabled: true, maxTurns: 8, timeoutMs: 30 * 60_000 },
     iconify: { enabled: true, maxTurns: 8, timeoutMs: null },
     // The review judges every step of the plan, repairs what it finds and judges the
     // repaired steps again. That is more work than the stages that write the files, and

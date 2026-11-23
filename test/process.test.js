@@ -467,7 +467,7 @@ test('the pipeline records an operator stage skip without marking it completed',
     assert.equal(result.status, 'partial');
 });
 
-test('a failed vector stage does not claim completion or run dependent stages', async () => {
+test('a failed vector stage does not claim completion and does not stop the run', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-optional-vector-'));
     const order = [];
     const stages = [
@@ -483,8 +483,10 @@ test('a failed vector stage does not claim completion or run dependent stages', 
         runId: 'run-optional-vector',
         stages,
     });
-    assert.equal(result.status, 'failed');
-    assert.deepEqual(order, ['coding', 'vector']);
+    // Графика — не страница: провал стадии не отменяет страницу, прогон идёт дальше, а
+    // ревью говорит, чего не хватает. Стадия не притворяется сделанной.
+    assert.equal(result.status, 'partial');
+    assert.deepEqual(order, ['coding', 'vector', 'iconify']);
     assert.equal(result.progress.stages[1].status, 'failed');
 });
 
@@ -747,6 +749,52 @@ test('the budget of a stage stops the work of the stage', async () => {
     // The work stopped with the budget: the stage did not finish its work afterwards.
     assert.equal(aborted, true);
     assert.equal(written, false);
+});
+
+test('a decorative stage that fails does not stop the run', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-decorative-'));
+    const stages = [
+        // The vector graphics are not the page: the run goes on, and the files that landed
+        // on the disk stay.
+        { name: 'vector', title: 'Vector', dependsOn: [], run: () => new Promise(() => {}) },
+        { name: 'markup', title: 'Markup', dependsOn: ['vector'], run: async () => ({ ok: true }) },
+    ];
+
+    const result = await runPipeline({
+        client: { responses: { create: async () => ({ output: [] }) } },
+        config: { ...CONFIG, limits: { ...CONFIG.limits, stageTimeoutMs: 50 } },
+        root,
+        task: 'Make a landing.',
+        runId: 'run-1',
+        stages,
+    });
+
+    // The run is not over: the page is still built.
+    assert.equal(result.status, 'partial');
+    assert.equal(result.stages.length, 2);
+    assert.equal(result.stages[0].status, 'failed');
+    assert.equal(result.stages[1].status, 'completed');
+    assert.ok(result.warnings.some((item) => /прогон идёт дальше/.test(item)), result.warnings.join(' | '));
+});
+
+test('a stage of the page itself still stops the run', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-core-fail-'));
+    const stages = [
+        { name: 'markup', title: 'Markup', dependsOn: [], run: () => new Promise(() => {}) },
+        { name: 'styling', title: 'Styles', dependsOn: ['markup'], run: async () => ({ ok: true }) },
+    ];
+
+    const result = await runPipeline({
+        client: { responses: { create: async () => ({ output: [] }) } },
+        config: { ...CONFIG, limits: { ...CONFIG.limits, stageTimeoutMs: 50 } },
+        root,
+        task: 'Make a landing.',
+        runId: 'run-1',
+        stages,
+    });
+
+    assert.equal(result.status, 'failed');
+    assert.equal(result.stages.length, 1);
 });
 
 test('a stage may ask for a budget of its own', async () => {    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-timeout-own-'));

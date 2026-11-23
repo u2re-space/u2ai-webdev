@@ -2153,7 +2153,16 @@ directory or a file that is not there.
 - A run that is interrupted keeps its progress on the disk and can be continued with `--resume`.
 - A stage that does not come back in `limits.stageTimeoutMs` (15 minutes by default) fails with
   the name of the stage: a run that hangs says so instead of waiting for ever. A stage that needs
-  more time asks for it: `stages.<id>.timeoutMs` wins over the budget of the run.
+  more time asks for it: `stages.<id>.timeoutMs` wins over the budget of the run. The vector
+  graphics ask for half an hour: a drawing is a long turn.
+- A stage that fails does not always stop the run. The stages of the page itself — the markup,
+  the styles, the code, the build — stop it: the rest of the chain would work against a page
+  that does not exist. The decorations — the crops of the reference, the vector graphics, the
+  assets, the motion, the icons, the look at the page — do not: the files that landed on the
+  disk stay, the run goes on, and the review says what is missing. The run ends as `partial`.
+- The vector graphics are drawn one graphic per step: a step with three drawings is a turn
+  longer than the budget of the stage, and the budget kills the stage after the pictures are
+  already on the disk.
 - A crash outside the command — an unhandled rejection, an uncaught exception — is printed and
   leaves the exit code of the failure: a silent death is the hardest kind of failure to read.
 
