@@ -117,6 +117,17 @@ export const DELEGATION_GATES = Object.freeze([
         requires: Object.freeze(['iconify']),
         reason: 'стили пишутся раньше кода и задают его контракт, а иконки — на своей стадии',
     }),
+    Object.freeze({
+        // Кодер не отдаёт разметку маркупу: разметка уже написана, и её правка после кода
+        // ломает то, что код уже опирается. Кодер, что меняет разметку, меняет её сам —
+        // своей правкой, а не через чужую роль.
+        from: 'coder',
+        stage: 'coding',
+        targets: Object.freeze(['markup']),
+        forbids: true,
+        reason: 'разметка уже написана, и её правка после кода ломает то, на что код опирается — '
+            + 'правьте её сами',
+    }),
 ]);
 
 /**
@@ -148,6 +159,10 @@ export function delegationGate({ from = null, stage = null, to = null, startedSt
         if (gate.from !== source) continue;
         if (gate.stage && where && gate.stage !== where) continue;
         if (!gate.targets.includes(target)) continue;
+        // Запрет: рука закрыта навсегда, а не до стадии.
+        if (gate.forbids) {
+            return { from: source, to: target, missing: [], reason: gate.reason };
+        }
         const missing = gate.requires.filter((name) => !started.has(name));
         if (!missing.length) return null;
         return { from: source, to: target, missing, reason: gate.reason };
@@ -169,6 +184,14 @@ export function delegationGateNote({ from = null, stage = null, startedStages = 
     for (const gate of DELEGATION_GATES) {
         if (gate.from !== source) continue;
         if (gate.stage && where && gate.stage !== where) continue;
+        // Запрет: рука закрыта навсегда, а не до стадии.
+        if (gate.forbids) {
+            return [
+                '## The hand-over is closed',
+                `Do not delegate to ${gate.targets.join(', ')}: ${gate.reason}.`,
+                'Write the files of your own step yourself and leave the rest to the stages that own them.',
+            ].join('\n');
+        }
         const missing = gate.requires.filter((name) => !started.has(name));
         if (!missing.length) continue;
         return [

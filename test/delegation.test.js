@@ -299,6 +299,23 @@ test('the door of the coder stays closed until the stage after the code started'
     }), null);
 });
 
+test('the coder never hands the work of the markup over', () => {
+    // Разметка уже написана, когда пишется код: её правка после кода ломает то, на что
+    // код опирается. Кодер, что меняет разметку, меняет её сам.
+    const closed = delegationGate({ from: 'coder', stage: 'coding', to: 'markup', startedStages: ['coding', 'styling', 'iconify'] });
+    assert.ok(closed, 'кодер передал разметку маркупу');
+    assert.match(closed.reason, /разметка уже написана/);
+    // Рука закрыта навсегда: никакая стадия её не открывает.
+    assert.ok(delegationGate({ from: 'coder', stage: 'coding', to: 'markup', startedStages: [] }));
+    // Кодеру стилист и иконщик по-прежнему доступны — по прежним правилам.
+    assert.equal(delegationGate({
+        from: 'coder',
+        stage: 'coding',
+        to: 'styler',
+        startedStages: ['styling', 'coding', 'iconify'],
+    }), null);
+});
+
 test('the markup is told that the hand-over is closed', () => {
     const note = delegationGateNote({ from: 'markup', stage: 'markup', startedStages: [] });
     assert.match(note, /closed for now/);

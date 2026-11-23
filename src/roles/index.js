@@ -693,6 +693,10 @@ export async function runRole({
         // the bridge works.
         notify,
         writeFiles: context?.delegated ? (context?.step?.files ?? []) : null,
+        // Границы шага: файлы, что принадлежат другим шагам, роль не пишет — ни своим
+        // инструментом, ни ответом. Таблица стилей — работа стилиста, и кодер, который
+        // правит её, портит чужую работу.
+        scope: context?.scope ?? null,
         signal,
         askUser: inputChannel?.askUser ? (question) => inputChannel.askUser(question) : null,
     });

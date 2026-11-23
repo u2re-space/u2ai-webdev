@@ -738,7 +738,15 @@ contract between the two roles. The production build belongs to the stage `build
 after the styles and after the code, so the coder does not chase a build that fails because the
 styles are not there yet. The hand-over knows the same boundaries: the markup may not hand the
 work to the coder, the styler or the editor before their stages have started, and the coder may
-not hand the work to the styler or the iconifier while the code is written.
+not hand the work to the styler or the iconifier while the code is written. The coder never
+hands the work to the markup at all: the markup is written before the code, and a change of it
+after the code breaks what the code stands on.
+
+The boundaries of a step hold for the tools of the role too, not only for its answer: a role
+that writes a file of another step with its own tool is refused, and the file of the styler
+stays the file of the styler. A coder that edits the stylesheet of the project changes the
+contract the code was written against — and the run that lets it through is how a working page
+becomes a broken one.
 
 The vector editor has no shell: the graphics are text, and the stage itself parses and tidies
 every SVG the editor writes. A command line there would only let the role hunt for a validator
@@ -2171,6 +2179,13 @@ directory or a file that is not there.
 - The vector graphics are drawn one graphic per step: a step with three drawings is a turn
   longer than the budget of the stage, and the budget kills the stage after the pictures are
   already on the disk.
+- The files a role wrote with its own tool are checked like the files of its answer: they are
+  on the disk, and a file that does not compile is a broken file whatever wrote it.
+- The production build is not the work of a role: `npm run build` and `vite build` are
+  refused, because the build is the work of the stage `build` — it runs after the styles and
+  after the code, and a build that fails because the styles are not there yet says nothing
+  about the code. A loop of build-and-fix over the whole project is how a run turns a working
+  page into a broken one.
 - A picture is checked like a script: the bytes of the file must be the format of its name.
   An SVG written into a `.webp` is not a picture the browser shows, and the check of the step
   says so by name. The tool `write_file` refuses such a write at all and tells the role how

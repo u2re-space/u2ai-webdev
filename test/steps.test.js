@@ -52,9 +52,30 @@ function fakeClient(answers = []) {
 }
 
 /**
+ * A raw call of a tool: the model writes a file with its own tool.
+ * @param {string} name the name of the tool
+ * @param {object} args the arguments of the call
+ * @returns {object}
+ * @ai.hint pure
+ */
+function toolAnswer(name, args = {}) {
+    return {
+        id: 'resp-1',
+        status: 'completed',
+        model: 'test-model',
+        output: [{
+            type: 'function_call',
+            id: 'fc-1',
+            call_id: `c-${Math.random().toString(36).slice(2)}`,
+            name,
+            arguments: JSON.stringify(args),
+        }],
+    };
+}
+
+/**
  * A raw answer of the model: the call of the schema with its arguments.
- * @param {string} name
- * @param {object} args
+ * @param {string} name * @param {object} args
  * @returns {object}
  * @ai.hint pure
  */
@@ -923,6 +944,43 @@ test('the file the role wrote beside the files of the step is checked too', asyn
 
     assert.equal(result.ok, false);
     assert.ok(result.steps[0].syntax.checked.includes('src/helper.js'));
+    assert.equal(result.steps[0].syntax.errors.length, 1);
+});
+
+test('the file the role wrote with its own tool is checked too', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-steps-own-'));
+    // Роль написала файл своим инструментом (`write_file`), и он не компилируется. Такой
+    // файл раньше не проверялся вовсе: он лежит в `own`, а не в `written`.
+    const broken = 'const max = 1;\nconst max = 2;\n';
+    const client = fakeClient([
+        toolAnswer('write_ready', {}),
+        toolAnswer('write_file', { path: 'src/main.js', content: broken }),
+        schemaAnswer('code', {
+            summary: 'The entry.',
+            files: [{ path: 'src/main.js', content: broken, language: 'js' }],
+            commands: [],
+            notes: '',
+        }),
+        schemaAnswer('code', {
+            summary: 'The entry.',
+            files: [{ path: 'src/main.js', content: broken, language: 'js' }],
+            commands: [],
+            notes: '',
+        }),
+    ]);
+
+    const result = await runStepStage({
+        client,
+        config: { output: { work: './.tmp' }, stages: { coder: { maxTurns: 4 } } },
+        root,
+        task: 'Make a landing.',
+        role: 'coder',
+        plan: PLAN,
+        runId: 'run-1',
+    });
+
+    assert.equal(result.ok, false);
+    assert.ok(result.steps[0].syntax.checked.includes('src/main.js'));
     assert.equal(result.steps[0].syntax.errors.length, 1);
 });
 

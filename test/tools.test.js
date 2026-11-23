@@ -124,6 +124,40 @@ test('a picture is not written as text', async () => {
     assert.match(written, /Записан/);
 });
 
+test('the production build is not the work of a role', async () => {
+    const { root, tools } = await workspace();
+    // Сборка — работа стадии `build`: она идёт после стилей и кода, и цикл
+    // «собрал — упало — поправил» чинит не свой файл, а чужой.
+    const answer = await tools.execute('run_command', { command: 'npm', args: ['run', 'build'] });
+    assert.match(answer, /не запущена/);
+    assert.match(answer, /стадии `build`/);
+
+    // Тесты проекта — можно: они проверяют твой код.
+    const tests = await tools.execute('run_command', { command: 'npm', args: ['test'] });
+    assert.doesNotMatch(tests, /не запущена/);
+});
+
+test('a role cannot write a file of another step with its own tool', async () => {
+    const { root } = await workspace();
+    // Границы шага: `src/styles.scss` принадлежит шагу стилей, и кодер его не трогает.
+    const scoped = createToolset({
+        root,
+        config: structuredClone(defaults),
+        role: 'coder',
+        scope: { paths: ['src/main.js'], owned: ['src/styles.scss'] },
+    });
+
+    // Отказ приходит исключением — цикл роли превращает его в текст ответа.
+    await assert.rejects(
+        () => scoped.execute('write_file', { path: 'src/styles.scss', content: 'body { color: red; }' }),
+        /принадлежит другому шагу/,
+    );
+
+    // Свой файл шага — можно.
+    const own = await scoped.execute('write_file', { path: 'src/main.js', content: 'export const x = 1;\n' });
+    assert.match(own, /Записан/);
+});
+
 test('the memory of the project is asked through the program', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-memory-'));
     const config = structuredClone(defaults);

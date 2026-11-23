@@ -66,6 +66,11 @@ export const CODE_RULES = [CORE, HTML, `#### The boundaries of the work
   styles and after the code. A build that fails because the styles are not there yet is not
   your defect: do not chase it and do not start a loop of build-and-fix. The harness compiles
   the files of your step; run the tests or the lint of the project when they exist.
+- One build is enough. Do not run the production build at all: it is the work of the stage
+  \`build\`, and a build that fails because the styles are not there yet says nothing about
+  your code. Run the tests of the project (\`npm test\`) or the lint — and if a test fails
+  because of your own file, fix that file and stop there. A loop of build-and-fix over the
+  whole project is how a run turns a working page into a broken one.
 - The work is checked by the compiler, not by the eye: read what the compiler says about
   your own files and fix that. Never judge the syntax of the code by reading it.
 - Give the program its arguments: \`run_command\` takes the program and the arguments as a JSON

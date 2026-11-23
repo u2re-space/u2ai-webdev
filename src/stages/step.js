@@ -41,7 +41,7 @@ import { listStyleFiles } from './build.js';
 import { projectFiles } from './project-files.js';
 import { runId, runFile, writeJsonFile, readJsonFile } from './workspace.js';
 import { stageForRole } from './roles.js';
-
+import { stepScope as scopeOf, inScope as inScopeOf } from './scope.js';
 /** The directory inside the run that holds the reports of the steps. */
 export const STEPS_DIR = 'steps';
 
@@ -366,7 +366,7 @@ export async function applyFiles({
             warnings.push(`Файл ${rel} не тронут: это не текстовый файл.`);
             continue;
         }
-        if (!inScope(rel, scope)) {
+        if (!inScopeOf(rel, scope)) {
             // The file is not the work of this step: it belongs to another step, and the
             // answer of the role does not get to write over it.
             skipped.push(rel);
@@ -524,23 +524,23 @@ export async function missingFiles(root, files = []) {
  * @exports
  * @ai.hint pure
  */
+/**
+ * The boundaries of the files of a step: what the step may write.
+ *
+ * The plan divides the work of the project between the steps, and every step owns its
+ * files. The boundaries of a step are therefore the files it named and the files that no
+ * other step of the plan named. A file that another step owns is not written: the answer of a
+ * role does not take the work of another step away, and the project keeps one version of
+ * itself.
+ *
+ * @param {object} step
+ * @param {object|null} [plan] the plan of the run
+ * @returns {{ paths: string[], owned: string[] }}
+ * @exports
+ * @ai.hint pure
+ */
 export function stepScope(step, plan = null) {
-    const paths = [];
-    const owned = [];
-    const id = String(step?.id ?? '').trim();
-    for (const file of Array.isArray(step?.files) ? step.files : []) {
-        const rel = String(file ?? '').trim().replace(/\\/g, '/');
-        if (rel) paths.push(rel);
-    }
-    const steps = Array.isArray(plan?.steps) ? plan.steps : [];
-    for (const other of steps) {
-        if (String(other?.id ?? '').trim() === id) continue;
-        for (const file of Array.isArray(other?.files) ? other.files : []) {
-            const rel = String(file ?? '').trim().replace(/\\/g, '/');
-            if (rel) owned.push(rel);
-        }
-    }
-    return { paths, owned };
+    return scopeOf(step, plan);
 }
 
 /**
@@ -549,29 +549,14 @@ export function stepScope(step, plan = null) {
  * The file of this step is its own — the step named it, or it lies in a directory the step
  * named. The file of another step is not: that file is the work of that step, and the
  * answer of this role does not get to write over it.
+ *
  * @param {string} rel
  * @param {{ paths?: string[], owned?: string[] }|null} scope
  * @returns {boolean}
  * @exports
  * @ai.hint pure
  */
-export function inScope(rel, scope) {
-    if (!scope) return true;
-    const name = String(rel ?? '').trim().replace(/\\/g, '/');
-    if (!name) return false;
-    const owns = (item) => {
-        const own = String(item ?? '').replace(/\\/g, '/').replace(/\/+$/, '');
-        if (!own) return false;
-        return name === own || name.startsWith(`${own}/`);
-    };
-    for (const item of Array.isArray(scope.paths) ? scope.paths : []) {
-        if (owns(item)) return true;
-    }
-    for (const item of Array.isArray(scope.owned) ? scope.owned : []) {
-        if (owns(item)) return false;
-    }
-    return true;
-}
+export { inScopeOf as inScope };
 
 /**
  * The files the role sees before it writes.
@@ -932,6 +917,10 @@ export async function runStepStage({
             ].join('\n'));
         }
 
+        // Границы шага: файлы этого шага и файлы чужих шагов. Роль получает их вместе с
+        // шагом, и её инструменты уважают их так же, как ответ роли.
+        const bounds = { ...scopeOf(step, plan), step: String(step?.id ?? '') };
+
         const result = await runRole({
             client,
             config,
@@ -947,6 +936,7 @@ export async function runStepStage({
                 referenceSizes: reference.sizes,
                 pageUrl: runContext?.browserUrl ?? null,
                 vectorOnly: Boolean(extra?.vectorOnly),
+                scope: bounds,
                 ...extra,
             },
             root,
@@ -988,9 +978,6 @@ export async function runStepStage({
         // The disk is the truth for them: the answer of the role may carry an older text of
         // the same file, and putting it over the disk would undo the work.
         const own = filesOfRole(result);
-        // The boundaries of the step: the answer of the role writes the files of the step
-        // and the files of the same kind, and nothing else.
-        const bounds = { ...stepScope(step, plan), step: String(step?.id ?? '') };
         let applied = { written: [], skipped: [], replaced: [], failed: [], own, warnings: [] };
         if (apply) {
             applied = { ...await applyFiles({ root, files, owned: own, scope: bounds }), own };
@@ -1008,10 +995,13 @@ export async function runStepStage({
         // The files of the step have to compile. The compiler of the platform sees the lost
         // quote and the stray backslash that the reader of the code does not see. The files
         // the role wrote beside the ones of the step are checked too: a broken stylesheet
-        // that nobody named is still broken.
+        // that nobody named is still broken. The files the role wrote with its own tool are
+        // checked as well — они лежат в `own`, а не в `written`, и раньше компилятор их
+        // не видел вовсе: сломанный файл проходил шаг молча.
         const checkedFiles = [...new Set([
             ...(step.files ?? []),
             ...(apply ? applied.written : files.map((file) => String(file?.path ?? '').trim())),
+            ...(apply ? applied.own : []),
         ])].filter(Boolean);
         let syntax = await checkFiles(root, checkedFiles, { env });
         // The stylesheets that use a file that was never written. The entry point of the

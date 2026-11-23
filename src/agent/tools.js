@@ -12,7 +12,8 @@
  *          agent/bridges, agent/tool-specs, agent/paths, agent/run-map, agent/cli-family,
  *          inputs/measured
  * @exports createToolset, toolSpecs, enabledToolNames, mcpToolEntries, htmlToText,
- *          BLOCKING_COMMANDS, WINDOWS_EXTENSIONS, quoteWindowsArg, findProgram, killTree
+ *          BLOCKING_COMMANDS, PRODUCTION_BUILDS, WINDOWS_EXTENSIONS, quoteWindowsArg,
+ *          findProgram, killTree
  * @ai.tags tools, agent
  * @ai.hint keep
  * @changed 2026-11-15 Карта прогона и кэш контекста отвечают на чтения и поиск.
@@ -35,6 +36,7 @@ import { toolForName } from './tool-pointer.js';
 import { guidanceSearchText, guidanceRetrieveText, GUIDANCE_SOURCE } from './guidance.js';
 import { runProgram as runProgramIn } from './programs.js';
 import { pictureExtension, contentLooksLikePicture } from './syntax.js';
+import { inScope as inScopeOf } from '../stages/scope.js';
 import { memoryArgs, memoryConnection, callMemoryProgram } from './memory-program.js';
 import { compareWithReference } from './image-compare.js';
 import { firstPageId } from './devtools.js';
@@ -95,6 +97,19 @@ const BATCH_TOOLS = new Set([
  * @ai.hint pure
  */
 export const BLOCKING_COMMANDS = /(?:python[0-9.]*\s+-m\s+http\.server|\bhttp-server\b|\blive-server\b|\bserve\b|(?:^|\s)(?:npx\s+)?vite\b(?!\s+build)|\bnpm\s+run\s+(?:dev|preview|serve|start)\b|\btail\s+-f\b)/i;
+
+/**
+ * The commands that build the project for production.
+ *
+ * Сборка — работа стадии `build`: она идёт после стилей и кода, и сломанная сборка из-за
+ * ещё не написанных стилей ничего не говорит о коде. Роль, что гоняет сборку по кругу
+ * «собрал — упало — поправил», чинит не свой файл, а чужой: в этом прогоне кодер убрал
+ * из таблицы стилей движение, которое писал стилист, потому что «сборка не проходила».
+ * @type {RegExp}
+ * @exports
+ * @ai.hint pure
+ */
+export const PRODUCTION_BUILDS = /(?:\bnpm\s+(?:run\s+)?build\b|\bvite\s+build\b|\bnpx\s+vite\s+build\b|\bng\s+build\b|\bwebpack\b|\brollup\b|\besbuild\b)/i;
 
 /**
  * Turn a name into a token the API accepts.
@@ -448,7 +463,7 @@ async function entryPage(root, page = '') {
  * @returns {{ execute: (name: string, args: object) => Promise<string>, specs: object[],
  *   specsFor: Function, setWriteDirs: Function, writeDirs: Function }}
  */
-export function createToolset({ root, config, role = null, mcp = [], writeDirs = null, writeFiles = null, env = process.env, context = null, map = null, notify = null, signal = null, askUser = null }) {
+export function createToolset({ root, config, role = null, mcp = [], writeDirs = null, writeFiles = null, env = process.env, context = null, map = null, notify = null, signal = null, askUser = null, scope = null }) {
     const mcpTools = mcpToolEntries(mcp);
     const mcpSpecs = mcpTools.map((entry) => ({
         type: 'function',
@@ -461,6 +476,9 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
     const scopedFiles = Array.isArray(writeFiles)
         ? new Set(writeFiles.map((file) => String(file ?? '').replace(/\\/g, '/').toLowerCase()))
         : null;
+    // Границы шага: файлы, что принадлежат другому шагу. Роль, что пишет свой инструмент,
+    // тоже не имеет права трогать чужой файл — границы шага это не только про ответ роли.
+    const stepScope = scope ?? null;
     // Every file the role has written with a tool — one by one, in a batch, or with a
     // patch. The disk is the truth for them, and the stage must not put the older text of
     // the answer over them.
@@ -667,6 +685,12 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
         const located = await resolveInside(root, String(value ?? ''), { forWrite: true, allowRoot: false });
         if (scopedFiles && !scopedFiles.has(located.rel.toLowerCase())) {
             throw new Error(`Запись вне списка файлов делегированной задачи запрещена: ${located.rel}`);
+        }
+        // Границы шага: файл, что принадлежит другому шагу, не пишется. Роль правит только
+        // то, что ей досталось.
+        if (stepScope && !inScopeOf(located.rel, stepScope)) {
+            throw new Error(`Файл ${located.rel} принадлежит другому шагу — шаг его не трогает. `
+                + 'Работа этого файла — другого шага; о своей работе скажите в ответе.');
         }
         if (!allowed.some((dir) => isInside(dir, located.abs))) {
             throw new Error(`Запись вне разрешённого каталога запрещена: ${located.rel}`);
@@ -1106,6 +1130,13 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                 // until the timeout, and the work of the run would wait for nothing.
                 if (BLOCKING_COMMANDS.test(line)) {
                     return 'Команда не запущена: она не заканчивается сама. Проверьте файлы проекта или запустите такую команду в фоне оболочки.';
+                }
+                // Production-сборка — работа стадии `build`, и она не чинит код: цикл
+                // «собрал — упало — поправил — собрал» поедает проект целиком.
+                if (PRODUCTION_BUILDS.test(line)) {
+                    return 'Команда не запущена: production-сборка — это работа стадии `build`, '
+                        + 'она идёт после стилей и кода. Проверьте свой код тестами проекта '
+                        + '(`npm test`) или линтером — и скажите в ответе, что не так.';
                 }
                 return await runProgram(
                     command,
