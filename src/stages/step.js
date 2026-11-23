@@ -1152,6 +1152,11 @@ export async function runStepStage({
         if (!answer.data) {
             warnings.push(`Шаг ${step.id}: роль ${role} не вернула ответ (${roleReason(answer)}).`);
         }
+        if (answer.error) {
+            // Хост отказал: это не «роль думает», это отказ с именем и кодом.
+            const status = answer.error.status ? ` (HTTP ${answer.error.status})` : '';
+            warnings.push(`Шаг ${step.id}: хост не ответил${status}: ${answer.error.message ?? 'без причины'}.`);
+        }
         await writeStepReport(root, config, run, step.id, report);
         reports.push(report);
     }

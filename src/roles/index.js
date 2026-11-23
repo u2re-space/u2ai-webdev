@@ -989,7 +989,29 @@ export async function runRole({
             effort: currentEffort,
             mode: forcedChannel ?? 'interactive',
         });
-        const { parsed, work, schemaUsed, prematureSchemaAnswer } = await ask();
+        let asked;
+        try {
+            asked = await ask();
+        } catch (error) {
+            // Ошибка хоста — это не молчание: ответ модели не пришёл. Роль не должна висеть
+            // на этом молчании, и прогон должен сказать, что именно не вышло.
+            const message = String(error?.message ?? error ?? 'The host did not answer.');
+            notify({ type: 'role.error', role: key, turn: turns, error: message });
+            answer = {
+                ...(answer ?? {}),
+                text: '',
+                data: null,
+                refusal: '',
+                error: { message, status: error?.status ?? null, code: error?.code ?? null },
+                schemaProblems: [],
+                toolCalls: [],
+                usage: null,
+                model: currentModel,
+            };
+            stopped = 'failed';
+            break;
+        }
+        const { parsed, work, schemaUsed, prematureSchemaAnswer } = asked;
         deferredSteering = inputChannel?.takeSteering?.() ?? [];
         const skip = inputChannel?.takeSkip?.({
             stage: stageForRole(roleStage) ?? roleStage,
@@ -1432,8 +1454,9 @@ export function roleReason(result = {}) {
     if (refusal) return `отказ модели: ${refusal}`;
     const error = result?.error;
     if (error) {
+        const status = typeof error === 'object' && error?.status ? ` (HTTP ${error.status})` : '';
         const message = typeof error === 'string' ? error : (error?.message ?? JSON.stringify(error));
-        return `ошибка ответа: ${String(message).slice(0, 300)}`;
+        return `хост не ответил${status}: ${String(message).slice(0, 300)}`;
     }
     const text = String(result?.text ?? '').trim();
     if (text) return `ответ без данных: ${text.slice(0, 300)}`;

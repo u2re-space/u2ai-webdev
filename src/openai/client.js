@@ -28,6 +28,15 @@ import { resolveModelRef } from '../model/refs.js';
 /** Statuses worth another try on the same backend. */
 const RETRYABLE_STATUS = new Set([408, 409, 425, 429, 500, 502, 503, 504]);
 
+/**
+ * The statuses that mean the request itself was refused.
+ *
+ * `400` — the request is wrong, and the same request stays wrong. `401`/`403` — the access is
+ * closed, and the same key stays closed. Повтор такого запроса не лечит ничего: он только
+ * жжёт время и молчит. Повторяется только то, что может пройти.
+ */
+const REFUSED_STATUS = new Set([400, 401, 403, 404, 405, 422]);
+
 const defaults = Object.freeze({
     baseURL: 'https://api.openai.com/v1/',
     retries: 3,
@@ -281,6 +290,11 @@ export async function createClient({ config, env = process.env, signal = null, o
 
             if (res.status >= 400) {
                 const error = await apiErrorFrom(res, clientRequestId);
+                // Отказ запроса повтором не лечится: тот же запрос останется отказом.
+                if (REFUSED_STATUS.has(res.status)) {
+                    announce({ type: 'request.refused', backend: backend.baseURL, status: res.status, error: error.message });
+                    throw error;
+                }
                 if (attempt < retries && RETRYABLE_STATUS.has(res.status)) {
                     const delay = retryDelayMs(attempt, error.retryAfter, res.status);
                     announce({ type: 'request.retry', attempt: attempt + 1, delayMs: delay, error: error.message });
@@ -424,6 +438,12 @@ export async function createClient({ config, env = process.env, signal = null, o
                     if (error?.name === 'AbortError' || error?.code === 'ABORTED') throw error;
                     // A host without the route is not a host to retry: the caller picks another transport.
                     if (supports === 'responses' && responsesRouteUnsupported(error)) break;
+                    // Отказ запроса (400, 403) на одном хосте — отказ на всех: следующий хост
+                    // откажет так же, и прогон молчал бы, перебирая хосты по кругу.
+                    if (REFUSED_STATUS.has(status)) {
+                        announce({ type: 'request.refused', backend: backend.baseURL, status, error: error.message });
+                        break;
+                    }
                     // Otherwise the next backend gets the request.
                 }
             }

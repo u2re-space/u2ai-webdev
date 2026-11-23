@@ -59,3 +59,52 @@ test('a host that says nothing is not asked again: the next host answers', async
         await new Promise((resolve) => answered.close(resolve));
     }
 });
+
+test('a refused request is not asked again: the answer comes at once', async () => {
+    let refusedRequests = 0;
+    const sockets = [];
+    const refused = http.createServer((req, res) => {
+        refusedRequests += 1;
+        req.on('data', () => {});
+        req.on('end', () => {
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: { message: 'the key has no access' } }));
+        });
+    });
+    refused.on('connection', (socket) => sockets.push(socket));
+    await new Promise((resolve) => refused.listen(0, '127.0.0.1', resolve));
+    const refusedUrl = `http://127.0.0.1:${refused.address().port}/v1/`;
+
+    const answered = http.createServer((req, res) => {
+        req.on('data', () => {});
+        req.on('end', () => {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ id: 'resp_1', status: 'completed', output: [], usage: {} }));
+        });
+    });
+    await new Promise((resolve) => answered.listen(0, '127.0.0.1', resolve));
+    const answeredUrl = `http://127.0.0.1:${answered.address().port}/v1/`;
+
+    const config = structuredClone(defaults);
+    config.limits.requestRetries = 3;
+    config.backends = [
+        { baseURL: refusedUrl, apiKey: 'test-key' },
+        { baseURL: answeredUrl, apiKey: 'test-key' },
+    ];
+
+    const client = await createClient({ config, env: {} });
+    try {
+        // Отказ запроса повтором не лечится: тот же запрос останется отказом. Проверка идёт
+        // один раз, и ответ приходит сразу — а не через минуты молчания.
+        await assert.rejects(
+            () => client.responses.create({ model: 'test-model', instructions: 'x', input: 'y' }),
+            /access/,
+        );
+        assert.equal(refusedRequests, 1, 'the refused host was asked again');
+    } finally {
+        client.close?.();
+        for (const socket of sockets) socket.destroy();
+        await new Promise((resolve) => refused.close(resolve));
+        await new Promise((resolve) => answered.close(resolve));
+    }
+});

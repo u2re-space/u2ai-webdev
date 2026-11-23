@@ -2197,6 +2197,13 @@ directory or a file that is not there.
 - A turn has a limit of its own — a quarter of the budget of the stage. A host that says
   nothing longer than that loses the turn, and the stage names the turn: one hung turn does
   not eat the whole stage.
+- A refused request is not asked again. `400` means the request is wrong, `401` and `403`
+  mean the access is closed: the same request stays just as wrong on the next host, and
+  repeating it only burns minutes of silence. The refusal is named at once — the status, the
+  message, the host.
+- A host that answers nothing is not silence of a thinking model: the role that waited for
+  the answer says that the host did not answer, and the step ends with that reason instead of
+  hanging until the budget is over.
 - A stopped run says where it stood: the stage, the step, the turn and the tool. «It hung» is
   not an answer — the step and the turn are.
 - A stage with many steps gets a budget for all of them: the budget of a stage is multiplied

@@ -44,6 +44,13 @@ async function mockApi(answers) {
             requests.push(parsed);
             const answer = answers[Math.min(index, answers.length - 1)];
             index += 1;
+            // Отказ хоста: ответ не приходит вовсе — так ведёт себя хост, у которого
+            // закрыт доступ.
+            if (answer?.status && answer.status >= 400) {
+                res.writeHead(answer.status, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify(answer.body ?? { error: { message: 'refused' } }));
+                return;
+            }
             if (parsed.stream === true) {
                 res.writeHead(200, { 'Content-Type': 'text/event-stream' });
                 res.write(`data: ${JSON.stringify({ type: 'response.created', response: { id: answer.id ?? 'resp_1', status: 'in_progress' } })}\n\n`);
@@ -1600,8 +1607,43 @@ test('a role that keeps coming back to one file is stopped', async () => {
     }
 });
 
+test('a role whose host refused ends the step and says why', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-host-refused-'));
+    const home = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-home-'));
+    const env = { HOME: home, USERPROFILE: home };
+
+    // Хост отказал: ответ не пришёл. Роль не должна висеть — она говорит, что не вышло.
+    const api = await mockApi([{ status: 403, body: { error: { message: 'the key has no access' } } }]);
+
+    try {
+        const config = structuredClone(defaults);
+        config.model = 'test-model';
+        config.backends = [{ baseURL: api.url, apiKey: 'test-key' }];
+        config.reasoning.effort = 'low';
+        const client = await createClient({ config, env });
+
+        const answer = await runRole({
+            client,
+            config,
+            role: 'illustrator',
+            input: 'Draw the picture.',
+            context: { task: 'Draw the picture.', step: { id: 'assets', files: ['out.png'] } },
+            root,
+            env,
+            requireFiles: true,
+        });
+
+        assert.equal(answer.stopped, 'failed');
+        assert.match(roleReason(answer), /хост не ответил/);
+        assert.match(roleReason(answer), /access/);
+    } finally {
+        api.close();
+    }
+});
+
 test('the reason of an answer without data is named', () => {    assert.match(roleReason({ refusal: 'I cannot do that.' }), /отказ модели/);
-    assert.match(roleReason({ error: { message: 'the model is down' } }), /ошибка ответа/);
+    assert.match(roleReason({ error: { message: 'the model is down' } }), /хост не ответил/);
+    assert.match(roleReason({ error: { message: 'the model is down', status: 403 } }), /HTTP 403/);
     assert.match(roleReason({ text: 'Сначала изучу проект.' }), /ответ без данных/);
     assert.match(roleReason({}), /ответ пуст/);
     assert.match(roleReason(), /ответ пуст/);
