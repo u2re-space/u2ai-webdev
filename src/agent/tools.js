@@ -26,6 +26,7 @@
 import path from 'node:path';
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import JSON5 from 'json5';
 import { toolSpecs as buildSpecs } from './tool-specs.js';
 import { listFiles, readTextFile, findLines, patchFile, searchFiles, writeTextFile, replaceInFile, deleteFile, makeDirectory, copyPath } from './fs-tools.js';
 import { listProjectBackups, restoreProjectBackup } from './project-backup.js';
@@ -138,7 +139,8 @@ function parseNames(value) {
     if (!text) return [];
     if (text.startsWith('[')) {
         try {
-            const parsed = JSON.parse(text);
+            // JSON5: список аргументов от модели — это «почти JSON» нередко.
+            const parsed = JSON5.parse(text);
             if (Array.isArray(parsed)) return parsed.map((item) => String(item));
         } catch {
             // Not a JSON list: the text is split by the commas.
@@ -338,7 +340,9 @@ function parseArgsList(raw) {
     if (Array.isArray(raw)) return raw.map((item) => String(item));
     if (typeof raw !== 'string' || !raw.trim()) return [];
     try {
-        const parsed = JSON.parse(raw);
+        // JSON5: аргументы вызова пишет модель, и «почти JSON» (одинарные кавычки, висячие
+        // запятые) разбирается так же, как строгий JSON.
+        const parsed = JSON5.parse(raw);
         if (Array.isArray(parsed)) return parsed.map((item) => String(item));
     } catch { /* not JSON: treat it as one argument */ }
     return [raw];

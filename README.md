@@ -8,6 +8,8 @@ remembers the lessons.
 - Config in `~/.ai-webdev/config.json`.
 - Node.js 26+, ESM, no SDK (plain `fetch`).
 - Only the Responses API; every role answers with a strict JSON of its own schema.
+- The JSON of a model is read as JSON5: single quotes, trailing commas, comments and unquoted
+  keys are what models actually write, and a strict parser threw the whole call away.
 - Repository: <https://github.com/u2re-space/u2ai-webdev>.
 
 The package was split out of the `ai` monolith: the web work lives here, with its own
@@ -570,6 +572,22 @@ fix of the styles is the work of the best model of the family, not of the model 
 The run that was interrupted is continued by its id: `ai-webdev run --resume <id>`. The stages
 that are done are skipped, and the stage that fell is done again.
 
+### The JSON of a model
+
+A model writes JSON the way a person writes it: single quotes, a trailing comma, a comment
+between the fields, a key without quotes. A strict parser calls that broken and throws the whole
+call away — the turn is spent for nothing, and the role is told that its own arguments are
+malformed.
+
+So the JSON of a model is read as **JSON5**: the arguments of a tool call, the answer of a role
+against its schema, the `plan-update` block in a report, the list of the names of an icon set.
+All of it parses the way a model writes it. The files of the package itself — the plan, the
+manifest, the journal, the config — are read as strict JSON: they are ours, and a broken file of
+ours is a defect to be found, not a spelling to be forgiven.
+
+The difference is not cosmetic. A call that was parsed is a call that runs; a call that was
+thrown away is a turn that is gone.
+
 ### The hand-over between the roles
 
 A role that meets work of another kind does not do it herself and does not describe it either:
@@ -587,7 +605,6 @@ context of the step travel with the work: the role continues the work, not the c
 The roles that may be handed work are `markup`, `styler`, `coder`, `editor` and `iconifier`.
 The roles of the whole run — the planner, the architect, the reviewer — are not among them:
 they work once for the whole run, and a step does not send them a piece of work.
-
 The hand-over is one level deep: a delegated role never gets the delegation tool itself, so
 there is no chain of sessions that nobody reads. A role may not hand work to itself.
 

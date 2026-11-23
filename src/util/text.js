@@ -8,7 +8,10 @@
  * @ai.hint pure
  * @ai.hint legacy-0.2
  * @changed 2026-10-25 extractJson tolerates fenced and prose-wrapped model replies.
+ * @changed 2026-11-24 extractJson reads JSON5: the text of a model is often almost-JSON.
  */
+
+import JSON5 from 'json5';
 
 /**
  * UTF-8 byte length of a string, or of its JSON form.
@@ -164,7 +167,7 @@ export function extractJson(text) {
 
     //
     try {
-        const jsonAlready = JSON.parse(text);
+        const jsonAlready = JSON5.parse(text);
         if (jsonAlready) return jsonAlready;
     } catch(e) {}
 
@@ -182,7 +185,8 @@ export function extractJson(text) {
     if (span) tries.push(span);
 
     for (const candidate of tries) {
-        try { return JSON.parse(candidate); }
+        // JSON5: текст модели — это «почти JSON» гораздо чаще, чем строгий JSON.
+        try { return JSON5.parse(candidate); }
         catch { /* next candidate */ }
     }
     return null;

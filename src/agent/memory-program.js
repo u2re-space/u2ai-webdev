@@ -18,6 +18,7 @@
  */
 
 import { runProgram } from './programs.js';
+import JSON5 from 'json5';
 
 /** Имя программы памяти по умолчанию. */
 export const MEMORY_PROGRAM = 'ai-memory';
@@ -74,7 +75,8 @@ export function memoryArgs(value) {
     const text = String(value ?? '').trim();
     if (!text) return {};
     try {
-        const parsed = JSON.parse(text);
+        // JSON5: аргументы вызова пишет модель, и «почти JSON» разбирается так же.
+        const parsed = JSON5.parse(text);
         if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
     } catch { /* не JSON: слова запроса */ }
     return { query: text };

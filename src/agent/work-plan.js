@@ -25,6 +25,7 @@
 
 import path from 'node:path';
 import { readFile } from 'node:fs/promises';
+import JSON5 from 'json5';
 import { runFile, writeJsonFile, readJsonFile } from '../stages/workspace.js';
 
 /** The name of the file of the progress inside the directory of the run. */
@@ -187,7 +188,9 @@ export function parsePlanUpdate(report) {
     if (!match) return null;
     let data;
     try {
-        data = JSON.parse(match[1]);
+        // JSON5: блок пишет модель, и «почти JSON» (одинарные кавычки, висячие запятые)
+        // разбирается так же. Строгий разбор молча терял план целиком.
+        data = JSON5.parse(match[1]);
     } catch {
         return null;
     }

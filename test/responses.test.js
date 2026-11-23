@@ -57,6 +57,35 @@ test('the arguments of a tool call are read as JSON or reported as broken', () =
     assert.ok(notObject[0].parseError);
 });
 
+test('the arguments of a tool call are read as JSON5: a model writes almost-JSON', () => {
+    // Одинарные кавычки, висячие запятые, комментарии — строгий разбор терял вызов целиком,
+    // и ход уходил впустую.
+    const almost = extractToolCalls({
+        output: [{
+            type: 'function_call', id: 'fc_5', call_id: 'call_5', name: 'write_file',
+            arguments: "{ path: 'index.html', /* the page */ note: 'a, b', }",
+        }],
+    });
+    assert.equal(almost[0].parseError, null);
+    assert.deepEqual(almost[0].arguments, { path: 'index.html', note: 'a, b' });
+
+    // Кавычки без кавычек (unquoted keys) — тоже обычное дело для модели.
+    const unquoted = extractToolCalls({
+        output: [{ type: 'function_call', id: 'fc_6', call_id: 'call_6', name: 'write_file', arguments: '{ path: "a.html", }' }],
+    });
+    assert.equal(unquoted[0].parseError, null);
+    assert.deepEqual(unquoted[0].arguments, { path: 'a.html' });
+});
+
+test('the answer of a role is read as JSON5 as well', () => {
+    const answer = parseResponse({
+        id: 'resp_1',
+        status: 'completed',
+        output_text: "{ summary: 'готово', items: [1, 2,], }",
+    });
+    assert.deepEqual(answer.data, { summary: 'готово', items: [1, 2] });
+});
+
 test('the answer is not pinned when the request carries a tool', () => {
     const body = buildResponsesBody({ model: 'm', schema: SCHEMA, schemaName: 'markup', tools: [TOOL] });
     assert.equal(body.text, undefined);

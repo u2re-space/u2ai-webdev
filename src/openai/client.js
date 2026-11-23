@@ -12,6 +12,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
+import JSON5 from 'json5';
 import { ApiError } from './api.js';
 import { createHttp, readBody } from './http.js';
 import { parseSSE } from './api.js';
@@ -214,7 +215,7 @@ export async function createClient({ config, env = process.env, signal = null, o
         const raw = await readBody(res.body, defaults.maxErrorBytes, { truncate: true }).catch(() => Buffer.alloc(0));
         const text = raw.toString('utf8').trim();
         let parsed = null;
-        try { parsed = JSON.parse(text); } catch { parsed = null; }
+        try { parsed = JSON5.parse(text); } catch { parsed = null; }
         const err = isRecord(parsed) ? (parsed.error ?? parsed) : null;
         const details = isRecord(err) ? err : {};
         const fromBody = typeof err === 'string' ? err : textOf(details.message);
@@ -319,7 +320,7 @@ export async function createClient({ config, env = process.env, signal = null, o
         const raw = await readBody(body, defaults.maxResponseBytes);
         const text = raw.toString('utf8');
         if (!text.trim()) return {};
-        try { return JSON.parse(text); } catch { return { raw: text }; }
+        try { return JSON5.parse(text); } catch { return { raw: text }; }
     }
 
     /**

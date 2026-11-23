@@ -19,6 +19,7 @@
 
 import { parseResponse } from '../openai/responses.js';
 import { maxOutputFor } from '../model/profiles.js';
+import JSON5 from 'json5';
 
 /** The verdicts of a review. */
 export const VERDICTS = Object.freeze(['pass', 'partial', 'fail']);
@@ -176,7 +177,8 @@ function callArguments(toolCalls, schemaName) {
     if (args && typeof args === 'object') return args;
     if (typeof args !== 'string') return null;
     try {
-        const parsed = JSON.parse(args);
+        // JSON5: аргументы вызова пишет модель, и «почти JSON» разбирается так же.
+        const parsed = JSON5.parse(args);
         return parsed && typeof parsed === 'object' ? parsed : null;
     } catch {
         return null;

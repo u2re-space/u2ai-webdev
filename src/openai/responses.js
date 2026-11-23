@@ -10,6 +10,7 @@
  */
 import { normalizeUsage, outputText, refusalText } from './api.js';
 import { assetPart, scrubDataUrls, scrubItems } from '../shared/data-urls.js';
+import JSON5 from 'json5';
 
 const isRecord = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const textOf = (value) => (typeof value === 'string' ? value : '');
@@ -204,7 +205,9 @@ export function extractToolCalls(raw) {
         let args = null;
         let parseError = null;
         try {
-            args = JSON.parse(rawArgs);
+            // JSON5: модель пишет «почти JSON» — одинарные кавычки, висячие запятые,
+            // комментарии. Строгий разбор терял вызов целиком, и ход уходил впустую.
+            args = JSON5.parse(rawArgs);
             if (!args || typeof args !== 'object' || Array.isArray(args)) {
                 parseError = 'arguments must be a JSON object';
                 args = null;
@@ -230,7 +233,9 @@ export function parseResponse(raw) {
     let data = null;
     const trimmed = text.trim();
     if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-        try { data = JSON.parse(trimmed); } catch { data = null; }
+        // JSON5: ответ роли — это текст модели, и «почти JSON» (одинарные кавычки, висячие
+        // запятые) разбирается так же, как строгий JSON.
+        try { data = JSON5.parse(trimmed); } catch { data = null; }
     }
     return {
         id: raw?.id ?? null,
