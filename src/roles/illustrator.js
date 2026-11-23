@@ -37,7 +37,7 @@ export const tools = [
 ];
 
 /** How many turns the role may spend. */
-export const maxTurns = 10;
+export const maxTurns = 8;
 
 /**
  * The instructions of the role: where the pictures go and what the stage checks afterwards.
@@ -99,6 +99,12 @@ ${vectors}
   The name of the prepared crop is the business of the measurer, not of the project.
 - The answer names every file that is on the disk now, with the path it lies at: the page
   links these paths, and the stages after this one take them from your answer.
+- Do the work in one go: read what you need, then write. The step has few turns, and a turn
+  spent on the memory or on the reading is a turn not spent on the pictures. One question to
+  the memory is enough — and only when the memory really knows about the pictures.
+- A command is not a picture: when the answer names a command, the file it makes is not on
+  the disk yet. Run the command yourself with \`magick\` — the tool of the house runs it and
+  the file lands where it lands. A picture that exists only as a command does not exist.
 
 ${UNTRUSTED}`;
 }

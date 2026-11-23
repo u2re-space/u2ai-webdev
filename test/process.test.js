@@ -777,6 +777,30 @@ test('a decorative stage that fails does not stop the run', async () => {
     assert.ok(result.warnings.some((item) => /прогон идёт дальше/.test(item)), result.warnings.join(' | '));
 });
 
+test('a decorative stage that answers with a failure does not stop the run either', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-decorative-ok-'));
+    // Стадия вернулась сама (без исключения) и сказала, что не справилась: прогон
+    // идёт дальше, файлы, что легли на диск, остаются.
+    const stages = [
+        { name: 'assets', title: 'Assets', dependsOn: [], run: async () => ({ ok: false, warnings: ['картинка не поставлена'] }) },
+        { name: 'markup', title: 'Markup', dependsOn: ['assets'], run: async () => ({ ok: true }) },
+    ];
+
+    const result = await runPipeline({
+        client: { responses: { create: async () => ({ output: [] }) } },
+        config: CONFIG,
+        root,
+        task: 'Make a landing.',
+        runId: 'run-1',
+        stages,
+    });
+
+    assert.equal(result.status, 'partial');
+    assert.equal(result.stages.length, 2);
+    assert.equal(result.stages[0].status, 'failed');
+    assert.equal(result.stages[1].status, 'completed');
+});
+
 test('a stage of the page itself still stops the run', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-core-fail-'));
     const stages = [

@@ -2169,6 +2169,9 @@ directory or a file that is not there.
   to make a real picture (`magick file.svg file.webp`).
 - A step owns its files: the step of the illustrator that also names `index.html` gives the
   markup back to the markup, and the plan says so.
+- The assets do not wait for the markup: a plan that ties them into a circle (the pictures
+  wait for the markup, the styles wait for the pictures) leaves the styles with no way to
+  start. The assets stage comes before the markup, and the circle is broken.
 - A crash outside the command — an unhandled rejection, an uncaught exception — is printed and
   leaves the exit code of the failure: a silent death is the hardest kind of failure to read.
 

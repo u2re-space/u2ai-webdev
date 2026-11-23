@@ -32,7 +32,7 @@
 import { runId as makeRunId } from './stages/workspace.js';
 import { enabledStages } from './stages/index.js';
 import { planOrder } from './stages/plan-order.js';
-import { LIVE_ROLES } from './stages/roles.js';
+import { LIVE_ROLES, withoutForeignFiles } from './stages/roles.js';
 import { readPlan } from './stages/plan.js';
 import { readScan } from './stages/scan.js';
 import { readArchitecture } from './stages/architect.js';
@@ -359,6 +359,14 @@ export async function runPipeline({
         // The artifacts of the finished stages are read back, so the run continues with
         // the same plan and the same structure.
         ctx.plan = await readPlan(root, config, run);
+        // План, который лежит на диске, мог быть составлен старой версией харнесса: роль
+        // могла назвать файл, который принадлежит другой роли. Такой файл отдаётся
+        // владельцу, иначе роль перепишет чужую работу.
+        const clean = withoutForeignFiles(ctx.plan);
+        if (clean.warnings.length) {
+            warnings.push(...clean.warnings);
+            ctx.plan = clean.plan;
+        }
         ctx.scan = await readScan(root, config, run);
         ctx.architecture = await readArchitecture(root, config, run);
         ctx.setup = await readSetup(root, config, run);
@@ -647,8 +655,16 @@ export async function runPipeline({
         notify({ type: 'stage.done', stage: stage.name, status: operatorPartial ? 'partial' : (ok ? 'completed' : 'failed'), result });
 
         if (failed) {
-            status = 'failed';
-            break;
+            // Провал оформления не отменяет страницу: картинка, иконка или анимация, что не
+            // доделалась, не отменяет разметку, стили и код. Файлы, что успели лечь на
+            // диск, остаются, прогон идёт дальше, а ревью говорит, чего не хватает.
+            if (!NON_FATAL_STAGES.has(stage.name)) {
+                status = 'failed';
+                break;
+            }
+            status = 'partial';
+            warnings.push(`Стадия ${stage.name} не закончилась — прогон идёт дальше: то, что `
+                + 'успело лечь на диск, остаётся, а ревью скажет, чего не хватает.');
         }
         if (stopAfter && String(stopAfter).trim().toLowerCase() === stage.name) {
             paused = true;

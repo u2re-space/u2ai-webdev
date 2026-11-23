@@ -655,7 +655,7 @@ export const TOOL_SPECS = Object.freeze({
             additionalProperties: false,
         },
         required: ['args'],
-        roles: ['editor'],
+        roles: ['editor', 'illustrator'],
     },
     ai_cli: {
         configKey: 'external_cli',

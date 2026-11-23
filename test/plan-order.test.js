@@ -18,6 +18,7 @@ import {
     placeVectorStage,
     placeAnimationAfterStyles,
     placeAssetsAfterVector,
+    placeAssetsBeforeMarkup,
 } from '../src/stages/plan-order.js';
 
 /**
@@ -248,4 +249,35 @@ test('the assets floor keeps the assets after the vector', () => {
     const kept = placeAssetsAfterVector(['setup', 'vector', 'assets', 'markup']);
     assert.equal(kept.moved, false);
     assert.deepEqual(kept.names, ['setup', 'vector', 'assets', 'markup']);
+});
+
+test('the assets do not wait for the markup: the circle of the plan is broken', () => {
+    // План связал картинки с разметкой, а стили — с картинками: без разрыва этого круга
+    // стили не могут начаться, и прогон стоит.
+    const placed = placeAssetsBeforeMarkup(['vector', 'markup', 'assets', 'styling']);
+    assert.equal(placed.moved, true);
+    assert.deepEqual(placed.names, ['vector', 'assets', 'markup', 'styling']);
+
+    // Ассеты перед разметкой остаются где были.
+    const kept = placeAssetsBeforeMarkup(['vector', 'assets', 'markup', 'styling']);
+    assert.equal(kept.moved, false);
+    assert.deepEqual(kept.names, ['vector', 'assets', 'markup', 'styling']);
+});
+
+test('the plan of the run breaks the circle of the assets and the markup', () => {
+    const plan = {
+        steps: [
+            { id: 'graphics', title: 'Graphics', role: 'editor', dependsOn: [], files: ['public/images/logo.svg'] },
+            { id: 'markup', title: 'Markup', role: 'markup', dependsOn: ['graphics'], files: ['index.html'] },
+            { id: 'imagery', title: 'Imagery', role: 'illustrator', dependsOn: ['markup'], files: ['public/images/event-01.webp'] },
+            { id: 'styles', title: 'Styles', role: 'styler', dependsOn: ['imagery'], files: ['src/styles/main.scss'] },
+        ],
+    };
+    const { stages, warnings } = planOrder([...STAGES], plan);
+    const names = stages.map((stage) => stage.name);
+    // Ассеты стоят перед разметкой, и стили идут после разметки: круг разорван.
+    assert.ok(names.indexOf('assets') < names.indexOf('markup'), names.join(' → '));
+    assert.ok(names.indexOf('markup') < names.indexOf('styling'), names.join(' → '));
+    assert.ok(warnings.some((item) => /Стадия ассетов перенесена перед разметкой/.test(item)),
+        warnings.join(' | '));
 });

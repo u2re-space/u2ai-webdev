@@ -15,7 +15,7 @@
  * @depends node:path
  * @usedBy stages/plan, roles/planner
  * @exports LIVE_ROLES, LIVE_ROLE_NAMES, liveRole, stageForRole, roleForFiles, planRole,
- *          foreignFiles
+ *          foreignFiles, withoutForeignFiles
  * @ai.tags stages, roles, plan
  * @ai.hint pure
  * @ai.hint legacy-0.2
@@ -217,4 +217,38 @@ export function foreignFiles(role = '', files = []) {
         out.push(rel);
     }
     return out;
+}
+
+/**
+ * План без чужих файлов в шагах.
+ *
+ * План на диске — это план, который был составлен когда-то: роль могла назвать файл,
+ * который принадлежит другой роли. Читать такой план — значит отдать роль чужую
+ * работу: шаг иллюстратора, в котором назван `index.html`, переписывает разметку.
+ * План читается без чужих файлов, и прогон говорит, что отдано.
+ *
+ * @param {object|null} plan
+ * @returns {{ plan: object|null, warnings: string[] }}
+ * @exports
+ * @ai.hint pure
+ */
+export function withoutForeignFiles(plan = null) {
+    const steps = Array.isArray(plan?.steps) ? plan.steps : [];
+    if (!steps.length) return { plan, warnings: [] };
+    const warnings = [];
+    const out = [];
+    for (const step of steps) {
+        const role = String(step?.role ?? '').trim().toLowerCase();
+        const files = Array.isArray(step?.files) ? step.files : [];
+        const foreign = foreignFiles(role, files);
+        if (!foreign.length) {
+            out.push(step);
+            continue;
+        }
+        const own = files.filter((file) => !foreign.includes(file));
+        warnings.push(`Шаг ${step?.id ?? 'шаг'}: чужие файлы отданы их ролям: ${foreign.join(', ')}.`);
+        if (!own.length) continue;
+        out.push({ ...step, files: own });
+    }
+    return { plan: { ...plan, steps: out }, warnings };
 }

@@ -1466,6 +1466,51 @@ test('a role that only describes its work is told to do it', async () => {
     }
 });
 
+test('a role that promised the work for later is told that a command is not a program', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-loop-promised-'));
+    const home = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-home-'));
+    const env = { HOME: home, USERPROFILE: home };
+
+    // Роль ответила не файлами, а командами: «convert the SVG with magick». Команда в
+    // ответе — это заметка для читателя, её никто не выполнит.
+    const api = await mockApi([
+        schemaAnswer('code', {
+            ...codeData(),
+            files: [],
+            commands: [{ command: 'magick', args: ['svg:hero.webp', 'webp:hero.webp'] }],
+        }),
+        toolAnswer('write_ready', {}),
+        toolAnswer('write_file', { path: 'hero.webp', content: 'binary' }),
+        schemaAnswer('code', codeData()),
+    ]);
+
+    try {
+        const config = structuredClone(defaults);
+        config.model = 'test-model';
+        config.backends = [{ baseURL: api.url, apiKey: 'test-key' }];
+        config.reasoning.effort = 'low';
+        const client = await createClient({ config, env });
+
+        const answer = await runRole({
+            client,
+            config,
+            role: 'coder',
+            input: 'Make the picture.',
+            context: { task: 'Make the picture.', step: { id: 'assets', files: ['hero.webp'] } },
+            root,
+            env,
+            requireFiles: true,
+        });
+
+        assert.equal(answer.stopped, 'completed');
+        // Поправка говорит прямо: команда в ответе ничего не выполняет.
+        const second = api.requests[1].input.map((item) => JSON.stringify(item)).join('\n');
+        assert.match(second, /a command in the answer is a note for the reader/);
+    } finally {
+        api.close();
+    }
+});
+
 test('the reason of an answer without data is named', () => {    assert.match(roleReason({ refusal: 'I cannot do that.' }), /отказ модели/);
     assert.match(roleReason({ error: { message: 'the model is down' } }), /ошибка ответа/);
     assert.match(roleReason({ text: 'Сначала изучу проект.' }), /ответ без данных/);

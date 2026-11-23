@@ -409,8 +409,9 @@ export const defaults = {
     // before the code.
     animation: { enabled: true, maxTurns: 14, timeoutMs: null },
     // The assets of the project: the pictures are put on their places after the vector
-    // graphics and before the markup links them.
-    assets: { enabled: true, maxTurns: 10, timeoutMs: null },
+    // graphics and before the markup links them. The role works with the pictures, and a
+    // picture is a quick job: the stage asks for a budget of its own.
+    assets: { enabled: true, maxTurns: 10, timeoutMs: 10 * 60_000 },
     build: { enabled: true, maxTurns: 1, timeoutMs: null },
     // The stage of the sight looks at the page and asks the styler to fix it, and it does
     // that twice: it needs more time than the stages that write the files.

@@ -20,7 +20,8 @@
  * @depends stages/roles
  * @usedBy pipeline
  * @exports PLAN_STAGES, planEdges, planOrder, placeVectorStage, placeIconifyStage,
- *          placeStylesBeforeCode, placeAnimationAfterStyles, placeAssetsAfterVector
+ *          placeStylesBeforeCode, placeAnimationAfterStyles, placeAssetsAfterVector,
+ *          placeAssetsBeforeMarkup
  * @ai.tags stages, plan, order
  * @ai.hint pure
  * @changed 2026-11-15 Порядок стадий, которые делают шаги плана, задаёт сам план.
@@ -107,7 +108,7 @@ export function placeAnimationAfterStyles(names = []) {
 }
 
 /**
- * Поставить стадию ассетов после вектора.
+ * Поставить стадию ассетов после вектора и до разметки.
  *
  * Ассеты раскладываются по местам, когда известно всё множество картинок: вырезки
  * референса и нарисованный вектор. Разметка подключает уже окончательные файлы, поэтому
@@ -128,6 +129,34 @@ export function placeAssetsAfterVector(names = []) {
     list.splice(assets, 1);
     const target = list.indexOf(ASSETS_AFTER);
     list.splice(target < 0 ? list.length : target + 1, 0, ASSETS_STAGE);
+    return { names: list, moved: true };
+}
+
+/**
+ * Оторвать стадию ассетов от разметки.
+ *
+ * Ассеты — это картинки, а разметка — это страница. Ни одна из них не ждёт другую:
+ * разметка подключает картинку, которая уже на диске, и ассет не переписывает разметку.
+ *
+ * Круг между ними — дело плана: шаг картинок ждёт шаг разметки, а шаг стилей ждёт шаг
+ * картинок. Такой круг разрывается здесь: стадия ассетов встаёт перед разметкой, и
+ * цепочка «вектор → ассеты → разметка → стили» снова становится прямой.
+ *
+ * @param {string[]} names имена стадий в порядке прогона
+ * @returns {{ names: string[], moved: boolean }}
+ * @exports
+ * @ai.hint pure
+ */
+export function placeAssetsBeforeMarkup(names = []) {
+    const list = Array.isArray(names) ? [...names] : [];
+    const assets = list.indexOf(ASSETS_STAGE);
+    const markup = list.indexOf(ASSETS_BEFORE);
+    if (assets < 0 || markup < 0) return { names: list, moved: false };
+    if (assets < markup) return { names: list, moved: false };
+    // Ассеты после разметки: они встают прямо перед ней.
+    list.splice(assets, 1);
+    const target = list.indexOf(ASSETS_BEFORE);
+    list.splice(target < 0 ? list.length : target, 0, ASSETS_STAGE);
     return { names: list, moved: true };
 }
 
@@ -154,6 +183,7 @@ const CODING_STAGE = 'coding';
 const ANIMATION_STAGE = 'animation';
 const ASSETS_STAGE = 'assets';
 const ASSETS_AFTER = 'vector';
+const ASSETS_BEFORE = 'markup';
 
 /**
  * Поставить стадию кода после стилиста.
@@ -360,8 +390,16 @@ export function planOrder(stages = [], plan = null) {
             + 'местам, когда известно всё множество — вырезки референса и нарисованный вектор.');
     }
 
+    // Стадия ассетов не после разметки: план связал их кругом (картинки ждут разметку,
+    // стили ждут картинки), и без разрыва этого круга стили не могут начаться.
+    const beforeMarkup = placeAssetsBeforeMarkup(withAssets.names);
+    if (beforeMarkup.moved) {
+        warnings.push('Стадия ассетов перенесена перед разметкой: картинки и разметка не ждут '
+            + 'друг друга — план связал их кругом, и стили не могли начаться.');
+    }
+
     // Стадия анимации: после стилиста.
-    const withAnimation = placeAnimationAfterStyles(withAssets.names);
+    const withAnimation = placeAnimationAfterStyles(beforeMarkup.names);
     if (withAnimation.moved) {
         warnings.push('Стадия анимации перенесена после стилиста: движение живёт в стилях, '
             + 'и править их раньше стилей нечего.');
