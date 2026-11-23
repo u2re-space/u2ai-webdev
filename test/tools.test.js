@@ -158,6 +158,29 @@ test('a role cannot write a file of another step with its own tool', async () =>
     assert.match(own, /Записан/);
 });
 
+test('a file that is not there is a fact, not a broken tool', async () => {
+    const { root, tools } = await workspace();
+    // Файла ещё нет: его пишет другая роль. Роль должна знать это и не ждать.
+    const read = await tools.execute('read_file', { path: 'src/rooms.js' });
+    assert.match(read, /не найден/);
+    assert.match(read, /не жди его/);
+
+    const copy = await tools.execute('copy_path', { source: 'src/rooms.js', destination: 'src/rooms-copy.js' });
+    assert.match(copy, /не найден/);
+    assert.match(copy, /не жди его/);
+});
+
+test('a picture is not read as text', async () => {
+    const { root, tools } = await workspace();
+    // Байты картинки — не строки: прочитать их как текст значит получить мусор.
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jYuoAAAAASUVORK5CYII=', 'base64');
+    await writeFile(path.join(root, 'src', 'hero.png'), png);
+
+    const answer = await tools.execute('read_file', { path: 'src/hero.png' });
+    // Картинка прикладывается к запросу — это её способ быть увиденной.
+    assert.match(answer, /Изображение|не текст/);
+});
+
 test('the memory of the project is asked through the program', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-memory-'));
     const config = structuredClone(defaults);

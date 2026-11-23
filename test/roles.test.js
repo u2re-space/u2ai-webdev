@@ -1511,6 +1511,95 @@ test('a role that promised the work for later is told that a command is not a pr
     }
 });
 
+test('a role that repeats the same call is stopped', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-loop-'));
+    const home = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-home-'));
+    const env = { HOME: home, USERPROFILE: home };
+
+    // Роль рисует картинку, смотрит на неё и рисует снова: тот же вызов второй раз подряд.
+    const api = await mockApi([
+        toolAnswer('write_ready', {}),
+        toolAnswer('magick', { args: ['-size', '100x100', 'xc:red', 'out.png'] }),
+        toolAnswer('magick', { args: ['-size', '100x100', 'xc:red', 'out.png'] }),
+        schemaAnswer('code', {
+            summary: 'The picture.',
+            files: [],
+            commands: [],
+            notes: 'The picture is drawn.',
+        }),
+    ]);
+
+    try {
+        const config = structuredClone(defaults);
+        config.model = 'test-model';
+        config.backends = [{ baseURL: api.url, apiKey: 'test-key' }];
+        config.reasoning.effort = 'low';
+        const client = await createClient({ config, env });
+
+        await runRole({
+            client,
+            config,
+            role: 'illustrator',
+            input: 'Draw the picture.',
+            context: { task: 'Draw the picture.', step: { id: 'assets', files: ['out.png'] } },
+            root,
+            env,
+            requireFiles: true,
+        });
+
+        // Второй одинаковый вызов получает отказ: это петля, а не работа.
+        const last = api.requests.at(-1).input.map((item) => JSON.stringify(item)).join('\n');
+        assert.match(last, /is a loop, not work/);
+    } finally {
+        api.close();
+    }
+});
+
+test('a role that keeps coming back to one file is stopped', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-churn-'));
+    const home = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-home-'));
+    const env = { HOME: home, USERPROFILE: home };
+
+    // Роль рисует картинку, проверяет её и рисует снова: вызовы разные, файл один.
+    const api = await mockApi([
+        toolAnswer('write_ready', {}),
+        toolAnswer('magick', { args: ['-size', '100x100', 'xc:red', 'out.png'] }),
+        toolAnswer('magick', { args: ['identify', '-format', '%wx%h', 'out.png'] }),
+        toolAnswer('magick', { args: ['-size', '100x100', 'xc:blue', 'out.png'] }),
+        schemaAnswer('code', {
+            summary: 'The picture.',
+            files: [],
+            commands: [],
+            notes: 'The picture is drawn.',
+        }),
+    ]);
+
+    try {
+        const config = structuredClone(defaults);
+        config.model = 'test-model';
+        config.backends = [{ baseURL: api.url, apiKey: 'test-key' }];
+        config.reasoning.effort = 'low';
+        const client = await createClient({ config, env });
+
+        await runRole({
+            client,
+            config,
+            role: 'illustrator',
+            input: 'Draw the picture.',
+            context: { task: 'Draw the picture.', step: { id: 'assets', files: ['out.png'] } },
+            root,
+            env,
+            requireFiles: true,
+        });
+
+        // Третье обращение к тому же файлу — это петля: роль сказала ей об этом.
+        const last = api.requests.at(-1).input.map((item) => JSON.stringify(item)).join('\n');
+        assert.match(last, /is a loop, not work/);
+    } finally {
+        api.close();
+    }
+});
+
 test('the reason of an answer without data is named', () => {    assert.match(roleReason({ refusal: 'I cannot do that.' }), /отказ модели/);
     assert.match(roleReason({ error: { message: 'the model is down' } }), /ошибка ответа/);
     assert.match(roleReason({ text: 'Сначала изучу проект.' }), /ответ без данных/);

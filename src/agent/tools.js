@@ -25,6 +25,7 @@
 
 import path from 'node:path';
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { toolSpecs as buildSpecs } from './tool-specs.js';
 import { listFiles, readTextFile, findLines, patchFile, searchFiles, writeTextFile, replaceInFile, deleteFile, makeDirectory, copyPath } from './fs-tools.js';
 import { listProjectBackups, restoreProjectBackup } from './project-backup.js';
@@ -45,7 +46,7 @@ import { findChromium, findEgo, resolveEngine, screenshotPage, startStaticServer
 import { ensurePage } from '../stages/dev-server.js';
 import { shootPage } from '../stages/vision.js';
 import { findMeasurement } from '../inputs/measured.js';
-import { sniffType } from '../shared/data-urls.js';
+import { sniffType, isTextBytes } from '../shared/data-urls.js';
 import {
     FAMILY_CLIS,
     FAMILY_ROOT,
@@ -904,6 +905,13 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                 const relKey = rel ?? target;
                 if (rel) {
                     const { abs } = await resolveInside(root, target, { allowRoot: false });
+                    // Файла нет — это факт о проекте, а не поломка инструмента: его пишет
+                    // другая роль, и ждать его бессмысленно.
+                    if (!existsSync(abs)) {
+                        return `Файл ${target} не найден: его ещё нет на диске. Посмотри, кто его `
+                            + 'пишет (список файлов шага и отчёт плана), и не жди его: сделай свою '
+                            + 'часть работы и скажи в ответе, что файла не было.';
+                    }
                     const bytes = await readFile(abs);
                     const image = sniffType(bytes);
                     if (image.kind === 'image'
@@ -912,6 +920,16 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                         await noteRead(relKey);
                         return `Изображение ${rel} приложено к запросу.`;
                     }
+                    // A file that is not text is not read as text: the bytes of a picture are
+                    // not lines. A role that reads them gets noise, decides the file is
+                    // broken and redraws it — forever.
+                    if (!isTextBytes(bytes)) {
+                        if (stamp) reads.set(key, stamp);
+                        await noteRead(relKey);
+                        return `Файл ${rel} не текст: его байты нельзя прочитать как строки `
+                            + '(это картинка или другой двоичный файл). Посмотри на него инструментом '
+                            + '`magick` (например `["identify", "<file>"]`) или приложи его к запросу.';
+                    }
                 }
                 const known = rel ? await readFromMap(rel, startLine, endLine) : null;
                 if (known !== null) {
@@ -919,12 +937,24 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                     await noteRead(relKey, { from: startLine ?? 1, to: endLine ?? null });
                     return known;
                 }
-                const file = await readTextFile({
-                    root,
-                    file: target,
-                    startLine,
-                    endLine,
-                });
+                let file;
+                try {
+                    file = await readTextFile({
+                        root,
+                        file: target,
+                        startLine,
+                        endLine,
+                    });
+                } catch (error) {
+                    // Файла нет — это не поломка инструмента, а факт о проекте. Роль должна
+                    // знать: файла ещё нет, его пишет другая роль, и ждать его бессмысленно.
+                    if (/Файл не найден|Не файл/.test(String(error?.message ?? ''))) {
+                        return `Файл ${target} не найден: его ещё нет на диске. Посмотри, кто его `
+                            + 'пишет (список файлов шага и отчёт плана), и не жди его: сделай свою '
+                            + 'часть работы и скажи в ответе, что файла не было.';
+                    }
+                    throw error;
+                }
                 if (stamp) reads.set(key, stamp);
                 // The moment of the read goes into the context of the run: the roles after
                 // this one know which lines of the file have been read, and they do not
@@ -1049,6 +1079,12 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
             case 'copy_path': {
                 const source = await resolveInside(root, String(args.source ?? ''), { allowRoot: false });
                 const destination = await writePath(args.destination);
+                // Источника нет — это факт о проекте, а не поломка: файла ещё не написали.
+                if (!existsSync(path.join(root, source.rel))) {
+                    return `Источник ${source.rel} не найден: его ещё нет на диске. Посмотри, кто его `
+                        + 'пишет (список файлов шага и отчёт плана), и не жди его: сделай свою часть '
+                        + 'работы и скажи в ответе, что источника не было.';
+                }
                 const result = await copyPath({ root, source: source.rel, destination: destination.rel });
                 rememberWrite(result.destination);
                 await rememberInMap(result.rel ?? destination.rel);

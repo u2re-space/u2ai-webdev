@@ -136,8 +136,10 @@ export const defaults = {
       // The motion is the work of the head of the family too: a wrong easing or a wrong
       // property costs more than the seconds of the thinking that prevented it.
       animator: 'family:gpt',
-      // The assets are the work of the head of the family: the place of a picture and its
-      // format are decisions that are expensive to undo.
+      // The assets are the work of the tail of the family: the place of a picture and its
+      // format — это решения, которые легко переиграть, и они обходятся дорого. Младшая
+      // модель (Terra) кладёт картинку на место и проверяет её один раз; старшая тратит
+      // минуты на то, что дешевле сделать дешевле.
       illustrator: 'family:gpt',
     },
     /**
@@ -161,10 +163,13 @@ export const defaults = {
         // The editor writes the SVG and then answers for it: the whole session of the
         // editor is the work of the model of the house.
         editor: [1],
-        // The animator and the illustrator answer once and write: there is nothing for them
-        // to polish on the disk, so they stay on the head of the ladder.
+        // The animator writes the motion and then answers for it: the whole session of the
+        // animator is the work of the model of the house.
         animator: [1],
-        illustrator: [1],
+        // The illustrator puts the pictures on their places: хвост лестницы, младшая модель
+        // семейства. Раскладка картинок и её проверка — это дешёвая работа, и старшая
+        // модель на ней сгорает: рисует, смотрит, рисует снова.
+        illustrator: [0],
       },
     },
   },

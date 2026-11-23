@@ -735,8 +735,7 @@ turns.
 | `iconifier` | Pick the icons. |
 | `installer` | Set the environment up. |
 | `editor` | Edit the vector graphics and the decorations. |
-| `reviewer` | Review the result. |
-| `auditor` | Audit the project. |
+| `reviewer` | Review the result. || `auditor` | Audit the project. |
 | `learner` | Write the lessons. |
 
 Seven of them take the steps of the plan: `markup`, `coder`, `styler`, `animator`, `editor`,
@@ -1227,10 +1226,14 @@ the best model of the family, and its prompt says what a wordmark is — spelled
 `<text>` element with the font of the project or the paths of a real font, never a pixel font
 invented out of rectangles.
 
-The animator and the illustrator have one as well. The motion is a matter of properties,
-durations and the reduced motion: a wrong easing is noticed by everybody. The place of a
-picture and its format are decisions that are expensive to undo: the markup links the final
-path of every asset.
+The animator has one as well. The motion is a matter of properties, durations and the
+reduced motion: a wrong easing is noticed by everybody.
+
+The illustrator works on the **tail** of the family — the junior model, the Terra. Putting a
+picture on its place and checking it once is cheap work, and the senior model burns minutes on
+it: it draws, looks, draws again, and the run pays for every attempt. The place of a picture
+and its format are cheap to redo, so they are done by the cheap model; the motion and the
+vector graphics — where a wrong decision is seen by everybody — stay on the head.
 
 The Kimi has no levels of the effort above `medium` — the answer of the same question costs the
 same seconds there — so a role that answers on it works on `medium` however deep the profile of
@@ -1299,8 +1302,9 @@ the house.
 
 The vector editor stands on the head of the family as well: the editor draws the geometry
 and the letters of the graphics, and a wordmark whose letters do not spell the name is not a
-drawing. The animator and the illustrator stand there too: a wrong easing or a wrong format
-of a picture costs more than the seconds of the thinking that prevented it.
+drawing. The animator stands there too: a wrong easing costs more than the seconds of the
+thinking that prevented it. The illustrator stands on the **tail**: the place of a picture and
+its format are cheap to redo, so the junior model does them.
 
 The ladder belongs to the role. A stage of the house never lowers the model of the work on its
 own — with one exception, and it is the point of the ladder: the fix of the styles after the
@@ -2222,6 +2226,14 @@ directory or a file that is not there.
   An SVG written into a `.webp` is not a picture the browser shows, and the check of the step
   says so by name. The tool `write_file` refuses such a write at all and tells the role how
   to make a real picture (`magick file.svg file.webp`).
+- The bytes of a picture are not lines: `read_file` will not show what a picture looks like.
+  A role that reads it as text gets noise, decides the file is broken and redraws it — for
+  ever. The binary is looked at with `magick` (`identify`), and the text of a file that is
+  not text is refused with that answer.
+- A call repeated twice in a row is a loop, not work, and the role is told so: the same
+  arguments twice mean that the previous answer did not satisfy it, and repeating it will
+  not. A file the role comes back to three times in a row is the same thing: take the best
+  of what you have, say what is not right in the report, and answer.
 - A step owns its files: the step of the illustrator that also names `index.html` gives the
   markup back to the markup, and the plan says so.
 - The assets do not wait for the markup: a plan that ties them into a circle (the pictures

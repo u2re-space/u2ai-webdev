@@ -31,7 +31,8 @@ import { role as vectorRole } from '../src/stages/vector.js';
 import { role as assetsRole } from '../src/stages/assets.js';
 import { role as iconifyRole } from '../src/stages/iconify.js';
 import { openRegistry } from '../src/registry.js';
-import { ROLES } from '../src/roles/index.js';
+import { ROLES, resolveRole } from '../src/roles/index.js';
+import { defaults } from '../src/config.js';
 
 /** Стадии, которые берут шаги плана, и роль каждой из них. */
 const modules = {
@@ -243,6 +244,45 @@ test('the architecture keeps the states of the interface', () => {
     assert.match(brief, /## The states of the interface/);
     assert.match(brief, /is-loading/);
     assert.match(brief, /the panel is open/);
+});
+
+test('the name of a step tells its role, not only the extension of its files', () => {
+    // Разметка, собранная в модулях, лежит файлами `.js` в каталоге `views`. По одному
+    // расширению она — код, и её не пишет никто: следующая роль лезет в файл, которого нет.
+    const plan = normalizePlan({
+        summary: 'An app.',
+        steps: [
+            {
+                id: 'markup-rooms',
+                title: 'Разметить комнаты',
+                role: 'coder',
+                files: ['src/views/rooms.js', 'src/views/device-panel.js'],
+            },
+            {
+                id: 'icons',
+                title: 'Модуль иконок',
+                role: 'coder',
+                files: ['src/icons.js'],
+            },
+        ],
+    });
+
+    const rooms = plan.steps.find((step) => step.id === 'markup-rooms');
+    assert.equal(rooms.role, 'markup');
+    // Модуль иконок — код, несмотря на имя шага.
+    const icons = plan.steps.find((step) => step.id === 'icons');
+    assert.equal(icons.role, 'coder');
+    assert.ok(plan.warnings.some((item) => /markup-rooms/.test(item) && /markup/.test(item)),
+        plan.warnings.join(' | '));
+});
+
+test('the illustrator works on the junior model of the family', () => {
+    // Раскладка картинок — дешёвая работа, и старшая модель на ней сгорает.
+    const config = structuredClone(defaults);
+    assert.equal(resolveRole('illustrator', config, { stage: 'assets' }).model, 'openai/gpt-6.1-terra');
+    // А движение и вектор — по-прежнему работа старшей.
+    assert.equal(resolveRole('animator', config, { stage: 'animation' }).model, 'openai/gpt-6.2-sol');
+    assert.equal(resolveRole('editor', config, { stage: 'vector' }).model, 'openai/gpt-6.2-sol');
 });
 
 test('a step of the environment leaves the plan, whoever the role is', () => {    const plan = normalizePlan({

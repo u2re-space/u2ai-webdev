@@ -20,7 +20,7 @@
  * @depends none
  * @usedBy openai/responses, roles/index, openai/chat
  * @exports DATA_URL_PATTERN, scrubDataUrls, scrubItems, assetPart, assetNote, dataUrlExtension,
- *          sniffType
+ *          sniffType, isTextBytes
  * @ai.tags data-urls, images, requests
  * @ai.hint pure
  */
@@ -166,6 +166,19 @@ function looksLikeText(bytes) {
         if (byte < 0x09 || (byte > 0x0d && byte < 0x20)) control += 1;
     }
     return control / sample.length < 0.02;
+}
+
+/**
+ * Do the bytes hold text?
+ *
+ * The bytes of a picture are not lines: a file that is not text is not read as text.
+ * @param {Buffer} bytes
+ * @returns {boolean}
+ * @exports
+ * @ai.hint pure
+ */
+export function isTextBytes(bytes) {
+    return looksLikeText(Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes ?? []));
 }
 
 /**

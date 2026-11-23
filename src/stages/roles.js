@@ -15,7 +15,7 @@
  * @depends node:path
  * @usedBy stages/plan, roles/planner
  * @exports LIVE_ROLES, LIVE_ROLE_NAMES, liveRole, stageForRole, roleForFiles, planRole,
- *          foreignFiles, withoutForeignFiles
+ *          foreignFiles, withoutForeignFiles, roleForStepName
  * @ai.tags stages, roles, plan
  * @ai.hint pure
  * @ai.hint legacy-0.2
@@ -122,6 +122,46 @@ export function stageForRole(role) {
 const MOTION_WORDS = /\b(motion|animation|animate|transition|transitions|keyframe|keyframes|reduced-motion)\b/i;
 
 /**
+ * Слова, что называют роль в имени шага.
+ *
+ * Планировщик называет шаг по тому, что он делает: `markup-rooms` — это разметка комнат,
+ * даже если файлы названы `.js`: так работает проект с шаблонами, где разметка лежит
+ * файлами `.js`. Без этого разметка уходила кодеру, её не было, и следующая роль лезла
+ * в `index.html`, которого никто не написал.
+ * @type {Readonly<Record<string, string>>}
+ */
+const ROLE_BY_STEP_NAME = Object.freeze({
+    markup: 'markup',
+    styles: 'styler',
+    style: 'styler',
+    motion: 'animator',
+    animation: 'animator',
+    vector: 'editor',
+    icons: 'iconifier',
+    imagery: 'illustrator',
+    assets: 'illustrator',
+    images: 'illustrator',
+    pictures: 'illustrator',
+    code: 'coder',
+    script: 'coder',
+    scripts: 'coder',
+});
+
+/**
+ * Роль по имени шага: первое слово имени, если оно называет роль.
+ * @param {string} stepId имя шага
+ * @returns {string|null}
+ * @exports
+ * @ai.hint pure
+ */
+export function roleForStepName(stepId = '') {
+    const id = String(stepId ?? '').trim().toLowerCase();
+    if (!id) return null;
+    const first = id.split(/[-_:.\s]+/).find(Boolean) ?? '';
+    return ROLE_BY_STEP_NAME[first] ?? null;
+}
+
+/**
  * Роль шага, угаданная по его файлам.
  *
  * Угадывает та роль, которой принадлежит первый файл шага: разметка — разметке, стили —
@@ -191,6 +231,30 @@ export function planRole(role = '', files = [], step = {}) {
         };
     }
 
+    // Имя шага говорит о роли не меньше, чем расширение файла: `markup-rooms` — это
+    // разметка комнат, даже когда файлы названы `.js`.
+    const byName = roleForStepName(step?.id ?? '');
+    if (byName && byName !== named) {
+        // Имя шага и его файлы должны говорить одно и то же: шаг `icons` с файлом
+        // `src/icons.js` — это модуль иконок, то есть код, а не набор иконок. Шаблон
+        // разметки лежит в каталоге `views`, и там `.js` — это разметка.
+        const kind = roleForFiles(list);
+        const byDir = kind === 'coder' ? ownerOfFile(list[0] ?? '', '') : kind;
+        if (kind && kind !== byName && byDir !== byName) {
+            return {
+                role: kind,
+                dropped: false,
+                warning: `Шаг ${step?.id ?? ''} назван по роли "${byName}", но его файлы — `
+                    + `${kind}: взята она.`,
+            };
+        }
+        return {
+            role: byName,
+            dropped: false,
+            warning: `Шаг ${step?.id ?? ''} назван по роли "${byName}" — взята она, а не "${named}".`,
+        };
+    }
+
     const live = liveRole(named);
     if (live) return { role: live, dropped: false, warning: null };
     const guessed = roleForFiles(list);
@@ -236,13 +300,32 @@ export function foreignFiles(role = '', files = []) {
     const styler = who === 'animator' ? 'styler' : who;
     const out = [];
     for (const rel of list) {
-        const owner = roleForFiles([rel]);
+        const owner = ownerOfFile(rel, who);
         // Файл без вида (папка, файл неизвестного вида) остаётся за шагом: его роль не
         // знает, и отдать его некому.
         if (!owner || owner === who || owner === styler) continue;
         out.push(rel);
     }
     return out;
+}
+
+/**
+ * Кому принадлежит файл: по виду и по каталогу.
+ *
+ * Шаблон разметки лежит файлом `.js` (`src/views/rooms.js`) — так работает проект, где
+ * разметка собирается в модули. По одному расширению такой файл — код, и разметка уходит
+ * кодеру: её не пишет никто, и следующая роль лезет в файл, которого нет.
+ * @param {string} rel путь файла
+ * @param {string} role роль шага
+ * @returns {string|null}
+ */
+function ownerOfFile(rel, role) {
+    const byKind = roleForFiles([rel]);
+    if (byKind !== 'coder' || role === 'coder') return byKind;
+    // Код в каталоге шаблонов — это разметка.
+    const dir = path.posix.dirname(rel);
+    if (/(^|\/)(views?|templates?|partials?|screens?)$/i.test(dir)) return 'markup';
+    return byKind;
 }
 
 /**

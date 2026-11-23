@@ -97,6 +97,15 @@ ${vectors}
   object is not a cut-out.
 - The name of the file says what the picture is: \`logo.svg\`, \`hero.webp\`, \`avatar.png\`.
   The name of the prepared crop is the business of the measurer, not of the project.
+- One picture, one drawing, one check. Draw the picture, look at it once with \`magick\` (for example
+  \`["identify", "-format", "%wx%h", "<file>"]\`), and if it is what the step asked for, stop. A
+  picture you keep redrawing because the last one was "almost right" is never right: the step
+  asks for a picture that fits the design, not a perfect one. If two drawings in a row did not
+  satisfy you, take the better of the two and say in the report what is not right — the run
+  will not wait for the tenth attempt.
+- The bytes of a picture are not text: \`read_file\` will not show you what the picture looks
+  like. Look at it with \`magick\` (\`identify\`, or convert it and look at the reference), and do
+  not read the file as lines — the noise you get that way is not the picture.
 - The answer names every file that is on the disk now, with the path it lies at: the page
   links these paths, and the stages after this one take them from your answer.
 - Do the work in one go: read what you need, then write. The step has few turns, and a turn
