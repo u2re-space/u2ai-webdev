@@ -2163,6 +2163,12 @@ directory or a file that is not there.
 - The vector graphics are drawn one graphic per step: a step with three drawings is a turn
   longer than the budget of the stage, and the budget kills the stage after the pictures are
   already on the disk.
+- A picture is checked like a script: the bytes of the file must be the format of its name.
+  An SVG written into a `.webp` is not a picture the browser shows, and the check of the step
+  says so by name. The tool `write_file` refuses such a write at all and tells the role how
+  to make a real picture (`magick file.svg file.webp`).
+- A step owns its files: the step of the illustrator that also names `index.html` gives the
+  markup back to the markup, and the plan says so.
 - A crash outside the command — an unhandled rejection, an uncaught exception — is printed and
   leaves the exit code of the failure: a silent death is the hardest kind of failure to read.
 

@@ -14,7 +14,8 @@
  *
  * @depends node:path
  * @usedBy stages/plan, roles/planner
- * @exports LIVE_ROLES, LIVE_ROLE_NAMES, liveRole, stageForRole, roleForFiles, planRole
+ * @exports LIVE_ROLES, LIVE_ROLE_NAMES, liveRole, stageForRole, roleForFiles, planRole,
+ *          foreignFiles
  * @ai.tags stages, roles, plan
  * @ai.hint pure
  * @ai.hint legacy-0.2
@@ -140,6 +141,10 @@ export function roleForFiles(files = []) {
  * назван: окружение готовит стадия `setup` для всего прогона, и шаг кодера с манифестом
  * уводит роль в чужую работу — установку зависимостей и правку lock-файла.
  *
+ * Шаг, который называет чужой файл, теряет этот файл: `index.html` принадлежит разметке,
+ * и шаг иллюстратора, который просит ещё и разметку, отдаёт её тому, кому она принадлежит.
+ * Файл остаётся в плане — он всё равно нужен кому-то, — но шаг за него не отвечает.
+ *
  * @param {string} role роль, которую назвал планировщик
  * @param {string[]} files файлы шага
  * @returns {{ role: string|null, dropped: boolean, warning: string|null }}
@@ -165,7 +170,6 @@ export function planRole(role = '', files = []) {
 
     const live = liveRole(named);
     if (live) return { role: live, dropped: false, warning: null };
-
     const guessed = roleForFiles(list);
     if (guessed) {
         return {
@@ -183,4 +187,34 @@ export function planRole(role = '', files = []) {
         dropped: true,
         warning: `${who} не исполняется ни одной стадией, ${reason} — шаг убран из плана.`,
     };
+}
+
+/**
+ * Файлы шага, которые принадлежат другой роли.
+ *
+ * План раздаёт файлы между шагами, и роль не должна брать чужое: `index.html` — работа
+ * разметки, а шаг иллюстратора, который просит ещё и разметку, отдаёт её тому, кому она
+ * принадлежит. Остальные файлы шага остаются за ролью.
+ *
+ * @param {string} role роль шага
+ * @param {string[]} files файлы шага
+ * @returns {string[]} чужие файлы
+ * @exports
+ * @ai.hint pure
+ */
+export function foreignFiles(role = '', files = []) {
+    const who = String(role ?? '').trim().toLowerCase();
+    const list = (Array.isArray(files) ? files : [])
+        .map((item) => String(item ?? '').trim().replace(/\\/g, '/'))
+        .filter(Boolean);
+    if (!who || !list.length) return [];
+    const out = [];
+    for (const rel of list) {
+        const owner = roleForFiles([rel]);
+        // Файл без вида (папка, файл неизвестного вида) остаётся за шагом: его роль не
+        // знает, и отдать его некому.
+        if (!owner || owner === who) continue;
+        out.push(rel);
+    }
+    return out;
 }

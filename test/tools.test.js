@@ -13,6 +13,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 
 import { createToolset, htmlToText, BLOCKING_COMMANDS } from '../src/agent/tools.js';
 import { runBridge } from '../src/agent/bridges.js';
@@ -100,6 +101,27 @@ test('a name of the house that is a tool is answered with a pointer, not a refus
     const other = await tools.execute('read_skill', { name: 'demo' });
     assert.match(other, /Скилл не найден: demo/);
     assert.match(other, /Установленные пакеты/);
+});
+
+test('a picture is not written as text', async () => {
+    const { root, tools } = await workspace();
+    // Текст в файле картинки — картинка, которую браузер не покажет: запись отказана, и
+    // роль сказано, как сделать настоящую картинку.
+    const refused = await tools.execute('write_file', {
+        path: 'src/hero.webp',
+        content: '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"></svg>',
+    });
+    assert.match(refused, /не записан/);
+    assert.match(refused, /magick/);
+    // Файла на диске нет: текст в файл картинки не попал.
+    assert.equal(existsSync(path.join(root, 'src', 'hero.webp')), false);
+
+    // Настоящая картинка (base64) пишется: это байты картинки, а не текст.
+    const written = await tools.execute('write_file', {
+        path: 'src/hero.webp',
+        content: 'UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAwA0JaQAA3AA/vuUAAA=',
+    });
+    assert.match(written, /Записан/);
 });
 
 test('the memory of the project is asked through the program', async () => {

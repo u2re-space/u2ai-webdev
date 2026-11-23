@@ -34,6 +34,7 @@ import { readSkill, readSkillFile, discoverSkills } from './skills.js';
 import { toolForName } from './tool-pointer.js';
 import { guidanceSearchText, guidanceRetrieveText, GUIDANCE_SOURCE } from './guidance.js';
 import { runProgram as runProgramIn } from './programs.js';
+import { pictureExtension, contentLooksLikePicture } from './syntax.js';
 import { memoryArgs, memoryConnection, callMemoryProgram } from './memory-program.js';
 import { compareWithReference } from './image-compare.js';
 import { firstPageId } from './devtools.js';
@@ -974,6 +975,18 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
             case 'write_file': {
                 const target = await writePath(args.path);
                 forgetReads(target.rel);
+                // A picture is bytes, not text: a file of a picture that gets text is a file
+                // the browser will not show. The write is refused, and the role is told how
+                // to make a real picture.
+                const raster = pictureExtension(target.rel);
+                if (raster) {
+                    const looks = await contentLooksLikePicture(String(args.content ?? ''));
+                    if (!looks) {
+                        return `Файл ${target.rel} не записан: это картинка (${raster}), а текст в `
+                            + 'файл картинки браузер не покажет. Нарисуйте вектор в .svg или '
+                            + `превратите его в картинку инструментом \`magick\` (например "magick file.svg ${target.rel}").`;
+                    }
+                }
                 const result = await writeTextFile({ root, file: target.rel, content: String(args.content ?? '') });
                 rememberWrite(target.rel);
                 await rememberInMap(target.rel);

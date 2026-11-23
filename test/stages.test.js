@@ -161,8 +161,42 @@ test('a step of a role that no stage executes leaves the plan when the role cann
     assert.ok(plan.warnings.some((item) => /Шаг c:/.test(item) && /unknown-role/.test(item)));
 });
 
-test('a step of the environment leaves the plan, whoever the role is', () => {
+test('a file of another role leaves the step that named it', () => {
+    // The step of the illustrator asked for the markup as well: the markup belongs to the
+    // role of the markup, and the step of the illustrator keeps only its own files.
     const plan = normalizePlan({
+        summary: 'A landing.',
+        steps: [
+            {
+                id: 'imagery',
+                title: 'The pictures of the carousel',
+                role: 'illustrator',
+                files: ['index.html', 'public/images/event-01.webp'],
+            },
+        ],
+    });
+
+    const step = plan.steps[0];
+    assert.equal(step.role, 'illustrator');
+    assert.deepEqual(step.files, ['public/images/event-01.webp']);
+    assert.ok(plan.warnings.some((item) => /чужие файлы отданы их ролям/.test(item) && /index\.html/.test(item)),
+        plan.warnings.join(' | '));
+});
+
+test('a step that named only foreign files is given to the role that owns them', () => {
+    const plan = normalizePlan({
+        summary: 'A landing.',
+        steps: [
+            { id: 'page', title: 'The page', role: 'illustrator', files: ['index.html'] },
+        ],
+    });
+
+    assert.equal(plan.steps[0].role, 'markup');
+    assert.deepEqual(plan.steps[0].files, ['index.html']);
+    assert.ok(plan.warnings.some((item) => /принадлежат роли "markup"/.test(item)), plan.warnings.join(' | '));
+});
+
+test('a step of the environment leaves the plan, whoever the role is', () => {    const plan = normalizePlan({
         summary: 'A landing.',
         steps: [
             { id: 'env', title: 'Manifest', role: 'coder', files: ['package.json', 'package-lock.json'] },

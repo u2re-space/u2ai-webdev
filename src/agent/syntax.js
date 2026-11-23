@@ -17,7 +17,9 @@
  *
  * @depends node:path, node:os, node:fs/promises, agent/programs
  * @usedBy stages/step, stages/build
- * @exports SCRIPT_EXTENSIONS, STYLE_EXTENSIONS, CHECKED_EXTENSIONS, checkableFile,
+ * @exports SCRIPT_EXTENSIONS, STYLE_EXTENSIONS, SVG_EXTENSIONS, RASTER_EXTENSIONS,
+ *          RASTER_MAGIC, BINARY_CONTENT, CHECKED_EXTENSIONS, checkableFile, checkPicture,
+ *          pictureExtension, contentLooksLikePicture,
  *          findSass, firstError, styleReferences, styleImportCandidates,
  *          missingStyleReferences, missingPartials, partialName, checkScript, checkStyle,
  *          checkFile, checkFiles
@@ -37,8 +39,90 @@ export const SCRIPT_EXTENSIONS = Object.freeze(['.js', '.mjs', '.cjs']);
 /** The extensions of the files that hold a stylesheet. */
 export const STYLE_EXTENSIONS = Object.freeze(['.scss', '.sass', '.css']);
 
+/**
+ * The extensions of the files that hold a vector graphic.
+ *
+ * The graphic is text, and the text is checked: an SVG with a lost tag does not open.
+ */
+export const SVG_EXTENSIONS = Object.freeze(['.svg']);
+
+/**
+ * The extensions of the files that hold a raster picture.
+ *
+ * The bytes of a picture are not text, and a picture whose content does not match its
+ * extension is a picture the browser will not show. The check below is the one that catches
+ * it: an SVG written into a `.webp` is the most common way to get one.
+ */
+export const RASTER_EXTENSIONS = Object.freeze(['.webp', '.png', '.jpg', '.jpeg', '.gif', '.avif', '.bmp', '.ico']);
+
+/**
+ * The magic bytes of the raster formats the browser shows.
+ *
+ * A file whose first bytes are not the magic of its extension is not that format: an SVG
+ * inside a `.webp` is text, and the browser refuses to show it. The check names the file and
+ * the format it really is.
+ * @type {Readonly<Record<string, number[]>>}
+ */
+export const RASTER_MAGIC = Object.freeze({
+    '.webp': [0x52, 0x49, 0x46, 0x46], // RIFF
+    '.png': [0x89, 0x50, 0x4e, 0x47], // ‰PNG
+    '.gif': [0x47, 0x49, 0x46], // GIF
+    '.bmp': [0x42, 0x4d], // BM
+    '.ico': [0x00, 0x00, 0x01, 0x00],
+    '.avif': [0x66, 0x74, 0x79, 0x70], // ftyp
+    '.jpg': [0xff, 0xd8, 0xff],
+    '.jpeg': [0xff, 0xd8, 0xff],
+});
+
+/**
+ * The formats that hold bytes and not text.
+ *
+ * A file of one of these formats is written by a program, not by `write_file`: текст в
+ * файле картинки — это картинка, которую браузер не покажет.
+ * @type {ReadonlySet<string>}
+ */
+export const BINARY_CONTENT = Object.freeze(new Set(RASTER_EXTENSIONS));
+
+/**
+ * The extension of a file, when the file holds a picture.
+ * @param {string} file
+ * @returns {string|null} the extension with the dot, or null
+ * @exports
+ * @ai.hint pure
+ */
+export function pictureExtension(file) {
+    const ext = path.extname(String(file ?? '').trim()).toLowerCase();
+    return BINARY_CONTENT.has(ext) ? ext : null;
+}
+
+/**
+ * Does the text look like a picture that was already encoded?
+ *
+ * A role that writes a picture as base64 writes a long line of digits; such a file is a
+ * real picture, and it may be written as text. SVG, HTML and код — не картинка.
+ * @param {string} content
+ * @returns {Promise<boolean>}
+ * @exports
+ * @ai.hint io
+ */
+export async function contentLooksLikePicture(content) {
+    const text = String(content ?? '').trim();
+    if (!text) return false;
+    // Начало файла SVG или разметки — это текст, а не картинка.
+    if (/^<\s*svg\b/i.test(text) || /^<\s*(!doctype|html)\b/i.test(text)) return false;
+    // Картинка в base64: длинная строка без пробелов и без угловых скобок.
+    if (text.length < 32) return false;
+    if (/[<>{}]/.test(text)) return false;
+    return /^[A-Za-z0-9+/=\s]+$/.test(text);
+}
+
 /** The extensions the check knows about. */
-export const CHECKED_EXTENSIONS = Object.freeze([...SCRIPT_EXTENSIONS, ...STYLE_EXTENSIONS]);
+export const CHECKED_EXTENSIONS = Object.freeze([
+    ...SCRIPT_EXTENSIONS,
+    ...STYLE_EXTENSIONS,
+    ...SVG_EXTENSIONS,
+    ...RASTER_EXTENSIONS,
+]);
 
 /**
  * True when the check knows this file.
@@ -403,6 +487,61 @@ export async function checkStyle(root, rel, { env = process.env, timeoutMs = 30_
 }
 
 /**
+ * Проверить картинку: байты файла должны быть того формата, который у него в имени.
+ *
+ * Роль, которая пишет картинку, может положить текст (SVG, код) в файл `.webp`: браузер
+ * такой файл не покажет, и страница остаётся без картинки. Проверка называет файл и то,
+ * чем он на самом деле является.
+ *
+ * @param {string} root
+ * @param {string} rel
+ * @returns {Promise<{ file: string, ok: boolean, errors: string[], note: string|null }>}
+ * @exports
+ * @ai.hint io
+ */
+export async function checkPicture(root, rel) {
+    const name = String(rel ?? '').trim();
+    const ext = path.extname(name).toLowerCase();
+    const kind = ext.replace(/^\./, '');
+    const magic = RASTER_MAGIC[ext];
+    if (!magic) return { file: name, ok: true, errors: [], note: null };
+    const abs = path.join(root, name);
+    let bytes = null;
+    try {
+        const buffer = await readFile(abs);
+        bytes = buffer.subarray(0, 16);
+    } catch {
+        // Файла нет: об этом говорит стадия шага, а не проверка формата.
+        return { file: name, ok: true, errors: [], note: null };
+    }
+    const matches = magic.every((byte, index) => bytes[index] === byte);
+    if (matches) {
+        // WebP лежит в контейнере RIFF: после «RIFF» идёт размер, потом «WEBP».
+        if (ext === '.webp' && bytes.subarray(8, 12).toString('latin1') !== 'WEBP') {
+            return { file: name, ok: false, errors: [`Файл ${name} не картинка webp: внутри контейнер RIFF, но не WEBP.`], note: null };
+        }
+        return { file: name, ok: true, errors: [], note: null };
+    }
+    // Текст внутри картинки: SVG или код. Такой файл браузер не покажет.
+    const head = bytes.toString('latin1');
+    if (/<svg\b/i.test(head) || head.trimStart().startsWith('<')) {
+        return {
+            file: name,
+            ok: false,
+            errors: [`Файл ${name} не картинка ${kind}: внутри SVG. Нарисуйте вектор в .svg или `
+                + 'превратите его в картинку инструментом `magick` (например "magick file.svg file.webp").'],
+            note: null,
+        };
+    }
+    return {
+        file: name,
+        ok: false,
+        errors: [`Файл ${name} не картинка ${kind}: первые байты не похожи на этот формат.`],
+        note: null,
+    };
+}
+
+/**
  * Check the syntax of one file.
  * @param {string} root
  * @param {string} rel
@@ -416,6 +555,7 @@ export async function checkFile(root, rel, options = {}) {
     const ext = path.extname(name).toLowerCase();
     if (SCRIPT_EXTENSIONS.includes(ext)) return await checkScript(root, name, options);
     if (STYLE_EXTENSIONS.includes(ext)) return await checkStyle(root, name, options);
+    if (RASTER_EXTENSIONS.includes(ext)) return await checkPicture(root, name);
     return { file: name, ok: true, errors: [], note: null };
 }
 

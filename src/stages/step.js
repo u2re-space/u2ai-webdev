@@ -34,7 +34,7 @@ import { readFile, readdir, stat } from 'node:fs/promises';
 import { runRole, roleReason, syntaxCorrection, partialCorrection } from '../roles/index.js';
 import { writeTextFile } from '../agent/fs-tools.js';
 import { resolveInside } from '../agent/paths.js';
-import { checkFiles, missingPartials } from '../agent/syntax.js';
+import { checkFiles, missingPartials, checkPicture } from '../agent/syntax.js';
 import { inputContext } from '../inputs/index.js';
 import { readReferences } from '../inputs/references.js';
 import { listStyleFiles } from './build.js';
@@ -731,6 +731,12 @@ export async function resumableStep(root, config = {}, id = null, step = {}, pla
     const names = written.length ? written : (Array.isArray(step.files) ? step.files : []);
     const missing = await missingFiles(root, names);
     if (missing.length) return null;
+    // Картинка, которая не картинка, — не работа этого шага: SVG внутри `.webp` браузер не
+    // покажет, и шаг делается заново — роль пишет файл правильно.
+    for (const rel of names) {
+        const picture = await checkPicture(root, String(rel ?? '')).catch(() => null);
+        if (picture && picture.ok === false) return null;
+    }
     // The answer of the role has to be on the disk: a file that is still the file of the
     // earlier stage means the answer was lost, and the step is done again.
     const own = new Set((Array.isArray(report.applied?.own) ? report.applied.own : []).map((item) => String(item)));

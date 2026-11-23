@@ -25,7 +25,7 @@ import { inputContext } from '../inputs/index.js';
 import { readReferences } from '../inputs/references.js';
 import { runId, runFile, writeJsonFile, readJsonFile } from './workspace.js';
 import { readScan, scanText } from './scan.js';
-import { planRole } from './roles.js';
+import { planRole, foreignFiles, roleForFiles } from './roles.js';
 
 /**
  * The name of the file of the plan inside the directory of the run. */
@@ -141,13 +141,33 @@ export function normalizePlan(plan = {}) {
         const resolved = planRole(item.role, item.files);
         if (resolved.warning) warnings.push(`Шаг ${id}: ${resolved.warning}`);
         if (resolved.dropped) continue;
+        // Чужой файл — не работа этого шага: разметка принадлежит разметке, и шаг
+        // иллюстратора, который просит ещё и разметку, отдаёт её тому, кому она
+        // принадлежит. Шаг без своих файлов отдаётся роли, которой эти файлы и есть.
+        const named = lines(item.files);
+        const foreign = foreignFiles(resolved.role, named);
+        let role = resolved.role;
+        let files = named;
+        if (foreign.length) {
+            const own = named.filter((file) => !foreign.includes(file));
+            if (own.length) {
+                files = own;
+                warnings.push(`Шаг ${id}: чужие файлы отданы их ролям: ${foreign.join(', ')}.`);
+            } else {
+                const owner = roleForFiles(foreign);
+                if (owner && owner !== role) {
+                    role = owner;
+                    warnings.push(`Шаг ${id}: файлы принадлежат роли "${owner}" — шаг отдан ей.`);
+                }
+            }
+        }
         seen.set(base, count + 1);
         steps.push({
             id,
             title: String(item.title ?? '').trim() || `Шаг ${id}`,
-            role: resolved.role,
+            role,
             dependsOn: lines(item.dependsOn),
-            files: lines(item.files),
+            files,
             criteria: lines(item.criteria),
         });
     }

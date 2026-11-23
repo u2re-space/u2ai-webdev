@@ -12,7 +12,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { chmod, mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 
-import { checkFile, checkFiles, checkableFile, findSass, styleImportCandidates, missingStyleReferences, missingPartials, partialName } from '../src/agent/syntax.js';
+import { checkFile, checkFiles, checkableFile, checkPicture, findSass, styleImportCandidates, missingStyleReferences, missingPartials, partialName } from '../src/agent/syntax.js';
 
 /**
  * A compiler of the stylesheets that always refuses the file: the test does not need sass.
@@ -39,8 +39,52 @@ async function fakeSass(root) {
 test('only the files of a known kind are checked', () => {
     assert.equal(checkableFile('src/main.js'), true);
     assert.equal(checkableFile('scss/main.scss'), true);
+    assert.equal(checkableFile('public/images/hero.webp'), true);
+    assert.equal(checkableFile('assets/logo.svg'), true);
     assert.equal(checkableFile('index.html'), false);
     assert.equal(checkableFile('notes.md'), false);
+});
+
+test('an SVG written into a webp is not a picture the browser shows', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-picture-'));
+    await mkdir(path.join(root, 'public', 'images'), { recursive: true });
+    await writeFile(
+        path.join(root, 'public', 'images', 'event-01.webp'),
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="810"><rect width="1440" height="810"/></svg>',
+        'utf8',
+    );
+
+    const result = await checkFile(root, 'public/images/event-01.webp');
+
+    assert.equal(result.ok, false);
+    assert.match(result.errors[0], /не картинка webp/);
+    assert.match(result.errors[0], /внутри SVG/);
+    // The error names the file and says what to do with it.
+    assert.match(result.errors[0], /event-01\.webp/);
+    assert.match(result.errors[0], /magick/);
+});
+
+test('a real webp passes the check', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-picture-real-'));
+    await mkdir(path.join(root, 'public', 'images'), { recursive: true });
+    // The header of a webp: RIFF, the size, WEBP.
+    const bytes = Buffer.concat([
+        Buffer.from('RIFF', 'latin1'),
+        Buffer.from([0x24, 0x00, 0x00, 0x00]),
+        Buffer.from('WEBPVP8 ', 'latin1'),
+        Buffer.alloc(8),
+    ]);
+    await writeFile(path.join(root, 'public', 'images', 'hero.webp'), bytes);
+
+    const result = await checkFile(root, 'public/images/hero.webp');
+    assert.equal(result.ok, true);
+    assert.equal(result.errors.length, 0);
+});
+
+test('a missing picture is not a broken picture', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-picture-missing-'));
+    const result = await checkPicture(root, 'public/images/hero.png');
+    assert.equal(result.ok, true);
 });
 
 test('a script with a lost quote does not pass', async () => {
