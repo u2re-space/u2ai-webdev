@@ -17,7 +17,8 @@
  *          stepReportPath,
  *          writeStepReport, readStepReport, readStepReports, resumableStep, roleWorkOnDisk,
  *          laterSteps, missingFiles, writtenLater, stepScope, inScope, visibleFiles, filesBlock,
- *          referenceList, runStepStage
+ *          referenceList, runStepStage, passReportPath, writePassReport, readPassReport,
+ *          donePasses
  * @ai.tags stages, steps, files
  * @ai.hint io
  * @ai.hint legacy-0.2
@@ -42,6 +43,8 @@ import { projectFiles } from './project-files.js';
 import { runId, runFile, writeJsonFile, readJsonFile } from './workspace.js';
 import { stageForRole } from './roles.js';
 import { stepScope as scopeOf, inScope as inScopeOf } from './scope.js';
+import { defaultPass, passFor, passKey, passesOf, passReportName, isPassReportName } from './pass.js';
+import { passTask, passNote, isDraftPass } from './pass-tasks.js';
 /** The directory inside the run that holds the reports of the steps. */
 export const STEPS_DIR = 'steps';
 
@@ -451,6 +454,81 @@ export async function readStepReport(root, config = {}, id = null, stepId = 'ste
 }
 
 /**
+ * Путь отчёта прохода. Отчёт прохода лежит рядом с отчётом шага и не заменяет его:
+ * шаг сделан, когда сделаны все его проходы, а читать отчёт шага нужно целиком.
+ * @param {string} root
+ * @param {object} config
+ * @param {string|null} id
+ * @param {string} stepId
+ * @param {string} role
+ * @param {string} pass
+ * @returns {string}
+ * @exports
+ * @ai.hint pure
+ */
+export function passReportPath(root, config = {}, id = null, stepId, role, pass) {
+    return stepReportPath(root, config, id, passReportName(stepId, role, pass));
+}
+
+/**
+ * Записать отчёт прохода.
+ * @param {string} root
+ * @param {object} config
+ * @param {string|null} id
+ * @param {string} stepId
+ * @param {string} role
+ * @param {string} pass
+ * @param {object} report
+ * @returns {Promise<string>}
+ * @exports
+ * @ai.hint io
+ */
+export async function writePassReport(root, config = {}, id = null, stepId, role, pass, report = {}) {
+    return await writeStepReport(root, config, id, passReportName(stepId, role, pass), report);
+}
+
+/**
+ * Прочитать отчёт прохода.
+ * @param {string} root
+ * @param {object} config
+ * @param {string|null} id
+ * @param {string} stepId
+ * @param {string} role
+ * @param {string} pass
+ * @returns {Promise<object|null>}
+ * @exports
+ * @ai.hint io
+ */
+export async function readPassReport(root, config = {}, id = null, stepId, role, pass) {
+    return await readStepReport(root, config, id, passReportName(stepId, role, pass));
+}
+
+/**
+ * Проходы роли, которые уже сделаны.
+ *
+ * Продолжённый прогон смотрит на отчёты: проход, который сделан и лежит на диске,
+ * не делается снова. Это и есть «старые прогоны продолжаются»: у прогона без новых
+ * проходов их просто не было, и они делаются с нуля — а работа прежних стадий
+ * остаётся на месте.
+ * @param {string} root
+ * @param {object} config
+ * @param {string|null} id
+ * @param {string} stepId
+ * @param {string} role
+ * @returns {Promise<string[]>}
+ * @exports
+ * @ai.hint io
+ */
+export async function donePasses(root, config = {}, id = null, stepId, role) {
+    const out = [];
+    for (const pass of passesOf(role)) {
+        const report = await readPassReport(root, config, id, stepId, role, pass).catch(() => null);
+        if (report && (report.ok === true || report.skipped === true)) out.push(pass);
+    }
+    return out;
+}
+
+/**
  * The reports of the steps of a run, read back from the disk.
  *
  * A continued run needs the reports of the steps of the earlier run: the review judges the
@@ -474,6 +552,9 @@ export async function readStepReports(root, config = {}, id = null) {
     const out = [];
     for (const name of names.sort()) {
         if (!name.endsWith('.json')) continue;
+        // Отчёт прохода (`шаг.роль.проход.json`) — часть отчёта шага, а не отдельный шаг:
+        // читать его здесь значит показать ревью одну и ту же работу дважды.
+        if (isPassReportName(name)) continue;
         const report = await readStepReport(root, config, id, name.slice(0, -5));
         if (report) out.push(report);
     }
@@ -563,17 +644,19 @@ export { inScopeOf as inScope };
  *
  * A model that cannot read the disk writes the file it has never seen — from scratch, with
  * its own names, and the work of the project is replaced by a guess. The role sees what is
- * on the disk now: the files of its step and the markup of the project, which every role
- * that writes the styles, the code or the icons has to speak the same language as.
+ * on the disk now: the files of its step, the markup of the project, and the tables of the
+ * styles and the modules of the code — those are the contracts between the phases, and
+ * a role that does not see them invents names of its own.
  *
  * @param {string} root
  * @param {object} step
  * @param {object|null} plan
+ * @param {{ styles?: boolean, code?: boolean }} [contracts] the contracts the role sees
  * @returns {Promise<Array<{ path: string, content: string }>>}
  * @exports
  * @ai.hint io
  */
-export async function visibleFiles(root, step, plan = null) {
+export async function visibleFiles(root, step, plan = null, contracts = {}) {
     const paths = [];
     const push = (rel) => {
         const name = String(rel ?? '').trim().replace(/\\/g, '/');
@@ -583,6 +666,10 @@ export async function visibleFiles(root, step, plan = null) {
     // The markup of the project: the names of its classes are the contract with the styles.
     const files = await projectFiles(root, plan);
     for (const rel of files.markup) push(rel);
+    // The tables of the styles: the names and the tokens of the contract of the styles.
+    if (contracts.styles) for (const rel of files.styles) push(rel);
+    // The modules of the code: the names of the contract of the code.
+    if (contracts.code) for (const rel of files.code) push(rel);
 
     const out = [];
     const seen = new Set();
@@ -740,6 +827,52 @@ export async function resumableStep(root, config = {}, id = null, step = {}, pla
 }
 
 /**
+ * Готов ли проход шага: лежит ли его отчёт, и лежит ли работа на диске.
+ *
+ * Проход — часть шага: отчёт шага говорит, что шаг сделан, а отчёт прохода — что сделан
+ * **этот** заход. Стадия `styling` не должна считать шаг сделанным потому, что его
+ * сделал черновик: черновик контракта — это половина работы, а не работа.
+ *
+ * @param {string} root
+ * @param {object} config
+ * @param {string|null} id
+ * @param {object} step
+ * @param {object|null} plan
+ * @param {string} pass
+ * @returns {Promise<object|null>}
+ * @exports
+ * @ai.hint io
+ */
+export async function resumablePass(root, config = {}, id = null, step = {}, plan = null, pass = 'full') {
+    const stepId = String(step?.id ?? '').trim();
+    if (!stepId) return null;
+    const report = await readPassReport(root, config, id, stepId, step.role, pass).catch(() => null);
+    if (!report || (report.ok !== true && report.skipped !== true)) return null;
+    if (report.skipped === true) return { ...report, resumed: true };
+    const written = Array.isArray(report.applied?.written) && report.applied.written.length
+        ? report.applied.written
+        : (Array.isArray(report.files) ? report.files.map((file) => file?.path ?? file) : []);
+    const names = written.length ? written : (Array.isArray(step.files) ? step.files : []);
+    const missing = await missingFiles(root, names);
+    if (missing.length) return null;
+    for (const rel of names) {
+        const picture = await checkPicture(root, String(rel ?? '')).catch(() => null);
+        if (picture && picture.ok === false) return null;
+    }
+    const own = new Set((Array.isArray(report.applied?.own) ? report.applied.own : []).map((item) => String(item)));
+    for (const file of Array.isArray(report.files) ? report.files : []) {
+        const rel = String(file?.path ?? '').trim();
+        const content = typeof file?.content === 'string' ? file.content : null;
+        if (!rel || content === null) continue;
+        if (own.has(rel)) continue;
+        if (await ownedByLater(root, config, id, plan, step, rel)) continue;
+        const disk = await currentContent(root, rel);
+        if (disk === null || disk !== content) return null;
+    }
+    return { ...report, resumed: true };
+}
+
+/**
  * Is the work of a role still on the disk?
  *
  * A stage that the progress calls done may have lost its work: the answer of the role was
@@ -751,31 +884,38 @@ export async function resumableStep(root, config = {}, id = null, step = {}, pla
  * @exports
  * @ai.hint io
  */
-export async function roleWorkOnDisk({ root, config = {}, id = null, plan = null, role } = {}) {
+export async function roleWorkOnDisk({ root, config = {}, id = null, plan = null, role, pass = null } = {}) {
     const steps = stepsForRole(plan, role);
     if (!steps.length) return true;
     let skipped = 0;
     for (const step of steps) {
         const stepId = String(step?.id ?? '').trim();
-        const report = await readStepReport(root, config, id, stepId).catch(() => null);
-        if (!report || (report.ok !== true && report.skipped !== true)) return false;
-        if (report.skipped === true) { skipped += 1; continue; }
-        const own = new Set((Array.isArray(report.applied?.own) ? report.applied.own : []).map((item) => String(item)));
-        const reportTime = await fileTime(stepReportPath(root, config, id, stepId));
-        for (const file of Array.isArray(report.files) ? report.files : []) {
-            const rel = String(file?.path ?? '').trim();
-            const content = typeof file?.content === 'string' ? file.content : null;
-            if (!rel || content === null) continue;
-            if (own.has(rel)) continue;
-            if (await ownedByLater(root, config, id, plan, step, rel)) continue;
-            const disk = await currentContent(root, rel);
-            if (disk === null) return false;
-            if (disk === content) continue;
-            // The file was changed after the step: it belongs to a later stage now.
-            const time = await fileTime(path.join(root, rel));
-            if (time !== null && reportTime !== null && time > reportTime) continue;
-            return false;
+        // Проверка идёт по проходу: стадия `pre-styling` сделала свой черновик, и её
+        // работа на диске — это работа черновика. Полные стили — это другой проход.
+        const wanted = [passFor(role, pass) ?? defaultPass(role)];
+        let stepSkipped = 0;
+        for (const name of wanted) {
+            const report = await readPassReport(root, config, id, stepId, role, name).catch(() => null);
+            if (!report || (report.ok !== true && report.skipped !== true)) return false;
+            if (report.skipped === true) { stepSkipped += 1; continue; }
+            const own = new Set((Array.isArray(report.applied?.own) ? report.applied.own : []).map((item) => String(item)));
+            const reportTime = await fileTime(passReportPath(root, config, id, stepId, role, name));
+            for (const file of Array.isArray(report.files) ? report.files : []) {
+                const rel = String(file?.path ?? '').trim();
+                const content = typeof file?.content === 'string' ? file.content : null;
+                if (!rel || content === null) continue;
+                if (own.has(rel)) continue;
+                if (await ownedByLater(root, config, id, plan, step, rel)) continue;
+                const disk = await currentContent(root, rel);
+                if (disk === null) return false;
+                if (disk === content) continue;
+                // The file was changed after the step: it belongs to a later stage now.
+                const time = await fileTime(path.join(root, rel));
+                if (time !== null && reportTime !== null && time > reportTime) continue;
+                return false;
+            }
         }
+        skipped += stepSkipped;
     }
     return skipped < steps.length;
 }
@@ -810,6 +950,7 @@ export async function runStepStage({
     signal = null,
     input = null,
     turnTimeoutMs: turnLimit = null,
+    pass: askedPass = null,
 } = {}) {
     if (!client?.responses) throw new Error('Клиент API не передан.');
     const run = id ?? runId();
@@ -899,46 +1040,170 @@ export async function runStepStage({
         // A step that is already done is not done again: the run continues with what is
         // on the disk. A model that has to write the same file a second time pays for
         // the whole stage and changes nothing.
+        //
+        // Готовность — по проходу, а не по отчёту шага: черновик контракта не делает
+        // шаг сделанным для стадии полных стилей.
         const done = await resumableStep(root, config, run, step, plan);
-        if (done) {
+        if (done && !askedPass) {
             reports.push(done);
             continue;
         }
-        const blocks = [];
-        if (task) blocks.push(String(task).trim());
-        blocks.push([
-            `## The step ${step.id}`,
-            `- title: ${step.title}`,
-            `- role: ${step.role}`,
-            step.files?.length ? `- files: ${step.files.join(', ')}` : '- files: not named',
-            step.criteria?.length ? `- criteria: ${step.criteria.join('; ')}` : '- criteria: not named',
-        ].join('\n'));
-        // What is on the disk now: the role changes the files, it does not replace them with
-        // a guess of what they should be.
-        const visible = extra?.vectorOnly ? '' : filesBlock(await visibleFiles(root, step, plan));
-        if (visible) blocks.push(visible);
-        if (brief && !(role === 'editor' && extra?.vectorOnly)) blocks.push(brief);
-        if (design && !(role === 'editor' && extra?.vectorOnly)) blocks.push(design);
-        blocks.push(order);
-        if (reference.names.length && !(role === 'editor' && extra?.vectorOnly)) {
-            blocks.push([
-                '## The reference',
-                LOOKS_AT_DESIGN.has(role)
-                    ? `The screenshot of the reference is attached to this request: ${referenceList(reference)}.`
-                    : `The screenshot of the reference of the design: ${referenceList(reference)}. It is not attached`
-                        + ' to this request: work from DESIGN.md and any existing measurements, palette and tokens.',
-                'Look at it before you write: the regions, the proportions, the colours and the',
-                'spacing of the result come from that picture.',
-            ].join('\n'));
+
+        // Проход роли: черновик контракта или работа целиком.
+        //
+        // Стадия владеет своим проходом: `pre-styling` просит черновик, `styling` — работу
+        // целиком. Стадия без явного прохода делает полную работу — так же, как раньше.
+        // Это и есть расщепление фаз: одна роль, два захода, и каждый заход — своя
+        // стадия со своим местом в прогоне.
+        const list = [passFor(role, askedPass) ?? defaultPass(role)];
+        const stepReports = [];
+        for (const pass of list) {
+            // Проход, который уже сделан, не делается снова: работа лежит на диске, и
+            // модель не должна платить за то, что уже готово.
+            const ready = await resumablePass(root, config, run, step, plan, pass);
+            if (ready) {
+                stepReports.push(ready);
+                continue;
+            }
+            const result = await runStepPass({
+                client,
+                config,
+                root,
+                task,
+                role,
+                pass,
+                step,
+                plan,
+                brief,
+                inputs,
+                run,
+                apply,
+                extra,
+                notify,
+                env,
+                signal,
+                input,
+                runContext,
+                turnTimeoutMs,
+                stageName,
+                design,
+                parts,
+                order,
+                reference,
+                warnings,
+            });
+            turns += result.turns;
+            usage = usage ?? result.usage;
+            stepReports.push(result.report);
+            // Проход, который провалился, останавливает шаг: следующий проход писал бы
+            // поверх того, что не сложилось. Шаг, который не сложился, говорит об этом
+            // сам — прогон не идёт дальше с дырой в основании.
+            if (!result.report.ok && result.report.skipped !== true) break;
         }
+        // Отчёт шага — это отчёт последнего прохода: он смотрит на файл, который на диске.
+        const last = stepReports[stepReports.length - 1] ?? null;
+        if (last) {
+            const report = { ...last, passes: list.map((pass) => passKey(role, pass)) };
+            await writeStepReport(root, config, run, step.id, report);
+            reports.push(report);
+        }
+    }
 
-        // Границы шага: файлы этого шага и файлы чужих шагов. Роль получает их вместе с
-        // шагом, и её инструменты уважают их так же, как ответ роли.
-        const bounds = { ...scopeOf(step, plan), step: String(step?.id ?? '') };
+    return {
+        stage: role,
+        ok: reports.every((report) => report.ok),
+        skipped: reports.length > 0 && reports.every((report) => report.skipped === true),
+        partial: reports.some((report) => report.skipped === true),
+        steps: reports,
+        warnings,
+        turns,
+        usage,
+        runId: run,
+    };
+}
 
-        const result = await runRole({
-            client,
-            config,
+/**
+ * Один проход роли по шагу: роль пишет, и отчёт прохода ложится на диск.
+ *
+ * Проход — это тот же шаг и те же файлы: различается только задача, которая ставится
+ * роли. Поэтому проход переиспользует всё, что уже есть у стадии шага, и отличается
+ * только текстом задачи и тем, что роль уже написала.
+ *
+ * @param {object} request
+ * @returns {Promise<{ report: object, turns: number, usage: object|null }>}
+ * @exports
+ * @ai.hint io
+ */
+async function runStepPass({
+    client,
+    config = {},
+    root = process.cwd(),
+    task = '',
+    role,
+    pass = defaultPass(role),
+    step,
+    plan = null,
+    brief = '',
+    run,
+    apply = true,
+    extra = {},
+    notify = () => {},
+    env = process.env,
+    signal = null,
+    input = null,
+    runContext = null,
+    turnTimeoutMs = null,
+    stageName = role,
+    design = '',
+    parts = [],
+    order = '',
+    reference = { names: [], sizes: [] },
+    warnings = [],
+} = {}) {
+    const blocks = [];
+    if (task) blocks.push(String(task).trim());
+    blocks.push([
+        `## The step ${step.id}`,
+        `- title: ${step.title}`,
+        `- role: ${step.role}`,
+        step.files?.length ? `- files: ${step.files.join(', ')}` : '- files: not named',
+        step.criteria?.length ? `- criteria: ${step.criteria.join('; ')}` : '- criteria: not named',
+    ].join('\n'));
+    // Задача прохода: она говорит роли, что именно она делает в этом заходе.
+    const taskOfPass = passTask(role, pass, { step, hasStyles: extra?.hasStyles, hasCode: extra?.hasCode });
+    if (taskOfPass) blocks.push(taskOfPass);
+    // What is on the disk now: the role changes the files, it does not replace them with
+    // a guess of what they should be. The contracts of the neighbouring phases are part of
+    // that: the tables of the styles and the modules of the code.
+    const visible = extra?.vectorOnly
+        ? ''
+        : filesBlock(await visibleFiles(root, step, plan, {
+            styles: role === 'coder' || role === 'styler',
+            code: role === 'styler' || role === 'animator',
+        }));
+    if (visible) blocks.push(visible);
+    if (brief && !(role === 'editor' && extra?.vectorOnly)) blocks.push(brief);
+    if (design && !(role === 'editor' && extra?.vectorOnly)) blocks.push(design);
+    blocks.push(order);
+    if (reference.names.length && !(role === 'editor' && extra?.vectorOnly)) {
+        blocks.push([
+            '## The reference',
+            LOOKS_AT_DESIGN.has(role)
+                ? `The screenshot of the reference is attached to this request: ${referenceList(reference)}.`
+                : `The screenshot of the reference of the design: ${referenceList(reference)}. It is not attached`
+                    + ' to this request: work from DESIGN.md and any existing measurements, palette and tokens.',
+            'Look at it before you write: the regions, the proportions, the colours and the',
+            'spacing of the result come from that picture.',
+        ].join('\n'));
+    }
+
+    // Границы шага: файлы этого шага и файлы чужих шагов. Роль получает их вместе с
+    // шагом, и её инструменты уважают их так же, как ответ роли.
+    const bounds = { ...scopeOf(step, plan), step: String(step?.id ?? '') };
+
+    const result = await runRole({
+        client,
+        config,
             role,
             input: blocks.join('\n\n'),
             parts,
@@ -951,13 +1216,16 @@ export async function runStepStage({
                 referenceSizes: reference.sizes,
                 pageUrl: runContext?.browserUrl ?? null,
                 vectorOnly: Boolean(extra?.vectorOnly),
+                // Проход роли: черновик контракта или полная работа. Роль знает, что это
+                // за заход, и пишет по заданию прохода.
+                pass,
                 scope: bounds,
                 turnTimeoutMs,
                 ...extra,
             },
             root,
             env,
-            maxTurns: config?.stages?.[role]?.maxTurns ?? null,
+            maxTurns: config?.stages?.[stageName]?.maxTurns ?? config?.stages?.[role]?.maxTurns ?? null,
             requireFiles: Boolean(step.files?.length),
             signal,
             notify,
@@ -965,11 +1233,12 @@ export async function runStepStage({
             stage: role,
             inputChannel: input,
         });
-        turns += result.turns;
-        usage = usage ?? result.usage;
+        const turnUsed = result.turns;
+        const turnUsage = result.usage;
         if (result.stopped === 'skipped') {
             const report = {
                 stage: role,
+                pass,
                 step: { id: step.id, title: step.title, files: step.files, criteria: step.criteria },
                 ok: false,
                 skipped: true,
@@ -977,12 +1246,11 @@ export async function runStepStage({
                 files: [], commands: [], notes: '', landmarks: [], accessibility: [], tokens: [], set: '', icons: [],
                 applied: { written: [], skipped: [], replaced: [], failed: [], own: [] },
                 syntax: { checked: [], errors: [] }, partials: { missing: [], planned: [], forgotten: [] },
-                turns: result.turns,
+                turns: turnUsed,
                 stopped: 'skipped',
             };
-            await writeStepReport(root, config, run, step.id, report);
-            reports.push(report);
-            continue;
+            await writePassReport(root, config, run, step.id, role, pass, report);
+            return { report, turns: turnUsed, usage: turnUsage };
         }
         for (const problem of result.schemaProblems ?? []) {
             warnings.push(`Шаг ${step.id}: ответ роли ${role} не по схеме — ${problem}.`);
@@ -1028,6 +1296,8 @@ export async function runStepStage({
         let partials = await missingPartials(root, scope);
         let answer = result;
         let repair = null;
+        let repairTurns = 0;
+        let repairUsage = null;
         if (syntax.errors.length || partials.length) {
             // The role is told what the compiler said and has to fix the files.
             const correction = partials.length
@@ -1050,7 +1320,7 @@ export async function runStepStage({
                 },
                 root,
                 env,
-                maxTurns: config?.stages?.[role]?.maxTurns ?? null,
+                maxTurns: config?.stages?.[stageName]?.maxTurns ?? config?.stages?.[role]?.maxTurns ?? null,
                 requireFiles: Boolean(step.files?.length),
                 signal,
                 notify,
@@ -1059,8 +1329,8 @@ export async function runStepStage({
                 stage: role,
                 inputChannel: input,
             });
-            turns += repair.turns;
-            usage = usage ?? repair.usage;
+            repairTurns += repair.turns;
+            repairUsage = repairUsage ?? repair.usage;
             if (repair.data) answer = repair;
             // The files of the repair are the files of the role: they go on the disk as they
             // are. A file that is written under another name is a copy, and the check below
@@ -1120,6 +1390,7 @@ export async function runStepStage({
 
         const report = {
             stage: role,
+            pass,
             step: { id: step.id, title: step.title, files: step.files, criteria: step.criteria },
             ok,
             summary: String(answer.data?.summary ?? answer.text ?? '').trim(),
@@ -1144,7 +1415,7 @@ export async function runStepStage({
                 planned: planned.map((item) => `${item.file} -> ${item.partial}`),
                 forgotten: forgotten.map((item) => `${item.file} -> ${item.partial}`),
             },
-            turns: result.turns + (repair?.turns ?? 0),
+            turns: turnUsed + repairTurns,
             stopped: answer.stopped,
             /** Where the role stopped: the step, the turn and the tool it called. */
             last: answer.last ?? null,
@@ -1157,19 +1428,6 @@ export async function runStepStage({
             const status = answer.error.status ? ` (HTTP ${answer.error.status})` : '';
             warnings.push(`Шаг ${step.id}: хост не ответил${status}: ${answer.error.message ?? 'без причины'}.`);
         }
-        await writeStepReport(root, config, run, step.id, report);
-        reports.push(report);
-    }
-
-    return {
-        stage: role,
-        ok: reports.every((report) => report.ok),
-        skipped: reports.length > 0 && reports.every((report) => report.skipped === true),
-        partial: reports.some((report) => report.skipped === true),
-        steps: reports,
-        warnings,
-        turns,
-        usage,
-        runId: run,
-    };
+        await writePassReport(root, config, run, step.id, role, pass, report);
+        return { report, turns: turnUsed + repairTurns, usage: turnUsage ?? repairUsage };
 }

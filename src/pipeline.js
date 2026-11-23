@@ -32,7 +32,7 @@
 import { runId as makeRunId } from './stages/workspace.js';
 import { enabledStages } from './stages/index.js';
 import { planOrder } from './stages/plan-order.js';
-import { LIVE_ROLES, withoutForeignFiles } from './stages/roles.js';
+import { LIVE_ROLES, ROLE_STAGES, withoutForeignFiles } from './stages/roles.js';
 import { isStateful } from './stages/stateful.js';
 import { readPlan } from './stages/plan.js';
 import { readScan } from './stages/scan.js';
@@ -503,9 +503,14 @@ export async function runPipeline({
     let ordered = false;
     const pendingSkips = new Set();
     const roleStages = { ...LIVE_ROLES };
-    const stageByRole = Object.fromEntries(Object.entries(roleStages).map(([role, stage]) => [stage, role]));
-    // Стадия — и роль, чьи шаги она делает: по ней считается бюджет стадии.
-    const roleByStage = { ...stageByRole };
+    // Стадия — и роль, чьи шаги она делает: по ней считается бюджет стадии. У роли
+    // может быть несколько стадий (черновик контракта и полная работа), и бюджет у
+    // них общий: это работа одной роли, разбитая на заходы.
+    const roleByStage = {};
+    for (const [role, stages] of Object.entries(ROLE_STAGES)) {
+        for (const stage of stages) roleByStage[stage] = role;
+    }
+    for (const [role, stage] of Object.entries(roleStages)) roleByStage[stage] ??= role;
     const drainNamedSkips = () => {
         for (const item of input?.takePendingSkips?.({ namedOnly: true }) ?? []) {
             const name = String(item?.target ?? '').toLowerCase();
@@ -513,8 +518,13 @@ export async function runPipeline({
             if (list.some((candidate) => candidate.name === name)) pendingSkips.add(name);
             else if (ctx.plan?.steps?.some((step) => String(step.id).toLowerCase() === name)) input?.queueStepSkip?.(name);
             else if (roleStages[name] && list.some((candidate) => candidate.name === roleStages[name])) {
+                // Пропуск роли пропускает все её стадии: черновик контракта и полная
+                // работа — это работа одной роли, и половина её не имеет смысла.
                 for (const step of ctx.plan?.steps?.filter((candidate) => candidate.role === name) ?? []) {
                     input?.queueStepSkip?.(step.id);
+                }
+                for (const stage of ROLE_STAGES[name] ?? []) {
+                    if (list.some((candidate) => candidate.name === stage)) pendingSkips.add(stage);
                 }
             }
         }
@@ -544,7 +554,7 @@ export async function runPipeline({
         const where = input?.location?.();
         const currentSkip = where?.stage === stage.name && !where?.step ? input?.takeCurrentSkip?.() : null;
         const exactStageSkip = input?.takeSkip?.({ stage: stage.name });
-        const roleForStage = stageByRole[stage.name];
+        const roleForStage = roleByStage[stage.name];
         const exactRoleSkip = roleForStage ? input?.takeSkip?.({ stage: roleForStage }) : null;
         if (currentSkip || exactStageSkip || exactRoleSkip || pendingSkips.has(stage.name)) {
             pendingSkips.delete(stage.name);

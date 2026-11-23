@@ -102,6 +102,8 @@ report into the directory of the run and hands the result to the next one.
 | `vector` | Draw the vector graphics as code: the SVG of the ornaments and the illustrations. |
 | `assets` | Place the assets: the prepared pictures and the drawn graphics get their final paths and their final format. |
 | `markup` | Write the markup of the pages. |
+| `pre-styling` | Draft the contract of the styles: the tokens, the names of the classes, the skeleton of the layout. |
+| `pre-coding` | Draft the contract of the code: the modules, the states, the data that flows between them. |
 | `styling` | Write the styles: the tokens, the layout, the states. |
 | `animation` | Write the motion of the result: the transitions, the entrances, the reduced motion. |
 | `coding` | Write the code: the scripts, the modules, the data. |
@@ -151,27 +153,54 @@ chain, after the build and the sight of the page. When the markup is already don
 continues, the vector stands before the build: the build carries `public/` into the bundle, and
 an asset drawn after it never reaches the distribution.
 
-The stage of the code stands after the styler. The styles are the contract of the page: they name
-the classes and the tokens, and the code is written against them. A plan that asks for the code
-before the styles is told that the stage moved, and the code is written against a stylesheet
-that exists.
+The styles and the code are written in **four phases**, and the order between them is not a
+choice — it is the same for every page:
 
-A page with a state — an app, a PWA, a router — is the exception: it is drawn by the scripts,
-so without them the screen is empty. There the order is the other way round: the markup, then
-the scripts of the state, then the styles, then the rest of the code. The styles and the scripts
-of the state are written against one contract — the one the architect named — and they do not
-wait for each other. `stack.stateful` says it outright (`true` / `false`), and `auto` decides it
-by the kind of the task and by the framework: `app` and `site` have a state, `landing` does
-not, and a framework that renders itself (`react`, `vue`, `svelte`, `next`, `astro`, `lure`,
-`ssre`) has one by its nature.
+| Phase | What it writes |
+|---|---|
+| `pre-styling` | The contract of the styles: the tokens, the names of the classes, the skeleton of the layout, the rules of the states. |
+| `pre-coding` | The skeleton of the code: the modules, their exports, the states of the interface, the data that flows between them. |
+| `styling` | The full styles: the components, the states, the responsive behaviour — written against the skeleton of the code. |
+| `coding` | The full code: the behaviour, the logic, the commands — written against the full styles. |
+
+The phases exist because a role that waits for something that comes after it waits for ever.
+The coder without styles does not know which class names the page will wear, and invents
+its own; the styler without code does not know which states the page will show, and dresses
+none of them. The draft of the contract settles both questions before either role writes
+the real thing: the styler writes the tokens and the names first, the coder writes the
+skeleton against them, and then each role does its work with the other one's result on the
+disk.
+
+A plan that asks for another order is told: the order of the phases is stronger than the
+plan, and the run says which edge of the plan it dropped.
+
+A page with a state — an app, a PWA, a router — used to be the exception: it was drawn by
+the scripts, so without them the screen was empty, and the code was moved before the
+styles. That exception is gone. It was the very reason the coder stood still: it wrote
+without styles, and waited for styles that were never coming. Now the page with a state
+walks the same four phases as any other page.
 
 The browser follows the same rule: on a page with a state the styles are written before the
 scripts, so the live page is empty while the styler works. The styler is told so — an empty
 page and a missing script are not defects of the styles — and the browser is started only when
 the code is there, for the stage `sight`.
 
-## The contract of the states
+### The two passes of a role
 
+A phase is not a new role and not a new step of the plan. It is the same role, the same
+step, the same files — a different task. The report of a pass lies next to the report of
+the step (`style-base.styler.draft.json`), and the report of the step is the report of the
+last pass: it looks at the file that is on the disk.
+
+That is what makes the phases possible: the styler writes the draft of the contract into
+the stylesheet, and the coder's draft is written *after* it — into the same project, on the
+same disk. The second pass of the coder sees the styles of the first pass of the styler,
+and the second pass of the styler sees the code that grew out of the drafts.
+
+A pass that is already done is not done again. A continued run reads the reports of the
+passes from the disk, and the work that is already there is not paid for twice.
+
+### The contract of the states
 The styles and the scripts must not need each other to learn a name. The architect names the
 states of the interface once — `is-loading`, `is-open`, `is-error`, with the selector that
 carries each and what it means — and both roles are written against that list: the scripts put

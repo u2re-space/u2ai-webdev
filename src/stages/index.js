@@ -30,6 +30,8 @@ import { planStage } from './plan.js';
 import { architectStage } from './architect.js';
 import { setupStage } from './setup.js';
 import { markupStage } from './markup.js';
+import { preStylingStage } from './pre-styling.js';
+import { preCodingStage } from './pre-coding.js';
 import { codingStage } from './coding.js';
 import { stylingStage } from './styling.js';
 import { animationStage } from './animation.js';
@@ -48,17 +50,22 @@ import { roleWorkOnDisk } from './step.js';
  *
  * The stage is done only when the work of its role is still on the disk: the progress of
  * the run says that the stage ran, but the answer of the role may have been lost.
+ *
+ * `pass` says which pass of the role the stage owns: the check of `pre-styling` looks at
+ * the draft of the contract, and the check of `styling` looks at the full styles.
  * @param {string} role
+ * @param {string} [pass]
  * @returns {Function}
  * @ai.hint pure
  */
-function workOnDisk(role) {
+function workOnDisk(role, pass = null) {
     return (ctx) => roleWorkOnDisk({
         root: ctx.root,
         config: ctx.config,
         id: ctx.runId,
         plan: ctx.plan,
         role,
+        pass,
     });
 }
 
@@ -173,14 +180,39 @@ export const STAGES = Object.freeze([
         apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
     },
     {
+        name: 'pre-styling',
+        title: 'Draft the contract of the styles',
+        // The draft of the contract comes before the code: the code is written against the
+        // names of the styles and the tokens, and it has to know them before it starts.
+        // Without this stage the coder invents names of his own, and the styles written
+        // later dress classes that nobody uses.
+        dependsOn: ['markup'],
+        run: preStylingStage,
+        args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
+        verify: workOnDisk('styler', 'draft'),
+        apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
+    },
+    {
+        name: 'pre-coding',
+        title: 'Draft the contract of the code',
+        // The skeleton of the code comes after the draft of the styles and before the full
+        // styles: the skeleton names the modules and the states, and the styles are written
+        // against them.
+        dependsOn: ['pre-styling'],
+        run: preCodingStage,
+        args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
+        verify: workOnDisk('coder', 'draft'),
+        apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
+    },
+    {
         name: 'styling',
         title: 'Write the styles',
-        // The styles stand before the code: the class names and the tokens are the
-        // contract of the page, and the code is written against them.
-        dependsOn: ['markup'],
+        // The full styles come after the skeleton of the code: the skeleton says which
+        // modules and which states the page has, and the styles dress exactly them.
+        dependsOn: ['pre-coding'],
         run: stylingStage,
         args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
-        verify: workOnDisk('styler'),
+        verify: workOnDisk('styler', 'full'),
         apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
     },
     {
@@ -197,12 +229,12 @@ export const STAGES = Object.freeze([
     {
         name: 'coding',
         title: 'Write the code',
-        // The code stands after the styles: the scripts use the class names and the
-        // tokens that the stylesheet has already written.
+        // The full code comes after the full styles: the scripts use the class names and
+        // the tokens that the stylesheet has already written.
         dependsOn: ['styling'],
         run: codingStage,
         args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
-        verify: workOnDisk('coder'),
+        verify: workOnDisk('coder', 'full'),
         apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
     },
     {

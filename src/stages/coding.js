@@ -65,9 +65,14 @@ export async function codingStage({
         env,
         input,
         runContext,
+        // Полный код: скелет сделала стадия `pre-coding`.
+        pass: 'full',
         context: {
             stack: config?.stack ?? {},
             styles,
+            // Полные стили уже написаны — код пишется по ним.
+            hasStyles: true,
+            hasCode: true,
         },
     });
 }

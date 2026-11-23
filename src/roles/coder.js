@@ -61,7 +61,8 @@ export const CODE_RULES = [CORE, HTML, `#### The boundaries of the work
   of the project before you write the code and use the names they give — when there are no
   stylesheets yet, use the class names of the markup and the tokens of the architect. Do not
   change the stylesheets: the styles are the styler's work, and a name that changes under the
-  written code breaks the page.
+  written code breaks the page. When you write only the skeleton of the code, the draft of the
+  styles is what you write against; when you write the whole code, the stylesheets are.
 - The states of the interface are named in the brief of the architect, and that list is the contract
   between you and the styler: put on the node exactly those states, with exactly those selectors,
   and no others. A state the list does not name is a class the styles will never dress; a state of
@@ -119,6 +120,18 @@ defect and the change that is asked for. Fix it now: find the place of the defec
 \`find_line\`, read that part of the file, and change that part with \`patch_file\`. The answer is
 the repaired file on the disk, never a description of the change.`
         : '';
+    // Проход роли: скелет кода или полный код. Скелет — это контракт, по которому
+    // потом пишутся и стили, и код.
+    const passNote = context.pass === 'draft'
+        ? `This is the skeleton of the code, not the code itself: the modules, their exports, the
+states of the interface and the data that flows between them. The styles of the page are written
+next, against the names and the states you give here — so a name you get wrong now is a name the
+styles will not find. Write the shape carefully and do not write the whole behaviour yet.`
+        : (context.pass === 'full'
+            ? `The full code: the styles of the page are already written, against the skeleton you
+wrote before. Keep the names of the skeleton and the names of the stylesheets — the styles are
+already written against them, and a name that changes under the written styles breaks the page.`
+            : '');
     return `You are the coder of a web project. You write the code of one step, in the files the
 step names, and you make it work.
 
@@ -129,6 +142,7 @@ ${design}
 ${styles}
 ${reference}
 ${repair}
+${passNote}
 
 Rules:
 ${INPUTS_IN_CONTEXT}

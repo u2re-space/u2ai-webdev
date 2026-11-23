@@ -417,6 +417,10 @@ export const defaults = {
     architect: { enabled: true, maxTurns: 16, timeoutMs: null },
     setup: { enabled: true, maxTurns: 8, timeoutMs: null },
     markup: { enabled: true, maxTurns: 16, timeoutMs: null },
+    // Фазы стилей и кода. Черновик контракта — короткая работа: токены, имена и каркас.
+    // Полная работа — длинная: она идёт по тому, что написала другая роль.
+    'pre-styling': { enabled: true, maxTurns: 10, timeoutMs: null },
+    'pre-coding': { enabled: true, maxTurns: 12, timeoutMs: null },
     coding: { enabled: true, maxTurns: 24, timeoutMs: null },
     styling: { enabled: true, maxTurns: 16, timeoutMs: null },
     // The motion of the result: the rules of the animation come after the styles and

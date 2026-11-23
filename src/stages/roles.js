@@ -33,6 +33,12 @@ import path from 'node:path';
  * Имена ролей и имена стадий не всегда совпадают: векторную графику рисует роль
  * `editor`, а стадия, которая берёт её шаги, называется `vector`; иконки выбирает роль
  * `iconifier`, а её стадия — `iconify`. Здесь лежит карта: роль → стадия.
+ *
+ * Одна роль может исполняться несколькими стадиями: `styler` — черновиком контракта
+ * (`pre-styling`) и полными стилями (`styling`), `coder` — скелетом (`pre-coding`) и
+ * полным кодом (`coding`). Карта стадии — первая из них: шаг роли попадает в обе
+ * стадии, и каждая делает свою часть. Карта `role → stage` указывает на стадию
+ * полной работы: по ней считается бюджет роли и находится её отчёт.
  * @type {Readonly<Record<string, string>>}
  */
 export const LIVE_ROLES = Object.freeze({
@@ -43,6 +49,39 @@ export const LIVE_ROLES = Object.freeze({
     editor: 'vector',
     iconifier: 'iconify',
     illustrator: 'assets',
+});
+
+/**
+ * Стадии, которые берут шаги роли: роль — и её стадии по порядку.
+ *
+ * Шаг роли исполняют все стадии из списка: сначала черновик контракта, потом полная
+ * работа. Стадия без шага своего прохода ничего не делает.
+ * @type {Readonly<Record<string, ReadonlyArray<string>>>}
+ * @exports
+ */
+export const ROLE_STAGES = Object.freeze({
+    markup: Object.freeze(['markup']),
+    coder: Object.freeze(['pre-coding', 'coding']),
+    styler: Object.freeze(['pre-styling', 'styling']),
+    animator: Object.freeze(['animation']),
+    editor: Object.freeze(['vector']),
+    iconifier: Object.freeze(['iconify']),
+    illustrator: Object.freeze(['assets']),
+});
+
+/**
+ * Стадии роли по порядку прогонов.
+ *
+ * Порядок фаз общий для всех ролей: черновик контракта стилей, скелет кода, полные
+ * стили, полный код. Каждая стадия роли стоит в своём месте этого порядка.
+ * @type {Readonly<Record<string, number>>}
+ * @exports
+ */
+export const ROLE_STAGE_ORDER = Object.freeze({
+    'pre-styling': 0,
+    'pre-coding': 1,
+    styling: 2,
+    coding: 3,
 });
 
 /** Имена живых ролей. */

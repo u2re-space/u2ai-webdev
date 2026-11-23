@@ -26,6 +26,15 @@ export const MARKUP_EXTENSIONS = Object.freeze(['.html', '.htm', '.vue', '.svelt
 /** Расширения файлов стилей. */
 export const STYLE_EXTENSIONS = Object.freeze(['.scss', '.sass', '.css', '.less']);
 
+/**
+ * Расширения файлов кода.
+ *
+ * Модуль шаблона лежит файлом `.js` (`src/views/rooms.js`) — так работает проект, где
+ * разметка собирается в модули. По одному расширению такой файл — код, и разметка уходит
+ * кодеру. Надо учитывать каталог: код в каталоге шаблонов — это разметка.
+ */
+export const CODE_EXTENSIONS = Object.freeze(['.js', '.mjs', '.cjs', '.jsx', '.ts', '.tsx']);
+
 /** Каталоги, в которых стилей проекта не бывает. */
 const SKIP_DIRS = /^(?:\.git|node_modules|\.hg|\.svn|dist|build|coverage|\.next|\.nuxt|\.cache|\.venv|venv|__pycache__|target|\.backup|\.tmp|\.ai)$/i;
 
@@ -84,7 +93,7 @@ async function exists(root, rel) {
  *
  * @param {string} root
  * @param {object|null} [plan]
- * @returns {Promise<{ markup: string[], styles: string[] }>}
+ * @returns {Promise<{ markup: string[], styles: string[], code: string[] }>}
  * @exports
  * @ai.hint io
  */
@@ -92,6 +101,7 @@ export async function projectFiles(root = process.cwd(), plan = null) {
     const steps = Array.isArray(plan?.steps) ? plan.steps : [];
     const markup = new Set();
     const styles = new Set();
+    const code = new Set();
     for (const step of steps) {
         const role = String(step?.role ?? '').trim().toLowerCase();
         for (const file of Array.isArray(step?.files) ? step.files : []) {
@@ -100,6 +110,7 @@ export async function projectFiles(root = process.cwd(), plan = null) {
             const ext = path.extname(rel).toLowerCase();
             if (role === 'markup' && MARKUP_EXTENSIONS.includes(ext)) markup.add(rel);
             if (role === 'styler' && STYLE_EXTENSIONS.includes(ext)) styles.add(rel);
+            if (role === 'coder' && CODE_EXTENSIONS.includes(ext)) code.add(rel);
         }
     }
     if (!markup.size) {
@@ -121,5 +132,9 @@ export async function projectFiles(root = process.cwd(), plan = null) {
     for (const rel of styles) {
         if (await exists(root, rel)) styleFiles.push(rel);
     }
-    return { markup: markupFiles.sort(), styles: styleFiles.sort() };
+    const codeFiles = [];
+    for (const rel of code) {
+        if (await exists(root, rel)) codeFiles.push(rel);
+    }
+    return { markup: markupFiles.sort(), styles: styleFiles.sort(), code: codeFiles.sort() };
 }

@@ -96,6 +96,8 @@ export async function stylingStage({
         env,
         input,
         runContext,
+        // Полные стили: черновик контракта сделала стадия `pre-styling`.
+        pass: 'full',
         context: {
             style: styles.language,
             styles,

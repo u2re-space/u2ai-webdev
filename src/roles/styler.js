@@ -136,6 +136,19 @@ export function instructions(context = {}) {
         ? `The review of the step found what has to be fixed, and the request names the file, the defect and the change that is asked for. Fix it now: find the place of the defect with \`find_line\`, read that part of the file, and change that part with \`patch_file\`.
         The answer is the repaired file on the disk, never a description of the change.`
       : '';
+    // Проход роли: черновик контракта или полная работа. В черновике роль пишет то,
+    // что должно быть общим, — и код пишется против этого.
+    const passNote = context.pass === 'draft'
+        ? `This is the draft of the contract of the styles: the tokens, the names of the classes and the
+skeleton of the layout. The code of the project is written next, against what you write here — so a
+token that is missing here is a token the code will not use, and a class name you invent that the
+markup does not have is a class nobody wears. The full styles come later, and they will see the
+code that grew out of your draft.`
+        : (context.pass === 'full'
+            ? `The full styles: the code of the project is already written, against the draft of the
+contract you wrote before. Keep the tokens and the names of that draft — the code is written
+against them, and a name that changes under the written code breaks the page.`
+            : '');
     return `You are the styler of a web project. You write the CSS (or SCSS) of one step and you make the result look the way the design direction says.
 
 ${task}
@@ -147,6 +160,7 @@ ${design}
 ${reference}
 ${width}
 ${repair}
+${passNote}
 
 ## The rules of the work:
 

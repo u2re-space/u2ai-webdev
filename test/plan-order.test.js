@@ -61,7 +61,18 @@ test('the edges of the plan are the edges of the stages of its steps', () => {
     const { edges } = planEdges(PLAN);
     const list = edges.map(([from, to]) => `${from}>${to}`).sort();
     // The steps of one role give no edge: their work goes inside the stage.
-    assert.deepEqual(list, ['iconify>styling', 'markup>iconify', 'markup>styling', 'styling>coding']);
+    // The stages of one role are ordered among themselves: the draft of the contract
+    // comes before the full work.
+    assert.deepEqual(list, [
+        'iconify>styling',
+        'markup>iconify',
+        'markup>styling',
+        'pre-coding>coding',
+        'pre-coding>styling',
+        'pre-styling>pre-coding',
+        'pre-styling>styling',
+        'styling>coding',
+    ].sort());
 });
 
 test('the plan decides the order of the stages that do its steps', () => {
@@ -80,7 +91,7 @@ test('the plan decides the order of the stages that do its steps', () => {
     assert.ok(warnings.some((item) => /Стадия иконок перенесена после кода/.test(item)));
 });
 
-test('the styles are written before the code, even when the plan says the opposite', () => {
+test('the phases of the styles and the code keep their order, even when the plan says the opposite', () => {
     const plan = {
         steps: [
             { id: 'code-1', title: 'Code', role: 'coder', dependsOn: [], files: ['src/main.js'] },
@@ -89,9 +100,12 @@ test('the styles are written before the code, even when the plan says the opposi
     };
     const { stages, warnings } = planOrder([...STAGES], plan);
     const names = stages.map((stage) => stage.name);
-    // The plan asked for the code before the styles; the floor of the stage wins.
+    // The plan asked for the code before the styles; the order of the phases wins.
+    assert.ok(names.indexOf('pre-styling') < names.indexOf('pre-coding'), names.join(' → '));
+    assert.ok(names.indexOf('pre-coding') < names.indexOf('styling'), names.join(' → '));
     assert.ok(names.indexOf('styling') < names.indexOf('coding'), names.join(' → '));
-    assert.ok(warnings.some((item) => /Стадия кода перенесена после стилиста/.test(item)));
+    assert.ok(warnings.some((item) => /противоречит фазам стилей и кода/.test(item)),
+        warnings.join(' | '));
 });
 
 test('the icons are picked after the code, even when the plan says the opposite', () => {
@@ -154,9 +168,10 @@ test('a circle in the plan is broken by the registry and says so', () => {
     // every stage is still there exactly once.
     assert.equal(names.length, STAGES.length);
     assert.equal(new Set(names).size, STAGES.length);
-    // The registry puts the styles before the code, and the floor of the styles keeps it.
+    // The floor of the phases keeps the order: the code never goes before the styles.
+    assert.ok(names.indexOf('pre-styling') < names.indexOf('pre-coding'), names.join(' → '));
+    assert.ok(names.indexOf('pre-coding') < names.indexOf('styling'), names.join(' → '));
     assert.ok(names.indexOf('styling') < names.indexOf('coding'), names.join(' → '));
-    assert.ok(warnings.some((item) => /круг зависимостей/.test(item)));
 });
 
 test('the graphics are drawn before the page that links them', () => {
@@ -166,11 +181,11 @@ test('the graphics are drawn before the page that links them', () => {
 
     // The plan of the run: the assets come before the markup, and the circle of the stages
     // does not throw that order away.
-    const { stages, warnings } = planOrder([...STAGES], ART_PLAN);
+    const { stages } = planOrder([...STAGES], ART_PLAN);
     const names = stages.map((stage) => stage.name);
     assert.ok(names.indexOf('vector') < names.indexOf('markup'), names.join(' → '));
-    assert.ok(names.indexOf('markup') < names.indexOf('coding'), names.join(' → '));
-    assert.ok(warnings.some((item) => /круг зависимостей/.test(item)));
+    assert.ok(names.indexOf('markup') < names.indexOf('pre-styling'), names.join(' → '));
+    assert.ok(names.indexOf('pre-styling') < names.indexOf('coding'), names.join(' → '));
 });
 
 test('the vector stage does not stand in the middle of the chain', () => {
@@ -241,9 +256,9 @@ test('the assets are placed after the vector, even when the plan says the opposi
     assert.ok(warnings.some((item) => /Стадия ассетов перенесена после вектора/.test(item)));
 });
 
-test('a page with a state gets the code before the styles', () => {
-    // Страница с состоянием рисуется скриптом: без него стилист смотрит на пустую
-    // страницу и начинает чинить то, что не сломано.
+test('a page with a state gets the same phases as a page without one', () => {
+    // Развилка «код раньше стилей» для страницы с состоянием убрана: порядок фаз один
+    // для всех. Без неё кодер не ждал того, что появлялось после него.
     const plan = {
         steps: [
             { id: 'markup-1', title: 'Markup', role: 'markup', dependsOn: [], files: ['index.html'] },
@@ -254,15 +269,19 @@ test('a page with a state gets the code before the styles', () => {
 
     const plain = planOrder([...STAGES], plan, { config: { stack: { frontendFramework: 'vanilla' }, agent: { kind: 'landing' } } });
     const plainNames = plain.stages.map((stage) => stage.name);
-    // Обычная страница: стили идут раньше кода.
-    assert.ok(plainNames.indexOf('styling') < plainNames.indexOf('coding'), plainNames.join(' → '));
-
     const app = planOrder([...STAGES], plan, { config: { stack: { frontendFramework: 'lure' }, agent: { kind: 'app' } } });
     const appNames = app.stages.map((stage) => stage.name);
-    // Страница с состоянием: код идёт раньше стилей.
-    assert.ok(appNames.indexOf('coding') < appNames.indexOf('styling'), appNames.join(' → '));
-    assert.ok(app.warnings.some((item) => /Стадия кода перенесена перед стадией стилей/.test(item)),
-        app.warnings.join(' | '));
+
+    // Порядок фаз одинаковый: черновик стилей, скелет кода, полные стили, полный код.
+    for (const names of [plainNames, appNames]) {
+        assert.ok(names.indexOf('pre-styling') < names.indexOf('pre-coding'), names.join(' → '));
+        assert.ok(names.indexOf('pre-coding') < names.indexOf('styling'), names.join(' → '));
+        assert.ok(names.indexOf('styling') < names.indexOf('coding'), names.join(' → '));
+    }
+    assert.deepEqual(
+        plainNames.filter((name) => ['pre-styling', 'pre-coding', 'styling', 'coding'].includes(name)),
+        appNames.filter((name) => ['pre-styling', 'pre-coding', 'styling', 'coding'].includes(name)),
+    );
 });
 
 test('the page with a state is known by the kind and by the framework', () => {

@@ -19,26 +19,42 @@
  *
  * @depends stages/roles
  * @usedBy pipeline
- * @exports PLAN_STAGES, planEdges, planOrder, placeVectorStage, placeIconifyStage,
- *          placeStylesBeforeCode, placeAnimationAfterStyles, placeAssetsAfterVector,
- *          placeAssetsBeforeMarkup
+ * @exports PLAN_STAGES, STYLE_CODE_PHASES, planEdges, planOrder, placeVectorStage,
+ *          placeIconifyStage, placeAnimationAfterStyles, placeAssetsAfterVector,
+ *          placeAssetsBeforeMarkup, placeStyleCodePhases
  * @ai.tags stages, plan, order
  * @ai.hint pure
  * @changed 2026-11-15 Порядок стадий, которые делают шаги плана, задаёт сам план.
  * @changed 2026-11-20 Круг зависимостей рвётся порядком реестра, а не отменяет план.
  * @changed 2026-11-20 Стадия вектора не стоит в середине: до разметки или в самом конце.
  * @changed 2026-11-20 Стадия иконок стоит после стилиста.
- * @changed 2026-11-20 Стадия кода стоит после стилиста: стили задают контракт страницы.
+ * @changed 2026-11-24 Фазы стилей и кода: черновик контракта, скелет, полные стили, полный
+ *                       код. Развилка «код раньше стилей» для страницы с состоянием убрана:
+ *                       без неё кодер ждал того, что появлялось после него.
  */
 
-import { LIVE_ROLES, stageForRole } from './roles.js';
-import { isStateful } from './stateful.js';
+import { LIVE_ROLES, ROLE_STAGES, stageForRole } from './roles.js';
 
-/** Стадии, которые исполняют шаги плана. */
-export const PLAN_STAGES = Object.freeze(new Set(Object.values(LIVE_ROLES)));
+/**
+ * Стадии, которые исполняют шаги плана.
+ *
+ * Шаг роли исполняют все её стадии: черновик контракта и полная работа. Поэтому в
+ * графе стадий шаг роли стоит сразу за всеми её стадиями — иначе план, где шаг кода
+ * зависит от шага стилей, связал бы только полные стадии, а черновики остались бы
+ * вне зависимостей.
+ * @type {ReadonlySet<string>}
+ */
+export const PLAN_STAGES = Object.freeze(new Set([
+    ...Object.values(LIVE_ROLES),
+    ...Object.values(ROLE_STAGES).flat(),
+]));
 
 /**
  * Стадия, которая исполняет шаг.
+ *
+ * Шаг роли исполняют несколько стадий: черновик контракта и полная работа. В графе
+ * стадий шаг стоит за последней из них — той, что делает работу целиком: зависимость
+ * «шаг кода зависит от шага стилей» говорит, что полный код ждёт полных стилей.
  * @param {object} step
  * @returns {string|null} имя стадии или null
  * @ai.hint pure
@@ -48,9 +64,31 @@ function stageOfStep(step) {
 }
 
 /**
+ * Нарушает ли ребро порядок фаз стилей и кода?
+ *
+ * Пол фаз сильнее плана: план может попросить код раньше стилей, но фазы стоят в
+ * своём порядке всегда. Ребро, которое против него, отбрасывается — иначе в графе
+ * появляется круг, и порядок решает не порядок фаз, а случай.
+ * @param {string} from
+ * @param {string} to
+ * @returns {boolean}
+ * @ai.hint pure
+ */
+function breaksPhaseOrder(from, to) {
+    const a = STYLE_CODE_PHASES.indexOf(from);
+    const b = STYLE_CODE_PHASES.indexOf(to);
+    if (a < 0 || b < 0) return false;
+    return a > b;
+}
+
+/**
  * Рёбра плана между стадиями: шаг зависит от шага — стадия зависит от стадии.
  *
  * Шаги одной роли не дают ребра: их работа и так идёт по порядку шагов внутри стадии.
+ *
+ * Ребро, которое противоречит порядку фаз, отбрасывается: план может просить код
+ * раньше стилей, но фазы стоят в своём порядке всегда — иначе граф получает круг,
+ * который разрывается случайно.
  * @param {object} plan
  * @returns {{ edges: Array<[string, string]> }}
  * @exports
@@ -67,6 +105,7 @@ export function planEdges(plan) {
     }
     const edges = [];
     const seen = new Set();
+    const againstPhases = [];
     for (const step of steps) {
         const id = String(step?.id ?? '').trim();
         const to = stageOf.get(id);
@@ -74,16 +113,41 @@ export function planEdges(plan) {
         for (const dep of Array.isArray(step?.dependsOn) ? step.dependsOn : []) {
             const from = stageOf.get(String(dep ?? '').trim());
             if (!from || from === to) continue;
+            if (breaksPhaseOrder(from, to)) {
+                // План просит порядок, который противоречит полу фаз. Пол сильнее, и
+                // прогон говорит об этом: иначе план молча делает не то, что написано.
+                if (!againstPhases.includes(`${from}>${to}`)) againstPhases.push(`${from}>${to}`);
+                continue;
+            }
             const key = `${from}>${to}`;
             if (seen.has(key)) continue;
             seen.add(key);
             edges.push([from, to]);
         }
     }
-    return { edges };
-}
-
-/**
+    // Стадии одной роли идут по порядку: черновик контракта — раньше полной работы.
+    // Без этого ребра план, где шаг кода зависит от шага стилей, мог бы поставить
+    // полный код раньше черновика стилей — и контракт, на который код опирается, был бы
+    // ещё не написан.
+    for (const [role, list] of Object.entries(ROLE_STAGES)) {
+        for (let i = 0; i + 1 < list.length; i += 1) {
+            const key = `${list[i]}>${list[i + 1]}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            edges.push([list[i], list[i + 1]]);
+        }
+        void role;
+    }
+    // Фазы разных ролей тоже стоят в порядке: черновик стилей — раньше скелета кода,
+    // а скелет кода — раньше полных стилей. Иначе скелет писался бы против пустоты.
+    for (const [from, to] of STYLE_CODE_PHASES.slice(0, -1).map((name, i) => [name, STYLE_CODE_PHASES[i + 1]])) {
+        const key = `${from}>${to}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        edges.push([from, to]);
+    }
+    return { edges, broken: againstPhases };
+}/**
  * Поставить стадию анимации после стилиста.
  *
  * Движение живёт в стилях: анимация правит ту же таблицу, что и стили, и править её
@@ -185,86 +249,58 @@ const ANIMATION_STAGE = 'animation';
 const ASSETS_STAGE = 'assets';
 const ASSETS_AFTER = 'vector';
 const ASSETS_BEFORE = 'markup';
+const PRE_STYLING_STAGE = 'pre-styling';
+const PRE_CODING_STAGE = 'pre-coding';
 
 /**
- * Поставить стадию кода после стилиста.
+ * Порядок фаз стилей и кода.
  *
- * Стили задают контракт страницы: имена классов и токены. Код пишется по этому
- * контракту, а не по своему представлению о нём, поэтому стили идут раньше кода.
- * План может попросить наоборот — код написан, а стили дописываются по нему; такой
- * порядок ломает пол, и прогон говорит об этом.
+ * Четыре фазы, и порядок между ними не выбирается: он один для всех страниц.
+ *
+ *   1. `pre-styling` — черновик контракта стилей: токены, имена классов, каркас.
+ *   2. `pre-coding` — скелет кода: модули, состояния, поток данных.
+ *   3. `styling` — полные стили, по скелету кода.
+ *   4. `coding` — полный код, по полным стилям.
+ *
+ * Раньше порядок развивался: для страницы с состоянием код шёл раньше стилей, и кодер
+ * писал, не зная ни имён классов, ни токенов, — а потом ждал стилей, которых не было
+ * и не предвиделось. Развилка убрана: страница с состоянием получает тот же путь.
+ * @type {ReadonlyArray<string>}
+ */
+export const STYLE_CODE_PHASES = Object.freeze([
+    PRE_STYLING_STAGE,
+    PRE_CODING_STAGE,
+    STYLING_STAGE,
+    CODING_STAGE,
+]);
+
+/**
+ * Поставить фазы стилей и кода в порядок: черновик, скелет, стили, код.
+ *
+ * Стадии, которых в прогоне нет (выключены), не занимают место: порядок строится по
+ * тем, что есть. Стадия, которой нет вовсе, не влияет на порядок — прогон без стилей
+ * идёт без них.
  *
  * @param {string[]} names имена стадий в порядке прогона
  * @returns {{ names: string[], moved: boolean }}
  * @exports
  * @ai.hint pure
  */
-export function placeStylesBeforeCode(names = []) {
+export function placeStyleCodePhases(names = []) {
     const list = Array.isArray(names) ? [...names] : [];
-    const styling = list.indexOf(STYLING_STAGE);
-    const coding = list.indexOf(CODING_STAGE);
-    if (styling < 0 || coding < 0) return { names: list, moved: false };
-    if (coding > styling) return { names: list, moved: false };
-    // Код раньше стилей: код встаёт прямо после стилиста.
-    list.splice(coding, 1);
-    const target = list.indexOf(STYLING_STAGE);
-    list.splice(target < 0 ? list.length : target + 1, 0, CODING_STAGE);
-    return { names: list, moved: true };
-}
-
-/**
- * Разорвать круг между стилями и скриптами.
- *
- * Страница с состоянием — SPA, PWA, роутер — рисуется скриптом: без него на экране
- * пусто, и стилист, который смотрит на страницу, видит пустоту и думает, что виноваты
- * стили. Он начинает их править, а правка не помогает: скрипта всё ещё нет.
- *
- * Стили не ждут скрипта: они пишутся по контракту, который назвал архитектор. Скрипт
- * состояния — тоже не ждёт стилей: он тоже пишется по этому контракту. Ожидание нужно
- * только между разметкой и обоими.
- *
- * @param {string[]} names имена стадий в порядке прогона
- * @returns {{ names: string[], moved: boolean }}
- * @exports
- * @ai.hint pure
- */
-export function breakStylesCodeCycle(names = []) {
-    const list = Array.isArray(names) ? [...names] : [];
-    const styling = list.indexOf(STYLING_STAGE);
-    const coding = list.indexOf(CODING_STAGE);
-    if (styling < 0 || coding < 0) return { names: list, moved: false };
-    // Код уже после стилей — порядок верный: ждать тут нечего.
-    if (coding > styling) return { names: list, moved: false };
-    // Код раньше стилей: он встаёт прямо перед стилистом — и больше не ждёт его.
-    list.splice(coding, 1);
-    const target = list.indexOf(STYLING_STAGE);
-    list.splice(target < 0 ? list.length : target, 0, CODING_STAGE);
-    return { names: list, moved: true };
-}
-
-/**
- * Поставить стадию кода перед стадией стилей — для страницы с состоянием.
- *
- * Страница с состоянием рисуется скриптом: без него на экране пусто. Стили такой
- * страницы пишутся по контракту архитектора, а скрипты состояния — по тому же контракту,
- * и ждать друг друга они не могут. Код встаёт перед стилями, и круг разрывается.
- *
- * @param {string[]} names имена стадий в порядке прогона
- * @returns {{ names: string[], moved: boolean }}
- * @exports
- * @ai.hint pure
- */
-export function placeCodeBeforeStyles(names = []) {
-    const list = Array.isArray(names) ? [...names] : [];
-    const styling = list.indexOf(STYLING_STAGE);
-    const coding = list.indexOf(CODING_STAGE);
-    if (styling < 0 || coding < 0) return { names: list, moved: false };
-    // Код уже перед стилями — так и надо.
-    if (coding < styling) return { names: list, moved: false };
-    list.splice(coding, 1);
-    const target = list.indexOf(STYLING_STAGE);
-    list.splice(target < 0 ? list.length : target, 0, CODING_STAGE);
-    return { names: list, moved: true };
+    const present = STYLE_CODE_PHASES.filter((name) => list.includes(name));
+    if (present.length < 2) return { names: list, moved: false };
+    const at = (name) => list.indexOf(name);
+    // Уже в порядке — двигать нечего.
+    const sorted = [...present].sort((left, right) => at(left) - at(right));
+    if (sorted.join('>') === present.join('>')) return { names: list, moved: false };
+    // Фазы встают в своём порядке на место самой ранней из них: остальные стадии
+    // остаются там, где были.
+    const anchor = Math.min(...present.map((name) => at(name)));
+    const taken = new Set(present);
+    const rest = list.filter((name) => !taken.has(name));
+    const out = [...rest.slice(0, anchor), ...present, ...rest.slice(anchor)];
+    return { names: out, moved: true };
 }
 
 /**
@@ -366,7 +402,12 @@ export function planOrder(stages = [], plan = null, { config = null } = {}) {
     const planStages = new Set(names.filter((name) => PLAN_STAGES.has(name)));
     if (planStages.size < 2) return { stages: list, warnings };
 
-    const { edges } = planEdges(plan);
+    const { edges, broken } = planEdges(plan);
+    if (broken?.length) {
+        warnings.push(`План просит порядок, который противоречит фазам стилей и кода `
+            + `(${broken.join(', ')}) — порядок фаз сильнее: черновик контракта, скелет кода, `
+            + 'полные стили, полный код.');
+    }
     if (!edges.length) return { stages: list, warnings };
 
     // Кто от кого зависит: реестр задаёт зависимости между стадиями, план — между
@@ -398,13 +439,13 @@ export function planOrder(stages = [], plan = null, { config = null } = {}) {
     const ready = names.filter((name) => incoming.get(name) === 0);
     const out = [];
     const done = new Set();
-    const broken = [];
+    const circle = [];
     while (out.length < names.length) {
         if (!ready.length) {
             // Круг: первым идёт та стадия, что раньше в реестре, и её рёбра теряют силу.
             const name = names.find((item) => !done.has(item) && !ready.includes(item));
             if (!name) break;
-            broken.push(name);
+            circle.push(name);
             ready.push(name);
         }
         ready.sort((a, b) => index.get(a) - index.get(b));
@@ -418,8 +459,8 @@ export function planOrder(stages = [], plan = null, { config = null } = {}) {
             if (incoming.get(next) === 0) ready.push(next);
         }
     }
-    if (broken.length) {
-        warnings.push(`План задаёт круг зависимостей между стадиями (${broken.join(', ')}) — `
+    if (circle.length) {
+        warnings.push(`План задаёт круг зависимостей между стадиями (${circle.join(', ')}) — `
             + 'порядок реестра решил, кто идёт первым, остальные рёбра плана остались в силе.');
     }
 
@@ -433,15 +474,20 @@ export function planOrder(stages = [], plan = null, { config = null } = {}) {
                 + 'сама себя — разметка ждёт ассеты, которых ещё нет.');
     }
 
-    // Стадия кода: после стилиста.
-    const withStyles = placeStylesBeforeCode(placed.names);
-    if (withStyles.moved) {
-        warnings.push('Стадия кода перенесена после стилиста: стили задают контракт страницы — '
-            + 'имена классов и токены, — и код пишется по этому контракту.');
+    // Фазы стилей и кода: черновик контракта, скелет, полные стили, полный код.
+    //
+    // Порядок фаз один для всех: страница с состоянием и страница без состояния идут
+    // одинаково. Развилка «код раньше стилей» для SPA убрана: она и была причиной
+    // застоя — кодер писал без стилей и ждал их, а стили приходили после него.
+    const withPhases = placeStyleCodePhases(placed.names);
+    if (withPhases.moved) {
+        warnings.push('Фазы стилей и кода перестроены: черновик контракта стилей, скелет кода, '
+            + 'полные стили, полный код. Порядок один для всех — развилка «код раньше стилей» '
+            + 'убрана: без неё кодер не ждал того, что появлялось после него.');
     }
 
     // Стадия ассетов: после вектора, до разметки.
-    const withAssets = placeAssetsAfterVector(withStyles.names);
+    const withAssets = placeAssetsAfterVector(withPhases.names);
     if (withAssets.moved) {
         warnings.push('Стадия ассетов перенесена после вектора: картинки раскладываются по '
             + 'местам, когда известно всё множество — вырезки референса и нарисованный вектор.');
@@ -469,19 +515,8 @@ export function planOrder(stages = [], plan = null, { config = null } = {}) {
             + 'страницы, а страница готова, когда написаны и стили, и код.');
     }
 
-    // Страница с состоянием (SPA, PWA, роутер): скрипты идут до стилей, иначе стилист
-    // смотрит на пустую страницу и начинает чинить то, что не сломано.
-    const stateful = isStateful({ config });
-    const withState = stateful
-        ? placeCodeBeforeStyles(withIcons.names)
-        : { names: withIcons.names, moved: false };
-    if (withState.moved) {
-        warnings.push('Стадия кода перенесена перед стадией стилей: страница с состоянием '
-            + 'рисуется скриптом, и без него стилист смотрит на пустую страницу.');
-    }
-
     const byName = new Map(list.map((stage) => [stage.name, stage]));
-    const ordered = withState.names.map((name) => byName.get(name));
+    const ordered = withIcons.names.map((name) => byName.get(name));
     // Стадии шагов в новом порядке — их видно в отчёте прогона.
     const steps = ordered.map((stage) => stage.name).filter((name) => planStages.has(name));
     const before = names.filter((name) => planStages.has(name));
