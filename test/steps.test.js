@@ -1180,3 +1180,88 @@ test('the tokens are printed as a block of custom properties', () => {
     assert.match(block, /--space-2: 8px;/);
     assert.equal(styleTokensText([]), '');
 });
+
+test('a file that is not on the disk is not a syntax error', async () => {
+    // `node --check` на файле, которого нет, печатает «Cannot find module» и выходит
+    // с кодом 1. Стадия читала это как сломанный файл и звала роль чинить файл,
+    // которого никогда не было.
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-steps-missing-'));
+    // Шаг называет два файла, а роль пишет только один: второй на диске не появится.
+    const plan = {
+        summary: 'A landing.',
+        steps: [
+            { id: 'code-1', title: 'Code', role: 'coder', dependsOn: [], files: ['src/main.js', 'src/controls.js'], criteria: ['runs'] },
+        ],
+    };
+    const answer = schemaAnswer('code', {
+        summary: 'The entry.',
+        files: [{ path: 'src/main.js', content: 'export const x = 1;\n', language: 'js' }],
+        commands: [],
+        notes: '',
+    });
+    const client = fakeClient([answer, answer]);
+
+    const result = await runStepStage({
+        client,
+        config: { output: { work: './.tmp' }, stages: { coder: { maxTurns: 4 } } },
+        root,
+        task: 'Make a landing.',
+        role: 'coder',
+        plan,
+        runId: 'run-1',
+    });
+
+    // Файла, которого нет, в отчёте нет ошибок синтаксиса: о нём говорит «файлы не
+    // написаны», а не «ошибка синтаксиса».
+    assert.equal(result.steps[0].syntax.errors.length, 0);
+    assert.ok(!result.warnings.some((item) => /Cannot find module/.test(item)));
+    assert.ok(result.warnings.some((item) => /файлы не написаны/.test(item)));
+});
+
+test('the abort signal of the stage reaches the role', async () => {
+    // Бюджет стадии отменяет её работу. Если сигнал не доходит до роли, запрос к
+    // хосту продолжается и тратит токены уже мёртвой стадии.
+    //
+    // Проверка идёт через стадию, а не через `runStepStage` напрямую: разорванная
+    // связь была именно между стадией и её шагами.
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-steps-abort-'));
+    let sawAbort = false;
+    const client = {
+        responses: {
+            async create(body) {
+                // Хост молчит и ждёт отмены: без сигнала стадии этот запрос живёт вечно.
+                return await new Promise((resolve, reject) => {
+                    const stop = () => {
+                        sawAbort = true;
+                        reject(Object.assign(new Error('This operation was aborted'), { name: 'AbortError' }));
+                    };
+                    if (body?.signal?.aborted) {
+                        stop();
+                        return;
+                    }
+                    const timer = setTimeout(() => resolve({ output: [] }), 3_000);
+                    body?.signal?.addEventListener('abort', () => {
+                        clearTimeout(timer);
+                        stop();
+                    }, { once: true });
+                });
+            },
+        },
+    };
+
+    const controller = new AbortController();
+    const work = codingStage({
+        client,
+        config: { output: { work: './.tmp' }, stages: { coding: { maxTurns: 4 } } },
+        root,
+        task: 'Make a landing.',
+        plan: PLAN,
+        runId: 'run-1',
+        signal: controller.signal,
+    });
+    // Отмена приходит, пока ход ещё идёт.
+    setTimeout(() => controller.abort(), 50);
+
+    await work;
+    assert.equal(sawAbort, true, 'the abort signal of the stage reached the request of the role');
+});

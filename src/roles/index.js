@@ -28,6 +28,9 @@
  * @ai.tags roles, agent
  * @ai.hint keep
  * @changed 2026-11-15 Роли читают сводку контекста прогона и пишут свои ответы в него.
+ * @changed 2026-11-25 Ход роли обрывается пропуском оператора и сигналом стадии: запрос
+ *                       получает свой `AbortController`, а пропуск даёт `stopped: 'skipped'`.
+ * @changed 2026-11-25 `wordsOfAnswer` читает слова роли, а не текст написанных ею файлов.
  */
 
 import { parseResponse, textPart, imagePart } from '../openai/responses.js';
@@ -186,6 +189,11 @@ export const WAITING_ORDER = 'There is nothing to wait for. The work of another 
  *
  * The detector of the waiting reads the whole answer: a role that waits says so in the
  * summary, in the notes, or in both.
+ *
+ * Текст **файлов** сюда не входит: файл — это работа роли, а не её слова о работе.
+ * Код пишет `await` и `let waiting = false;` в каждом втором модуле, и разметка говорит
+ * «Комнат пока нет» в пустом состоянии. Роль, которая написала честный код, не должна
+ * быть объявлена «ждущей чужую работу» из-за слов в её собственном файле.
  * @param {object} answer
  * @returns {string}
  * @ai.hint pure
@@ -196,7 +204,6 @@ export function wordsOfAnswer(answer) {
         String(answer?.text ?? ''),
         String(data?.summary ?? ''),
         String(data?.notes ?? ''),
-        Array.isArray(data?.files) ? data.files.map((file) => String(file?.content ?? '')).join('\n') : '',
     ];
     return parts.filter(Boolean).join('\n');
 }
@@ -894,6 +901,9 @@ export async function runRole({
     const churnCounts = new Map();
     // The files the step names: the role has to write them.
     const wantsFiles = Boolean(requireFiles);
+    // Пропуск оператора, который пришёл во время хода: ход обрывается, и роль
+    // останавливается как пропущенная, а не как упавшая.
+    let skipRequested = false;
     const wantedFiles = Array.isArray(context?.step?.files)
         ? context.step.files.map((item) => String(item ?? '').trim()).filter(Boolean)
         : [];
@@ -995,35 +1005,57 @@ export async function runRole({
         const maxOutputTokens = writing
             ? writeBudgetFor(currentModel, config, definition.maxOutputTokens, writeEstimate)
             : maxOutputFor(currentModel, config, definition.maxOutputTokens, { readOnly: reduced });
-        const raw = await client.responses.create({
-            model: currentModel,
-            instructions,
-            input: items,
-            tools: boundedTools,
-            schema: useSchema,
-            schemaChannel: channelOverride === undefined ? schemaChannel : channelOverride,
-            schemaName,
-            effort: currentEffort,
-            summary: definition.summary,
-            temperature: definition.temperature,
-            maxOutputTokens,
-            verbosity: config?.verbosity ?? (reduced ? 'low' : null),
-            // Several calls in one turn are allowed: a step that writes several files writes
-            // them in one turn, and not one turn per file.
-            parallelToolCalls: true,
-            signal,
-            // The limit of the turn: a host that says nothing longer than that loses the turn,
-            // and the stage says which turn it was — instead of the whole stage standing
-            // still until the budget of the stage is over.
-            ...(Number.isSafeInteger(context?.turnTimeoutMs) && context.turnTimeoutMs > 0
-                ? { idleTimeoutMs: context.turnTimeoutMs }
-                : {}),
-            // The answer comes as a stream: a model that thinks for minutes shows its
-            // reasoning while it thinks, and a host that says nothing is told apart from a
-            // model that is thinking. The silence of the terminal is not the hang of the run.
-            stream: true,
-            onEvent: notify,
-        });
+        // Пропуск оператора прерывает ход, который идёт: `/skip` должен работать и
+        // тогда, когда хост молчит. Без этого запрос ждёт своего ответа, а оператор
+        // смотрит на прогон, который «не слышит» команду.
+        const turn = new AbortController();
+        const stopTurn = () => { try { turn.abort(); } catch { /* the turn is already over */ } };
+        const offSkip = inputChannel?.onSkip?.(() => {
+            skipRequested = true;
+            stopTurn();
+        }) ?? (() => {});
+        // Сигнал стадии тоже прерывает ход: бюджет стадии и Ctrl+C должны обрывать
+        // запрос, а не ждать его.
+        const onStageAbort = () => stopTurn();
+        if (signal) {
+            if (signal.aborted) stopTurn();
+            else signal.addEventListener('abort', onStageAbort, { once: true });
+        }
+        let raw;
+        try {
+            raw = await client.responses.create({
+                model: currentModel,
+                instructions,
+                input: items,
+                tools: boundedTools,
+                schema: useSchema,
+                schemaChannel: channelOverride === undefined ? schemaChannel : channelOverride,
+                schemaName,
+                effort: currentEffort,
+                summary: definition.summary,
+                temperature: definition.temperature,
+                maxOutputTokens,
+                verbosity: config?.verbosity ?? (reduced ? 'low' : null),
+                // Several calls in one turn are allowed: a step that writes several files writes
+                // them in one turn, and not one turn per file.
+                parallelToolCalls: true,
+                signal: turn.signal,
+                // The limit of the turn: a host that says nothing longer than that loses the turn,
+                // and the stage says which turn it was — instead of the whole stage standing
+                // still until the budget of the stage is over.
+                ...(Number.isSafeInteger(context?.turnTimeoutMs) && context.turnTimeoutMs > 0
+                    ? { idleTimeoutMs: context.turnTimeoutMs }
+                    : {}),
+                // The answer comes as a stream: a model that thinks for minutes shows its
+                // reasoning while it thinks, and a host that says nothing is told apart from a
+                // model that is thinking. The silence of the terminal is not the hang of the run.
+                stream: true,
+                onEvent: notify,
+            });
+        } finally {
+            offSkip();
+            signal?.removeEventListener('abort', onStageAbort);
+        }
 
         const parsed = parseResponse(raw);
         const toolCalls = parsed.toolCalls ?? [];
@@ -1087,6 +1119,13 @@ export async function runRole({
         try {
             asked = await ask();
         } catch (error) {
+            // Пропуск оператора обрывает ход: это не ошибка хоста, а команда человека.
+            // Роль останавливается как пропущенная, и стадия идёт дальше.
+            if (skipRequested) {
+                stopped = 'skipped';
+                answer = { text: '', data: null, refusal: '', error: null, schemaProblems: [], toolCalls: [], usage: null, model: currentModel };
+                break;
+            }
             // Ошибка хоста — это не молчание: ответ модели не пришёл. Роль не должна висеть
             // на этом молчании, и прогон должен сказать, что именно не вышло.
             const message = String(error?.message ?? error ?? 'The host did not answer.');

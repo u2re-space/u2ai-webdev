@@ -12,6 +12,8 @@
  * @usedBy cli/input, cli/worker
  * @exports createInputState
  * @ai.tags cli, input, operator
+ * @changed 2026-11-25 `onSkip`: слушатель пропуска зовётся в момент запроса, чтобы
+ *                       ход, который идёт, прервался сразу.
  */
 
 /**
@@ -26,6 +28,9 @@ export function createInputState() {
     let stepSkips = new Set();
     let location = null;
     let quit = false;
+    // Слушатели пропуска: роль, которая ждёт ответа хоста, должна услышать пропуск
+    // сразу, а не после ответа. Иначе `/skip` не прерывает шаг, который висит.
+    const skipListeners = new Set();
 
     return {
         /**
@@ -49,16 +54,34 @@ export function createInputState() {
         },
 
         /**
+         * Listen for the requests to skip.
+         *
+         * The listener is called the moment the request is made: a role that waits for a
+         * host that says nothing has to hear the skip now, not after the host answers.
+         * @param {Function} listener
+         * @returns {Function} the function that stops listening
+         */
+        onSkip(listener) {
+            if (typeof listener !== 'function') return () => {};
+            skipListeners.add(listener);
+            return () => skipListeners.delete(listener);
+        },
+
+        /**
          * Ask for a stage or a step to be skipped.
          * @param {string|null} [target] the name of the stage or step
          * @param {object|null} [where] the place where the request was made
          * @returns {void}
          */
         addSkip(target = null, where = null) {
-            skips.push({
+            const request = {
                 target: target ? String(target).toLowerCase() : null,
                 location: where && typeof where === 'object' ? { ...where } : null,
-            });
+            };
+            skips.push(request);
+            for (const listener of skipListeners) {
+                try { listener(request); } catch { /* a listener never breaks the operator */ }
+            }
         },
 
         /**

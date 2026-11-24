@@ -14,6 +14,8 @@
  * @ai.hint io
  * @ai.hint legacy-0.2
  * @changed 2026-11-13 Ported from the monolith: подбор иконок и интеграция в разметку.
+ * @changed 2026-11-25 Стадия принимает сигнал отмены и передаёт его роли: бюджет стадии
+ *                       и `/skip` обрывают запрос, который идёт.
  */
 
 import { stat, readFile } from 'node:fs/promises';
@@ -69,6 +71,7 @@ export async function iconifyStage({
     apply = true,
     notify = () => {},
     env = process.env,
+    signal = null,
     input = null,
 } = {}) {
     const brief = architecture ? architectureText(architecture) : '';
@@ -87,6 +90,7 @@ export async function iconifyStage({
         apply,
         notify,
         env,
+        signal,
         input,
         context: {
             iconSet,

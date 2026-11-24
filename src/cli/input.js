@@ -6,6 +6,7 @@
  * @exports readPipedInput, createInputChannel
  * @ai.tags cli, input, steering
  * @ai.hint io
+ * @changed 2026-11-25 Канал отдаёт слушатель пропуска: ход роли прерывается сразу.
  */
 
 import { clearLine, createInterface, cursorTo, moveCursor } from 'node:readline';
@@ -234,6 +235,9 @@ export function createInputChannel({ stdin = process.stdin, output = process.std
         log(text) { writeLog(String(text ?? '')); },
         takeSkip({ stage = '', step = '' } = {}) {
             return state.takeSkip({ stage, step });
+        },
+        onSkip(listener) {
+            return state.onSkip(listener);
         },
         takeCurrentSkip() {
             return state.takeCurrentSkip();

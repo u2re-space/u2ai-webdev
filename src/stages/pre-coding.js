@@ -21,6 +21,8 @@
  * @ai.tags stages, coding, contract
  * @ai.hint io
  * @changed 2026-11-24 Скелет кода: стадия сразу после разметки, перед черновиком стилей.
+ * @changed 2026-11-25 Стадия принимает сигнал отмены и передаёт его роли: бюджет стадии
+ *                       и `/skip` обрывают запрос, который идёт.
  */
 
 import { architectureText } from './architect.js';
@@ -52,6 +54,7 @@ export async function preCodingStage({
     apply = true,
     notify = () => {},
     env = process.env,
+    signal = null,
     input = null,
     runContext = null,
 } = {}) {
@@ -73,6 +76,7 @@ export async function preCodingStage({
         env,
         input,
         runContext,
+        signal,
         // Имя стадии: по нему берутся лестница моделей, усилие и бюджет.
         stage: 'pre-coding',
         // Только скелет кода: полный код пишет стадия `coding`.

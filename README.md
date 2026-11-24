@@ -2309,9 +2309,17 @@ directory or a file that is not there.
   the name of the stage: a run that hangs says so instead of waiting for ever. A stage that needs
   more time asks for it: `stages.<id>.timeoutMs` wins over the budget of the run. The vector
   graphics ask for half an hour: a drawing is a long turn.
-- A turn has a limit of its own — a quarter of the budget of the stage. A host that says
+- A turn has a limit of its own — an eighth of the budget of the **step**. A host that says
   nothing longer than that loses the turn, and the stage names the turn: one hung turn does
   not eat the whole stage.
+- The budget of a stage is divided among its steps: eight steps of one role do not each get
+  the budget of the stage. Without the division, eight steps of twelve turns each stand for
+  hours, and the run burns every budget without reaching the next stage.
+- The budget of the stage is a real budget: the abort of the stage reaches the request of the
+  role. A stage that runs out of time cancels the call it is waiting for, instead of leaving
+  it to burn tokens on a stage that is already dead.
+- The skip of the operator reaches the turn that is running: `/skip` stops a role that waits
+  for a host that says nothing. The role ends as skipped, not as failed, and the run goes on.
 - A refused request is not asked again. `400` means the request is wrong, `401` and `403`
   mean the access is closed: the same request stays just as wrong on the next host, and
   repeating it only burns minutes of silence. The refusal is named at once — the status, the
@@ -2325,6 +2333,12 @@ directory or a file that is not there.
   by the number of its steps (up to three). The styles of a whole landing are three steps, and
   fifteen minutes for all three is not enough — the last step of a stage never starts, and the
   run stands still.
+- A file that is not on the disk is not a broken file: `node --check` says «Cannot find
+  module» about a file that was never written, and the step says that the file is missing
+  instead of calling the role to repair a file that does not exist.
+- The words of a role are her prose, not the code she wrote: `await` in a module is not an
+  expectation of the work of another role, and a role that wrote honest code is not told to
+  write it again.
 - A stage that fails does not always stop the run. The stages of the page itself — the markup,
   the styles, the code, the build — stop it: the rest of the chain would work against a page
   that does not exist. The decorations — the crops of the reference, the vector graphics, the

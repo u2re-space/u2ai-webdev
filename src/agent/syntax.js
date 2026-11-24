@@ -25,6 +25,8 @@
  *          checkFile, checkFiles
  * @ai.tags tools, agent, syntax
  * @ai.hint io
+ * @changed 2026-11-25 Файла, который не написан, нет ошибки синтаксиса: о нём говорит
+ *                       стадия шага.
  */
 
 import path from 'node:path';
@@ -403,6 +405,11 @@ export async function missingPartials(root, files = []) {
  */
 export async function checkScript(root, rel, { env = process.env, timeoutMs = 30_000 } = {}) {
     const abs = path.join(root, rel);
+    // Файла нет — это не ошибка синтаксиса: о нём говорит стадия шага («файлы не
+    // написаны»). Проверка без файла читала ошибку node как «модуль не найден» и
+    // звала роль чинить файл, которого никогда не было.
+    const exists = await stat(abs).then((info) => info.isFile()).catch(() => false);
+    if (!exists) return { file: rel, ok: true, errors: [], note: null };
     const result = await runProgram({
         command: process.execPath,
         args: ['--check', abs],

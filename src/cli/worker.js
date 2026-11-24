@@ -13,6 +13,7 @@
  * @exports createWorkerInput, createWorkerRenderer, mainWorker
  * @ai.tags cli, worker, ipc
  * @ai.hint io
+ * @changed 2026-11-25 Канал отдаёт слушатель пропуска: ход роли прерывается сразу.
  */
 
 import { main, parseArgv } from '../cli.js';
@@ -106,6 +107,10 @@ export function createWorkerInput({ send = () => {}, stderr = process.stderr, on
 
         takeSkip({ stage = '', step = '' } = {}) {
             return state.takeSkip({ stage, step });
+        },
+
+        onSkip(listener) {
+            return state.onSkip(listener);
         },
 
         takeCurrentSkip() {

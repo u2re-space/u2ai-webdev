@@ -22,6 +22,8 @@
  * @ai.tags stages, styling, contract
  * @ai.hint io
  * @changed 2026-11-24 Черновик контракта стилей: стадия после скелета кода.
+ * @changed 2026-11-25 Стадия принимает сигнал отмены и передаёт его роли: бюджет стадии
+ *                       и `/skip` обрывают запрос, который идёт.
  */
 
 import { architectureText } from './architect.js';
@@ -53,6 +55,7 @@ export async function preStylingStage({
     apply = true,
     notify = () => {},
     env = process.env,
+    signal = null,
     input = null,
     runContext = null,
 } = {}) {
@@ -74,6 +77,7 @@ export async function preStylingStage({
         env,
         input,
         runContext,
+        signal,
         // Имя стадии: по нему берутся лестница моделей, усилие и бюджет.
         stage: 'pre-styling',
         // Только черновик контракта: полные стили пишет стадия `styling`.

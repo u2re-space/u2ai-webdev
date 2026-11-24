@@ -14,6 +14,8 @@
  * @ai.hint io
  * @ai.hint legacy-0.2
  * @changed 2026-11-13 Ported from the monolith: код по шагу плана.
+ * @changed 2026-11-25 Стадия принимает сигнал отмены и передаёт его роли: бюджет стадии
+ *                       и `/skip` обрывают запрос, который идёт.
  */
 
 import { architectureText } from './architect.js';
@@ -45,6 +47,7 @@ export async function codingStage({
     apply = true,
     notify = () => {},
     env = process.env,
+    signal = null,
     input = null,
     runContext = null,
 } = {}) {
@@ -65,6 +68,7 @@ export async function codingStage({
         env,
         input,
         runContext,
+        signal,
         // Имя стадии: по нему берутся лестница моделей, усилие и бюджет.
         stage: 'coding',
         // Полный код: скелет сделала стадия `pre-coding`.

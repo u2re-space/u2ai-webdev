@@ -19,6 +19,8 @@
  * @ai.hint io
  * @ai.hint legacy-0.2
  * @changed 2026-11-13 Ported from the monolith: стили по шагу плана, токены и DESIGN.md.
+ * @changed 2026-11-25 Стадия принимает сигнал отмены и передаёт его роли: бюджет стадии
+ *                       и `/skip` обрывают запрос, который идёт.
  */
 import { architectureText } from './architect.js';
 import { stylesOf } from './style-entry.js';
@@ -72,6 +74,7 @@ export async function stylingStage({
     apply = true,
     notify = () => {},
     env = process.env,
+    signal = null,
     input = null,
     runContext = null,
 } = {}) {
@@ -95,6 +98,7 @@ export async function stylingStage({
         env,
         input,
         runContext,
+        signal,
         // Имя стадии: по нему берутся лестница моделей, усилие и бюджет.
         stage: 'styling',
         // Полные стили: черновик контракта сделала стадия `pre-styling`.

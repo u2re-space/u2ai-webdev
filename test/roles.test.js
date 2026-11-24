@@ -15,6 +15,7 @@ import path from 'node:path';
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 
 import { ROLES, ROLE_NAMES, resolveRole, readOnlyOperation, roleSchema, buildInstructions, runRole, roleReason, pictureParts } from '../src/roles/index.js';
+import { createInputState } from '../src/cli/input-state.js';
 import { runStepStage } from '../src/stages/step.js';
 import { WEB_DEVELOPMENT, webDevelopment } from '../src/roles/web-development.js';
 import { chunkText, chunksFor } from '../src/roles/chunks.js';
@@ -545,6 +546,44 @@ test('steering entered during a model call is included in the next safe role tur
     await runRole({ client, config: structuredClone(defaults), role: 'planner', input: 'Make a page.', inputChannel });
     assert.ok(requests.length >= 2);
     assert.ok(requests.some((request) => JSON.stringify(request.input).includes('keep the existing header unchanged')));
+});
+
+test('the skip of the operator stops the turn that is running', async () => {
+    // `/skip` должен работать и тогда, когда хост молчит: иначе оператор смотрит на
+    // прогон, который «не слышит» команду.
+    const state = createInputState();
+    let aborted = false;
+    const client = { responses: { async create(body) {
+        return await new Promise((resolve, reject) => {
+            const timer = setTimeout(() => resolve(schemaAnswer('plan', { summary: 'A page.', steps: [], risks: [], questions: [] })), 30_000);
+            const stop = () => {
+                aborted = true;
+                clearTimeout(timer);
+                reject(Object.assign(new Error('This operation was aborted'), { name: 'AbortError' }));
+            };
+            if (body?.signal?.aborted) {
+                stop();
+                return;
+            }
+            body?.signal?.addEventListener('abort', stop, { once: true });
+        });
+    } } };
+    const inputChannel = {
+        interactive: true,
+        setLocation() {},
+        takeSteering() { return []; },
+        takeSkip() { return null; },
+        takeCurrentSkip() { return null; },
+        onSkip(listener) { return state.onSkip(listener); },
+    };
+
+    const work = runRole({ client, config: structuredClone(defaults), role: 'planner', input: 'Plan.', inputChannel });
+    // Оператор жмёт `/skip`, пока ход идёт.
+    setTimeout(() => state.addSkip(null, { stage: 'plan' }), 50);
+
+    const answer = await work;
+    assert.equal(aborted, true, 'the request of the role was aborted by the skip');
+    assert.equal(answer.stopped, 'skipped');
 });
 
 test('ask_user is exposed to interactive roles and returns the operator answer as tool output', async () => {

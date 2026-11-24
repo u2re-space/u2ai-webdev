@@ -15,6 +15,8 @@
  * @ai.hint io
  * @ai.hint legacy-0.2
  * @changed 2026-11-13 Ported from the monolith: разметка по шагу плана и брифу.
+ * @changed 2026-11-25 Стадия принимает сигнал отмены и передаёт его роли: бюджет стадии
+ *                       и `/skip` обрывают запрос, который идёт.
  */
 
 import { architectureText } from './architect.js';
@@ -46,6 +48,7 @@ export async function markupStage({
     apply = true,
     notify = () => {},
     env = process.env,
+    signal = null,
     input = null,
     runContext = null,
 } = {}) {
@@ -66,6 +69,7 @@ export async function markupStage({
         env,
         input,
         runContext,
+        signal,
         context: {
             markup: architecture?.stack?.markup ?? config?.stack?.markupLanguage ?? 'html',
             styles,

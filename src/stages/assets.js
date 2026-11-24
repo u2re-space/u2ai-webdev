@@ -21,6 +21,8 @@
  * @ai.tags stages, pictures, assets
  * @ai.hint io
  * @changed 2026-11-24 Стадия стоит после разметки: разметка линкует по именам из контекста.
+ * @changed 2026-11-25 Стадия принимает сигнал отмены и передаёт его роли: бюджет стадии
+ *                       и `/skip` обрывают запрос, который идёт.
  */
 
 import path from 'node:path';
@@ -164,6 +166,7 @@ export async function assetsStage({
     apply = true,
     notify = () => {},
     env = process.env,
+    signal = null,
     input = null,
     runContext = null,
 } = {}) {
@@ -216,6 +219,7 @@ export async function assetsStage({
         env,
         input,
         runContext,
+        signal,
         context: {
             pictures,
             vectors,

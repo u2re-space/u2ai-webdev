@@ -27,6 +27,8 @@
  * @changed 2026-11-15 Результат стадии применяется внутри защиты: стадия, чей результат не
  *                       применился, — это упавшая стадия, а не мёртвый прогон.
  * @changed 2026-11-15 Порядок стадий, которые делают шаги плана, задаёт сам план.
+ * @changed 2026-11-25 Бюджет хода делится на число шагов стадии: восемь шагов одной
+ *                       роли не стоят каждый по бюджету всей стадии.
  */
 
 import { runId as makeRunId } from './stages/workspace.js';
@@ -655,7 +657,14 @@ export async function runPipeline({
         // The limit of one turn: a part of the budget of the stage. A host that says nothing
         // longer than that loses the turn, and the stage says which turn it was — instead of
         // the whole stage standing still until the budget is over.
-        ctx.turnTimeoutMs = budget > 0 ? Math.max(60_000, Math.round(budget / 8)) : null;
+        // Бюджет делится на шаги стадии: восемь шагов кодера не могут стоять по
+        // бюджету одного шага каждый. Иначе ход каждого шага получал бы весь бюджет
+        // стадии, и восемь шагов по двенадцать ходов стоили бы девять часов — прогон
+        // «тратил все бюджеты», не дойдя до конца.
+        const stageSteps = stepsOfStage(stage.name, ctx.plan);
+        ctx.turnTimeoutMs = budget > 0
+            ? Math.max(60_000, Math.round(budget / Math.max(stageSteps, 1) / 8))
+            : null;
         let result = null;
         try {
             const args = typeof stage.args === 'function' ? { ...ctx, ...stage.args(ctx) } : ctx;

@@ -28,6 +28,7 @@
  * @changed 2026-11-15 Роль видит файлы, которые уже лежат на диске.
  * @changed 2026-11-16 Размер референса в пикселях едет в роль: по картинке ширину дизайна
  *                       не определить.
+ * @changed 2026-11-25 Бюджет хода — часть бюджета своего шага, а не всей стадии.
  */
 
 import path from 'node:path';
@@ -976,8 +977,19 @@ export async function runStepStage({
     const base = own && own > 0
         ? own
         : (Number.isSafeInteger(config?.limits?.stageTimeoutMs) ? config.limits.stageTimeoutMs : 0);
-    const budget = base > 0 ? base * Math.min(Math.max(steps.length, 1), 3) : 0;
-    const turnTimeoutMs = turnLimit ?? (budget > 0 ? Math.max(60_000, Math.round(budget / 8)) : null);
+    // Бюджет стадии делится на её шаги: восемь шагов кодера не могут стоять по
+    // бюджету одного шага каждый.
+    //
+    // Бюджет стадии — это `base * min(шаги, 3)` (см. `pipeline.js`), и ход получает
+    // восьмую часть **своего** бюджета: у стадии с восемью шагами один шаг получает
+    // `base * 3 / 8`, а не `base * 3`. Иначе восемь шагов по двенадцать ходов стоят
+    // девять часов, и прогон «тратит все бюджеты», не дойдя до конца.
+    const stageBudget = base > 0 ? base * Math.min(Math.max(steps.length, 1), 3) : 0;
+    const stepBudget = stageBudget > 0
+        ? Math.round(stageBudget / Math.max(steps.length, 1))
+        : 0;
+    // Ход — часть бюджета шага. Минимум — минута: меньше ход не стоит.
+    const turnTimeoutMs = turnLimit ?? (stepBudget > 0 ? Math.max(60_000, Math.round(stepBudget / 8)) : null);
 
     if (!steps.length) {
         // The plan is the work: a stage whose role has no step has nothing to do. It is

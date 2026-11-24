@@ -14,7 +14,7 @@ import path from 'node:path';
 import { mkdtemp, rm } from 'node:fs/promises';
 
 import { CONTRACTS, contractOf, contractNote, isWaiting, WAITING_WORDS } from '../src/stages/contract.js';
-import { runRole } from '../src/roles/index.js';
+import { runRole, wordsOfAnswer } from '../src/roles/index.js';
 import { defaults } from '../src/config/defaults.js';
 
 test('the coder and the styler have a contract with each other', () => {
@@ -45,6 +45,42 @@ test('a role that does its work is not seen as waiting', () => {
     assert.equal(isWaiting('Created the state store with the session model.'), false);
     assert.equal(isWaiting(''), false);
     assert.equal(isWaiting(null), false);
+});
+
+test('the code of a role is not an expectation of the work of another role', () => {
+    // `await` — ключевое слово JavaScript, а не ожидание роли. Без границы слева
+    // детектор ловил его в каждом модуле и объявлял роль «ждущей чужую работу».
+    assert.equal(isWaiting('const response = await fetch(url);'), false);
+    assert.equal(isWaiting('await loadHome();'), false);
+    assert.equal(isWaiting('The adapter awaits the response.'), false);
+    assert.equal(isWaiting('const data = await readFile(path);'), false);
+});
+
+test('a fact about the project is not an expectation of the work of another role', () => {
+    // «Проектных тестов пока нет» — это факт о проекте, а не ожидание соседней роли.
+    // Роль, честно сказавшая о нём, не должна быть отправлена переписывать своё.
+    assert.equal(isWaiting('Проектных тестов пока нет.'), false);
+    assert.equal(isWaiting('Снимки и измерения должны иметь ревизии; проектных тестов пока нет.'), false);
+    assert.equal(isWaiting('Настоящий поставщик создаётся на следующих этапах.'), false);
+    // А ожидание соседней роли — это ожидание.
+    assert.equal(isWaiting('Стилей пока нет.'), true);
+    assert.equal(isWaiting('Файлы пока нет.'), true);
+    assert.equal(isWaiting('Файлы стилей не написаны.'), true);
+});
+
+test('the words of an answer do not include the text of the files', () => {
+    // Текст файлов — это работа роли, а не её слова о работе. Роль, которая написала
+    // честный код с `await`, не должна быть объявлена «ждущей».
+    const words = wordsOfAnswer({
+        text: '',
+        data: {
+            summary: 'Готово.',
+            notes: '',
+            files: [{ path: 'src/main.js', content: 'const r = await fetch(url);\n' }],
+        },
+    });
+    assert.equal(words.includes('await'), false);
+    assert.match(words, /Готово\./);
 });
 
 test('the rule of the contract tells the role that there is nothing to wait for', () => {

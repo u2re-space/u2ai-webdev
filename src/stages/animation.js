@@ -15,6 +15,8 @@
  * @exports role, animationStage
  * @ai.tags stages, animation, motion
  * @ai.hint io
+ * @changed 2026-11-25 Стадия принимает сигнал отмены и передаёт его роли: бюджет стадии
+ *                       и `/skip` обрывают запрос, который идёт.
  */
 
 import { architectureText } from './architect.js';
@@ -46,6 +48,7 @@ export async function animationStage({
     apply = true,
     notify = () => {},
     env = process.env,
+    signal = null,
     input = null,
     runContext = null,
 } = {}) {
@@ -67,6 +70,7 @@ export async function animationStage({
         env,
         input,
         runContext,
+        signal,
         context: {
             style: styles.language,
             styles,

@@ -108,3 +108,46 @@ test('a refused request is not asked again: the answer comes at once', async () 
         await new Promise((resolve) => answered.close(resolve));
     }
 });
+
+test('the cancellation of a request stops the body of the answer', async () => {
+    // Хост присылает заголовки и молчит: тело ответа не приходит. Отмена запроса
+    // должна обрывать чтение тела сразу, а не ждать конца молчания.
+    //
+    // Застой шёл именно так: заголовки пришли, тело — нет, и запрос висел до своего
+    // таймаута, а бюджет стадии и `/skip` не могли его остановить.
+    const sockets = [];
+    const server = http.createServer((req, res) => {
+        req.on('data', () => {});
+        res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+        res.flushHeaders();
+        // Тело не приходит никогда.
+    });
+    server.on('connection', (socket) => sockets.push(socket));
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const url = `http://127.0.0.1:${server.address().port}/v1/`;
+
+    const config = structuredClone(defaults);
+    config.timeoutMs = 30_000;
+    config.backends = [{ baseURL: url, apiKey: 'test-key' }];
+
+    const client = await createClient({ config, env: {} });
+    const controller = new AbortController();
+    try {
+        const started = Date.now();
+        const work = client.responses.create({
+            model: 'test-model',
+            instructions: 'x',
+            input: 'y',
+            stream: true,
+            signal: controller.signal,
+        });
+        setTimeout(() => controller.abort(), 100);
+        await assert.rejects(() => work, /abort/i);
+        // Отмена сработала сразу, а не через полминуты молчания.
+        assert.ok(Date.now() - started < 10_000, 'the request was cancelled at once');
+    } finally {
+        client.close?.();
+        for (const socket of sockets) socket.destroy();
+        await new Promise((resolve) => server.close(resolve));
+    }
+});

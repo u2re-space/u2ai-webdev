@@ -862,6 +862,43 @@ test('a stage with many steps gets a budget for all of them', async () => {
     assert.match(result.error, /не закончилась/);
 });
 
+test('the budget of a step is a part of the budget of the stage', async () => {
+    // Восемь шагов кодера не могут стоять по бюджету одного шага каждый: ход
+    // получает восьмую часть бюджета **своего** шага, а не всей стадии.
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-budget-step-'));
+    const seen = [];
+    const plan = {
+        steps: [
+            { id: 'code-1', title: 'Code', role: 'coder', dependsOn: [], files: ['src/main.js'] },
+            { id: 'code-2', title: 'More code', role: 'coder', dependsOn: ['code-1'], files: ['src/other.js'] },
+        ],
+    };
+    const stages = [{
+        name: 'coding',
+        title: 'Code',
+        dependsOn: [],
+        run: async ({ turnTimeoutMs }) => {
+            seen.push(turnTimeoutMs);
+            return { ok: true };
+        },
+    }];
+
+    await runPipeline({
+        client: { responses: { create: async () => ({ output: [] }) } },
+        config: { ...CONFIG, limits: { ...CONFIG.limits, stageTimeoutMs: 600_000 } },
+        root,
+        task: 'Make a landing.',
+        runId: 'run-1',
+        stages,
+        plan,
+    });
+
+    assert.equal(seen.length, 1);
+    // Бюджет стадии — 600 000 * 2 (два шага), один шаг — половина, ход — восьмая
+    // часть шага: 75 000 мс.
+    assert.equal(seen[0], 75_000);
+});
+
 test('a stopped run says where it stood', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-where-'));
     const controller = new AbortController();
