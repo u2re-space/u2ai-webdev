@@ -411,6 +411,13 @@ export function createSubagentSpawner({
                 files: expected,
                 rights: { cwd: root, write: true },
                 budget: { maxTurns: Math.min(spec.maxTurns ?? 8, 8) },
+                // The economy of the turns travels with the hand-over: the sub-agent spends
+                // the cap of the model, and the estimate it gives at the write gate sizes
+                // the budget of the write turn.
+                output: {
+                    maxOutputTokens: spec.maxOutputTokens ?? config?.maxOutputTokens ?? null,
+                    models: config?.models ?? {},
+                },
                 model: {
                     model: modelOf,
                     baseURL: addressOf,

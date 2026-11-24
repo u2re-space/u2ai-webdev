@@ -301,6 +301,7 @@ test('the sub-agent works in a thread of the parent and the parent runs its tool
     const calls = [];
     const api = await startFakeApi([
         { type: 'function_call', name: 'read_file', arguments: { path: 'note.txt' } },
+        { type: 'function_call', name: 'write_ready', arguments: {} },
         { type: 'function_call', name: 'write_file', arguments: { path: 'styles.scss', content: 'body { color: #111; }\n' } },
         { text: 'The stylesheet is written.' },
     ]);
@@ -349,6 +350,11 @@ test('the sub-agent works in a thread of the parent and the parent runs its tool
         const done = events.find((event) => event.type === 'subagent.done');
         assert.equal(done.ok, true);
         assert.deepEqual(done.files, ['styles.scss']);
+        // The gate of the write is in the log of the sub-agent: the estimate of the model
+        // sizes the budget of the write turn.
+        const ready = events.find((event) => event.type === 'subagent.status'
+            && event.event?.status === 'write_ready');
+        assert.ok(ready, 'the gate of the write opened');
     } finally {
         api.stop();
         await rm(root, { recursive: true, force: true });
