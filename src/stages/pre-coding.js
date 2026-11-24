@@ -73,6 +73,8 @@ export async function preCodingStage({
         env,
         input,
         runContext,
+        // Имя стадии: по нему берутся лестница моделей, усилие и бюджет.
+        stage: 'pre-coding',
         // Только скелет кода: полный код пишет стадия `coding`.
         pass: 'draft',
         context: {

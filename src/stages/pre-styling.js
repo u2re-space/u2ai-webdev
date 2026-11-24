@@ -74,6 +74,8 @@ export async function preStylingStage({
         env,
         input,
         runContext,
+        // Имя стадии: по нему берутся лестница моделей, усилие и бюджет.
+        stage: 'pre-styling',
         // Только черновик контракта: полные стили пишет стадия `styling`.
         pass: 'draft',
         context: {

@@ -951,6 +951,7 @@ export async function runStepStage({
     input = null,
     turnTimeoutMs: turnLimit = null,
     pass: askedPass = null,
+    stage: askedStage = null,
 } = {}) {
     if (!client?.responses) throw new Error('Клиент API не передан.');
     const run = id ?? runId();
@@ -962,7 +963,10 @@ export async function runStepStage({
     // A turn that hangs must not eat the whole stage: the host says nothing, the turn is
     // lost, and the stage says which turn it was — instead of standing still until the
     // budget of the stage is over.
-    const stageName = stageForRole(role) ?? role;
+    // Имя стадии: бюджет и модель берутся от неё, а не от роли. У роли может быть
+    // несколько стадий (черновик контракта и полная работа), и у каждой — своя
+    // лестница моделей и свой бюджет.
+    const stageName = String(askedStage ?? '').trim() || (stageForRole(role) ?? role);
     const own = Number.isSafeInteger(config?.stages?.[stageName]?.timeoutMs)
         ? config.stages[stageName].timeoutMs
         : null;
@@ -1230,7 +1234,10 @@ async function runStepPass({
             signal,
             notify,
             runContext,
-            stage: role,
+            // Стадия, а не роль: ранг модели и усилие берутся по стадии, и проходы
+            // одной роли отвечают разными моделями — контракт пишет старшая, полную
+            // работу ведёт младшая.
+            stage: stageName,
             inputChannel: input,
         });
         const turnUsed = result.turns;

@@ -36,6 +36,14 @@ export const STAGE_EFFORT = Object.freeze({
     reviewer: 'high',
     auditor: 'high',
     learner: 'high',
+    // Фазы стилей и кода. Черновик контракта — это основа, на которой стоит вся
+    // работа: токены, имена классов, состояния. Ошибка в них стоит дороже, чем
+    // ошибка в самой работе, поэтому контракт пишется с самой глубокой планкой, а
+    // полная работа — с обычной для своего вида.
+    'pre-styling': 'xhigh',
+    'pre-coding': 'xhigh',
+    styling: 'high',
+    coding: 'high',
 });
 
 /**
@@ -170,6 +178,25 @@ export const defaults = {
         // семейства. Раскладка картинок и её проверка — это дешёвая работа, и старшая
         // модель на ней сгорает: рисует, смотрит, рисует снова.
         illustrator: [0],
+      },
+      /**
+       * The ladders of the ranks of the stages.
+       *
+       * A stage may walk its own ladder: the phases of the styles and the code write the
+       * contract with one model and do the work with another. The contract — the tokens,
+       * the names of the classes, the states — is the foundation the whole run stands on,
+       * so it is written by the head of the family (the Sol). The full work is done by the
+       * tail (the Terra): it follows a contract that is already written, and it is a second
+       * pass over the same file — the expensive model would burn the money on the second
+       * pass.
+       *
+       * The ladder of the stage wins over the ladder of the role.
+       */
+      stages: {
+        'pre-styling': [1],
+        'pre-coding': [1],
+        styling: [0],
+        coding: [0],
       },
     },
   },
@@ -403,6 +430,10 @@ export const defaults = {
     architectQuality: 50,
     iconifierQuality: 50,
     reviewerQuality: 50,
+    // Планка черновиков контракта. Она выше остальных: контракт — это основа, на
+    // которой стоит вся работа, и ошибка в нём стоит дороже, чем ошибка в самой
+    // работе. Пользователь может опустить её до общей планки качества.
+    contractQuality: 75,
   },
 
   // --- stages -----------------------------------------------------------------

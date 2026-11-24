@@ -139,15 +139,19 @@ export function instructions(context = {}) {
     // Проход роли: черновик контракта или полная работа. В черновике роль пишет то,
     // что должно быть общим, — и код пишется против этого.
     const passNote = context.pass === 'draft'
-        ? `This is the draft of the contract of the styles: the tokens, the names of the classes and the
-skeleton of the layout. The code of the project is written next, against what you write here — so a
-token that is missing here is a token the code will not use, and a class name you invent that the
-markup does not have is a class nobody wears. The full styles come later, and they will see the
-code that grew out of your draft.`
+        ? `This is the contract of the styles, and it is written whole: the tokens, the names of the
+classes, the skeleton of the layout, the rules of the components, the rules of the states and the
+responsive behaviour. The next pass of this role is the second look at the same file, and it runs
+on a cheaper model — everything you leave out here will be written from scratch there, against your
+names or against other ones, and the two will not agree. The code of the project is written next,
+against what you write here: a token that is missing here is a token the code will not use, and a
+class name you invent that the markup does not have is a class nobody wears.`
         : (context.pass === 'full'
-            ? `The full styles: the code of the project is already written, against the draft of the
-contract you wrote before. Keep the tokens and the names of that draft — the code is written
-against them, and a name that changes under the written code breaks the page.`
+            ? `The contract of the styles is already on the disk and it is whole: it was written by the
+model that is good at this. This pass is the second look at it — fix what does not match the markup
+or the code, add the rules the code needs, tune the spacing, the contrast and the focus ring. Keep
+the tokens and the names of the contract: the code is written against them, and a name that changes
+under the written code breaks the page. Do not start the styles over.`
             : '');
     return `You are the styler of a web project. You write the CSS (or SCSS) of one step and you make the result look the way the design direction says.
 

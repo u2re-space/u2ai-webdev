@@ -19,6 +19,7 @@ import { ENUMS } from '../config/constants.js';
  */
 export const FINE_QUALITY_KEYS = Object.freeze([
     'codeQuality', 'decorQuality', 'architectQuality', 'iconifierQuality', 'reviewerQuality',
+    'contractQuality',
 ]);
 
 /** The stage a role works in, so that the right dial moves. */
@@ -33,6 +34,28 @@ export const STAGE_OF_ROLE = Object.freeze({
     iconifier: 'iconifierQuality',
     reviewer: 'reviewerQuality',
     auditor: 'reviewerQuality',
+});
+
+/**
+ * The dial of the contract of the styles and the code.
+ *
+ * Черновик контракта — это основа, на которой стоит вся работа: токены, имена
+ * классов, состояния. Ошибка в них стоит дороже, чем ошибка в самой работе, поэтому
+ * у них свой диал, и он по умолчанию выше диала работы.
+ */
+export const CONTRACT_QUALITY_KEY = 'contractQuality';
+
+/**
+ * Стадии, которые пишут контракт, и их диал.
+ *
+ * Черновики отвечают за то, на чём стоит вся работа, поэтому у них свой диал
+ * качества — и он по умолчанию выше диала самой работы.
+ * @type {Readonly<Record<string, string>>}
+ * @exports
+ */
+export const STAGE_OF_CONTRACT = Object.freeze({
+    'pre-styling': CONTRACT_QUALITY_KEY,
+    'pre-coding': CONTRACT_QUALITY_KEY,
 });
 
 /** One full band of quality points moves the effort by one level. */
@@ -117,7 +140,10 @@ export function resolvePace({ config = {}, stage = null, role = null } = {}) {
         : mode === 'quality'
             ? { speed: Math.max(0, speed - 25), quality: Math.min(100, quality + 25) }
             : { speed, quality };
-    const key = stage ?? (role ? STAGE_OF_ROLE[role] : null);
+    // Черновик контракта отвечает за основу работы, и у него свой диал: он выше диала
+    // самой работы, потому что ошибка в основании стоит дороже ошибки в надстройке.
+    const contract = stage ? STAGE_OF_CONTRACT[String(stage).trim().toLowerCase()] : null;
+    const key = contract ?? (role ? STAGE_OF_ROLE[role] : null);
     const stageQuality = key
         ? fineQuality({ ...pace, speed: effective.speed, quality: effective.quality }, key)
         : effective.quality;
@@ -129,16 +155,25 @@ export function resolvePace({ config = {}, stage = null, role = null } = {}) {
  *
  * The profile lives in the config (`reasoning.stageEffort`): a role that is not in it
  * keeps the effort of the run. A profile that is turned off (`null`) keeps nothing.
- * @param {{ config?: object, role?: string|null }} request
+ *
+ * The profile of the stages wins over the profile of the role: the phases of the styles
+ * and the code ask for different depths — the contract is written with the deepest
+ * reasoning, and the full work with a shallower one.
+ * @param {{ config?: object, role?: string|null, stage?: string|null }} request
  * @returns {string|null}
  * @exports
  * @ai.hint pure
  */
-export function stageEffortFor({ config = {}, role = null } = {}) {
-    const key = String(role ?? '').trim().toLowerCase();
-    if (!key) return null;
+export function stageEffortFor({ config = {}, role = null, stage = null } = {}) {
     const profile = config?.reasoning?.stageEffort;
     if (!profile || typeof profile !== 'object' || Array.isArray(profile)) return null;
+    const where = String(stage ?? '').trim().toLowerCase();
+    if (where) {
+        const own = profile[where];
+        if (typeof own === 'string' && own) return own;
+    }
+    const key = String(role ?? '').trim().toLowerCase();
+    if (!key) return null;
     const level = profile[key];
     return typeof level === 'string' && level ? level : null;
 }
@@ -173,18 +208,18 @@ export function lowerEffort(first, second) {
  * The profile of the stages says what a stage asks for; `reasoning.effort` is the budget
  * of the run: a stage never works above it. An effort set for the role itself
  * (`roles.<role>.effort`) is taken as it is.
- * @param {{ config?: object, role?: string|null, effort?: string|null }} request
+ * @param {{ config?: object, role?: string|null, effort?: string|null, stage?: string|null }} request
  * @returns {string|null}
  * @exports
  * @ai.hint pure
  */
-export function effortFor({ config = {}, role = null, effort = null } = {}) {
+export function effortFor({ config = {}, role = null, effort = null, stage = null } = {}) {
     const ceiling = config?.reasoning?.effort ?? null;
-    const asked = stageEffortFor({ config, role });
+    const asked = stageEffortFor({ config, role, stage });
     const base = effort ?? (asked ? lowerEffort(asked, ceiling) : ceiling);
     if (!base) return null;
-    const pace = resolvePace({ config, role });
-    const key = role ? STAGE_OF_ROLE[role] : null;
+    const pace = resolvePace({ config, role, stage });
+    const key = stage ?? (role ? STAGE_OF_ROLE[role] : null);
     if (!key) return base;
     const moved = stageEffort(base, defaultFineQuality(pace.speed, pace.quality), pace.stageQuality);
     // The dial of the stage is an explicit wish of the user: it may lift the effort above

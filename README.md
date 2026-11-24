@@ -102,11 +102,11 @@ report into the directory of the run and hands the result to the next one.
 | `vector` | Draw the vector graphics as code: the SVG of the ornaments and the illustrations. |
 | `assets` | Place the assets: the prepared pictures and the drawn graphics get their final paths and their final format. |
 | `markup` | Write the markup of the pages. |
-| `pre-styling` | Draft the contract of the styles: the tokens, the names of the classes, the skeleton of the layout. |
-| `pre-coding` | Draft the contract of the code: the modules, the states, the data that flows between them. |
-| `styling` | Write the styles: the tokens, the layout, the states. |
+| `pre-styling` | Write the contract of the styles: the tokens, the names of the classes, the rules of the components and the states. |
+| `pre-coding` | Write the contract of the code: the modules, the states of the interface, the data, the behaviour. |
+| `styling` | Look over the styles once more: what the code needs, the fine tuning. |
 | `animation` | Write the motion of the result: the transitions, the entrances, the reduced motion. |
-| `coding` | Write the code: the scripts, the modules, the data. |
+| `coding` | Look over the code once more: the logic, the errors, the fine tuning. |
 | `iconify` | Choose the icons of the interface and check that every one of them is on the disk. |
 | `build` | Connect the styles: the entry point, the compilation, the links of the markup. |
 | `sight` | Open the page in a browser, shoot it, and let the styler compare the picture with the reference and fix the styles. |
@@ -156,20 +156,30 @@ an asset drawn after it never reaches the distribution.
 The styles and the code are written in **four phases**, and the order between them is not a
 choice — it is the same for every page:
 
-| Phase | What it writes |
-|---|---|
-| `pre-styling` | The contract of the styles: the tokens, the names of the classes, the skeleton of the layout, the rules of the states. |
-| `pre-coding` | The skeleton of the code: the modules, their exports, the states of the interface, the data that flows between them. |
-| `styling` | The full styles: the components, the states, the responsive behaviour — written against the skeleton of the code. |
-| `coding` | The full code: the behaviour, the logic, the commands — written against the full styles. |
+| Phase | What it writes | Model | Effort |
+|---|---|---|---|
+| `pre-styling` | The contract of the styles: the tokens, the names of the classes, the skeleton of the layout, the rules of the components, the rules of the states, the responsive behaviour. | head of the family (the Sol) | `xhigh` |
+| `pre-coding` | The contract of the code: the modules, their exports, the states of the interface, the data, the behaviour. | head of the family (the Sol) | `xhigh` |
+| `styling` | The second look at the same stylesheets: what the code needs, the fine tuning. | tail of the family (the Terra) | `high` |
+| `coding` | The second look at the same files: the logic, the errors, the fine tuning. | tail of the family (the Terra) | `high` |
 
 The phases exist because a role that waits for something that comes after it waits for ever.
 The coder without styles does not know which class names the page will wear, and invents
 its own; the styler without code does not know which states the page will show, and dresses
-none of them. The draft of the contract settles both questions before either role writes
-the real thing: the styler writes the tokens and the names first, the coder writes the
-skeleton against them, and then each role does its work with the other one's result on the
-disk.
+none of them. The contract settles both questions before either role writes the real thing:
+the styler writes the tokens and the names first, the coder writes the code against them,
+and then each role does its work with the other one's result on the disk.
+
+**The contract is written whole, and by the better model.** The full work is a second pass
+over the same file — and a second pass is where the money burns: the expensive model would
+pay twice for the same stylesheet. So the head of the family writes the contract, and the
+tail of the family polishes it. The contract is written at the deepest effort (`xhigh`),
+because an error in the foundation costs more than an error in the work on top of it.
+
+The dial of the contract is its own: `pace.contractQuality`. It stands higher than the dial
+of the work by default (75 against 50), and it lifts the effort above the ceiling of the
+run — the ceiling is the budget of the run, and the dial of a stage is an explicit wish of
+the user. Lower it to `contractQuality: 50` and the contract works at the ordinary depth.
 
 A plan that asks for another order is told: the order of the phases is stronger than the
 plan, and the run says which edge of the plan it dropped.
@@ -192,10 +202,10 @@ step, the same files — a different task. The report of a pass lies next to the
 the step (`style-base.styler.draft.json`), and the report of the step is the report of the
 last pass: it looks at the file that is on the disk.
 
-That is what makes the phases possible: the styler writes the draft of the contract into
-the stylesheet, and the coder's draft is written *after* it — into the same project, on the
-same disk. The second pass of the coder sees the styles of the first pass of the styler,
-and the second pass of the styler sees the code that grew out of the drafts.
+That is what makes the phases possible: the styler writes the contract of the styles into
+the stylesheet, and the contract of the code is written *after* it — into the same project,
+on the same disk. The second pass of the coder sees the styles of the first pass of the
+styler, and the second pass of the styler sees the code that grew out of the contracts.
 
 A pass that is already done is not done again. A continued run reads the reports of the
 passes from the disk, and the work that is already there is not paid for twice.

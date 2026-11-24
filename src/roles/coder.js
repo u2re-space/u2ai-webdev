@@ -120,17 +120,22 @@ defect and the change that is asked for. Fix it now: find the place of the defec
 \`find_line\`, read that part of the file, and change that part with \`patch_file\`. The answer is
 the repaired file on the disk, never a description of the change.`
         : '';
-    // Проход роли: скелет кода или полный код. Скелет — это контракт, по которому
-    // потом пишутся и стили, и код.
+    // Проход роли: контракт кода или полный код. Контракт — это то, на чём стоит
+    // и стили, и работа.
     const passNote = context.pass === 'draft'
-        ? `This is the skeleton of the code, not the code itself: the modules, their exports, the
-states of the interface and the data that flows between them. The styles of the page are written
-next, against the names and the states you give here — so a name you get wrong now is a name the
-styles will not find. Write the shape carefully and do not write the whole behaviour yet.`
+        ? `This is the contract of the code, and it is written whole: the modules, the exports, the
+states of the interface, the data that flows between them and the behaviour itself. The next pass
+of this role is the second look at the same files, and it runs on a cheaper model — everything you
+leave out here will be written from scratch there, against your names or against other ones, and the
+two will not agree. The styles of the page are written next, against the names and the states you
+give here: a name you get wrong now is a name the styles will not find.`
         : (context.pass === 'full'
-            ? `The full code: the styles of the page are already written, against the skeleton you
-wrote before. Keep the names of the skeleton and the names of the stylesheets — the styles are
-already written against them, and a name that changes under the written styles breaks the page.`
+            ? `The contract of the code is already on the disk and it is whole: it was written by the
+model that is good at this. This pass is the second look at it — fix the logic that does not do
+what the step asks, handle the errors, finish the states and the fine tuning. The styles of the page
+are on the disk too, written against that contract. Keep the names of the contract and of the
+stylesheets: a name that changes under the written styles breaks the page. Do not start the code
+over.`
             : '');
     return `You are the coder of a web project. You write the code of one step, in the files the
 step names, and you make it work.

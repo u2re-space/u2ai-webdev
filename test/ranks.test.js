@@ -65,10 +65,14 @@ function schemaAnswer(name, data) {
 
 test('the fix of the styles is the polish of the styler', () => {
     const config = configFor();
-    // The styles are written by the head of the ladder. The fix of them, after the styling
-    // stage, is the polish: the work of the tail, of the junior model of the family.
-    assert.equal(resolveRole('styler', config, { stage: 'styling' }).model, 'openai/gpt-6.2-sol');
+    // Контракт стилей пишет старшая модель: она пишет токены и имена, на которых
+    // стоит вся работа. Полную работу ведёт младшая — она идёт по готовому контракту.
+    assert.equal(resolveRole('styler', config, { stage: 'pre-styling' }).model, 'openai/gpt-6.2-sol');
+    // Стадия `styling` — это вторая прокрутка по тому же файлу: младшая модель.
+    assert.equal(resolveRole('styler', config, { stage: 'styling' }).model, 'openai/gpt-6.1-terra');
+    // Роль без своей стадии отвечает как раньше: по лестнице роли.
     assert.equal(resolveRole('styler', config, { stage: 'styler' }).model, 'openai/gpt-6.2-sol');
+    // Полировка — всегда хвост лестницы.
     assert.equal(resolveRole('styler', config, { stage: 'sight', phase: 'polish' }).model, 'openai/gpt-6.1-terra');
     assert.equal(resolveRole('styler', config, { stage: 'repair', phase: 'polish' }).model, 'openai/gpt-6.1-terra');
 });
@@ -77,6 +81,38 @@ test('the phase of the work decides the rank of the family', () => {
     const config = configFor();
     assert.equal(resolveRole('styler', config, { phase: 'work' }).model, 'openai/gpt-6.2-sol');
     assert.equal(resolveRole('styler', config, { phase: 'polish' }).model, 'openai/gpt-6.1-terra');
+});
+
+test('the contract of the styles and the code is written by the head of the family', () => {
+    const config = configFor();
+    // Черновик контракта — основа, на которой стоит вся работа: его пишет старшая
+    // модель, и с самой глубокой планкой усилия.
+    const draft = resolveRole('styler', config, { stage: 'pre-styling' });
+    assert.equal(draft.model, 'openai/gpt-6.2-sol');
+    assert.equal(draft.effort, 'xhigh');
+
+    const draftCode = resolveRole('coder', config, { stage: 'pre-coding' });
+    assert.equal(draftCode.model, 'openai/gpt-6.2-sol');
+    assert.equal(draftCode.effort, 'xhigh');
+
+    // Полная работа — вторая прокрутка по тому же файлу: её ведёт младшая модель.
+    const full = resolveRole('styler', config, { stage: 'styling' });
+    assert.equal(full.model, 'openai/gpt-6.1-terra');
+    assert.equal(full.effort, 'high');
+
+    const fullCode = resolveRole('coder', config, { stage: 'coding' });
+    assert.equal(fullCode.model, 'openai/gpt-6.1-terra');
+    assert.equal(fullCode.effort, 'high');
+});
+
+test('the ladder of the stage wins over the ladder of the role', () => {
+    const config = configFor();
+    // Лестница роли — старшая на работе и младшая на полировке. Стадия перекрывает её:
+    // полная работа идёт на младшей, а полировка на той же стадии — тоже младшая.
+    const path = resolveRole('styler', config, { stage: 'styling' }).path;
+    assert.deepEqual(path, [0]);
+    // Стадия без своей лестницы наследует лестницу роли.
+    assert.deepEqual(resolveRole('styler', config, { stage: 'sight' }).path, [1, 0]);
 });
 
 test('a role that has to write again goes back to the head of the ladder', async () => {

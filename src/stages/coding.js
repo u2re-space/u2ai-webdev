@@ -65,6 +65,8 @@ export async function codingStage({
         env,
         input,
         runContext,
+        // Имя стадии: по нему берутся лестница моделей, усилие и бюджет.
+        stage: 'coding',
         // Полный код: скелет сделала стадия `pre-coding`.
         pass: 'full',
         context: {

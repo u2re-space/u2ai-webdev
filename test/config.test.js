@@ -175,12 +175,42 @@ test('the validation of the profile of the stages names the role', () => {
 
     const role = cloneDefaults();
     role.reasoning.stageEffort.sculptor = 'high';
-    assert.throws(() => validateConfig(role), /Конфигурация: reasoning\.stageEffort\.sculptor: неизвестная роль/);
+    assert.throws(() => validateConfig(role), /Конфигурация: reasoning\.stageEffort\.sculptor: неизвестная роль или стадия/);
+
+    // В профиле есть и стадии: у роли может быть несколько стадий, и у каждой своя
+    // планка усилия.
+    const stage = cloneDefaults();
+    stage.reasoning.stageEffort['pre-styling'] = 'xhigh';
+    assert.doesNotThrow(() => validateConfig(stage));
 
     // The profile may be turned off: every role keeps the effort of the run.
     const off = cloneDefaults();
     off.reasoning.stageEffort = null;
     assert.doesNotThrow(() => validateConfig(off));
+});
+
+test('the ladder of the ranks may be set for a stage', () => {
+    const config = cloneDefaults();
+    config.house.ranks.stages = { 'pre-styling': [1], styling: [0] };
+    assert.doesNotThrow(() => validateConfig(config));
+
+    // Ранг — целое не меньше нуля.
+    const bad = cloneDefaults();
+    bad.house.ranks.stages = { styling: [-1] };
+    assert.throws(() => validateConfig(bad), /ranks\.stages\.styling/);
+
+    // Раздел, которого нет, — ошибка.
+    const unknown = cloneDefaults();
+    unknown.house.ranks.sculptors = { a: [0] };
+    assert.throws(() => validateConfig(unknown), /ranks\.sculptors: неизвестное поле/);
+});
+
+test('the dial of the contract is higher than the dial of the work', () => {
+    const config = cloneDefaults();
+    // Планка черновиков контракта стоит выше: контракт — это основа, на которой
+    // стоит вся работа.
+    assert.ok(config.pace.contractQuality > config.pace.codeQuality);
+    assert.doesNotThrow(() => validateConfig(config));
 });
 
 test('the validation of the bridges names the bridge', () => {

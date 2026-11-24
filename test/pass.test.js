@@ -23,6 +23,8 @@ import {
 } from '../src/stages/pass.js';
 import { passTask, passNote, isDraftPass } from '../src/stages/pass-tasks.js';
 import { runStepStage, readPassReport } from '../src/stages/step.js';
+import { effortFor } from '../src/agent/pace.js';
+import { defaults } from '../src/config/defaults.js';
 
 test('the roles with passes have the draft before the full work', () => {
     assert.deepEqual(passesOf('styler'), ['draft', 'full']);
@@ -67,32 +69,43 @@ test('a report of a pass is told from a report of a step', () => {
     assert.equal(isPassReportName('markup-home.markup.full.json'), false);
 });
 
-test('the draft of the styles asks for the contract, not the styles', () => {
+test('the contract of the styles is asked for whole', () => {
     const task = passTask('styler', 'draft', { step: { id: 'style-base' } });
     assert.match(task, /contract/i);
     assert.match(task, /token/i);
     assert.match(task, /style-base/);
-    // The full work asks for the styles themselves.
+    // Контракт пишется целиком: токены, имена, каркас, правила компонентов, состояния.
+    assert.match(task, /rules of the components/);
+    assert.match(task, /rules of the states/);
+    assert.match(task, /responsive behaviour/);
+    // Черновик — это не «только скелет»: следующий проход идёт на младшей модели.
+    assert.match(task, /cheaper model/);
+    assert.match(task, /Write \*\*all of it\*\*/);
+
+    // Полная работа — второй взгляд на тот же файл, а не написание с нуля.
     const full = passTask('styler', 'full', { step: { id: 'style-base' } });
-    assert.match(full, /styles of the page/i);
-    assert.doesNotMatch(full, /draft of the contract, not the styles/);
+    assert.match(full, /polish/i);
+    assert.match(full, /already on the disk/);
+    assert.doesNotMatch(full, /Write \*\*all of it\*\*/);
 });
 
-test('the draft of the code asks for the skeleton, not the code', () => {
+test('the contract of the code is asked for whole', () => {
     const task = passTask('coder', 'draft', { step: { id: 'state' }, hasStyles: true });
-    assert.match(task, /skeleton/i);
+    assert.match(task, /contract/i);
     assert.match(task, /state/);
-    // With the draft of the styles on the disk, the role is told to read it.
+    assert.match(task, /Write \*\*all of it\*\*/);
+    // С контрактом стилей на диске роль читает его.
     assert.match(task, /Read it first/);
-    // Without it, the role is told where the names come from.
+    // Без него — имена берутся из разметки и брифа.
     const bare = passTask('coder', 'draft', { step: { id: 'state' }, hasStyles: false });
     assert.match(bare, /not written yet/);
 });
 
-test('the full code is written against the styles that are already there', () => {
+test('the full code is the second look at the contract', () => {
     const task = passTask('coder', 'full', { step: { id: 'state' } });
     assert.match(task, /code of the page/i);
-    assert.match(task, /skeleton/);
+    assert.match(task, /already on the disk/);
+    assert.match(task, /Do not start the code over/);
 });
 
 test('a role without passes has no task of a pass', () => {
@@ -100,9 +113,9 @@ test('a role without passes has no task of a pass', () => {
     assert.equal(passNote('markup', 'draft'), '');
 });
 
-test('the note of a pass names the draft', () => {
-    assert.equal(passNote('styler', 'draft'), 'черновик контракта стилей');
-    assert.equal(passNote('coder', 'draft'), 'черновик контракта кода');
+test('the note of a pass names the contract', () => {
+    assert.equal(passNote('styler', 'draft'), 'контракт стилей');
+    assert.equal(passNote('coder', 'draft'), 'контракт кода');
     assert.equal(passNote('styler', 'full'), '');
     assert.equal(isDraftPass('draft'), true);
     assert.equal(isDraftPass('full'), false);
@@ -111,6 +124,27 @@ test('the note of a pass names the draft', () => {
 test('the passes of the house are known', () => {
     assert.ok(PASSES.styler.includes('draft'));
     assert.ok(PASSES.coder.includes('full'));
+});
+
+test('the dial of the contract lifts the plan of the drafts', () => {
+    // Планка черновиков контракта выше: она поднимает усилие выше потолка прогона.
+    const config = structuredClone(defaults);
+    const draft = effortFor({ config, role: 'styler', stage: 'pre-styling' });
+    const work = effortFor({ config, role: 'styler', stage: 'styling' });
+    assert.equal(draft, 'xhigh');
+    assert.equal(work, 'high');
+    assert.ok(draft !== work, 'черновик и работа отвечают с разной планкой');
+
+    // Диал контракта поднимает усилие и над потолком прогона: он и есть то самое
+    // «поднять планку на pre-стадиях».
+    const low = structuredClone(defaults);
+    low.pace.contractQuality = 50;
+    assert.equal(effortFor({ config: low, role: 'styler', stage: 'pre-styling' }), 'high');
+
+    // Пользователь может опустить планку контракта до общей.
+    const flat = structuredClone(defaults);
+    flat.pace.contractQuality = 0;
+    assert.equal(effortFor({ config: flat, role: 'styler', stage: 'pre-styling' }), 'low');
 });
 
 /**

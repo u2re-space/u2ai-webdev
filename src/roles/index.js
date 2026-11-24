@@ -358,9 +358,11 @@ export function resolveRole(role, config = {}, { stage = null, phase = 'work' } 
     const tools = pick('tools', base.tools);
     const maxTurns = pick('maxTurns', base.maxTurns);
     const roleEffort = pick('effort', null);
+    // Стадия, а не роль: усилие и ранг модели берутся по стадии. Черновик контракта
+    // работает глубже, чем полная работа, — и это решение стадии.
     const asked = roleEffort
-        ? effortFor({ config, role: key, effort: roleEffort })
-        : effortFor({ config, role: key });
+        ? effortFor({ config, role: key, effort: roleEffort, stage })
+        : effortFor({ config, role: key, stage });
 
     // The model of the role: the pin of the role wins, then the model of the house for the
     // role, then the pin of the default role, then the model of the run. A role that names
@@ -372,7 +374,7 @@ export function resolveRole(role, config = {}, { stage = null, phase = 'work' } 
     const context = pick('context', null);
     // The ladder of the ranks of the role in its family: the stage may walk its own ladder,
     // the role of the house keeps the ladder of the house.
-    const path = rankPathFor(config, key);
+    const path = rankPathFor(config, key, stage);
     // The reference of the model: the place in the house, not the model itself. The model is
     // resolved again for every phase of the work — see `runRole`.
     const ref = ownModel ?? houseModelRef(key, config) ?? fallbackModel ?? (config?.model ?? null);
@@ -429,16 +431,28 @@ export function rankFor(path, phase = 'work') {
  * The ladder belongs to the role: the stage inherits it, so a stage of the house never
  * lowers the model of the work on its own. The role answers on the head of the ladder and
  * steps down to the tail when its work is done.
+ *
+ * A stage may have a ladder of its own — see `house.ranks.stages`. The ladder of the
+ * stage wins: the phases of the styles and the code write the contract with one model
+ * and do the work with another.
  * @param {object|null} config
  * @param {string} role the name of the role
+ * @param {string} [stage] the name of the stage
  * @returns {number[]|null}
  * @exports
  * @ai.hint pure
  */
-export function rankPathFor(config, role) {
+export function rankPathFor(config, role, stage = null) {
     const ranks = config?.house?.ranks;
     if (!ranks || typeof ranks !== 'object') return null;
     const key = String(role ?? '').trim().toLowerCase();
+    const where = String(stage ?? '').trim().toLowerCase();
+    // Лестница стадии сильнее лестницы роли: контракт пишет старшая модель, а полную
+    // работу ведёт младшая — и это решение стадии, а не роли.
+    if (where) {
+        const own = rankPath(ranks.stages?.[where]);
+        if (own) return own;
+    }
     return rankPath(ranks.roles?.[key]);
 }
 

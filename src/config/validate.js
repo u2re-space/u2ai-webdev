@@ -99,14 +99,13 @@ function validateHouse(house, fail, config) {
   const ranks = house.ranks;
   if (!isRecord(ranks)) fail(`${where}.ranks должен быть объектом`);
   for (const key of Object.keys(ranks)) {
-    if (key === 'stages') {
-      fail(`${where}.ranks.stages: раздел больше не поддерживается — лестница рангов принадлежит `
-        + 'роли (house.ranks.roles), а стадия наследует её; удалите раздел из конфигурации.');
-    }
-    if (key !== 'roles') fail(`${where}.ranks.${key}: неизвестное поле (допустимо: roles)`);
+    if (!['roles', 'stages'].includes(key)) fail(`${where}.ranks.${key}: неизвестное поле (допустимо: roles | stages)`);
   }
-  for (const part of ['roles']) {
+  // Лестница рангов принадлежит роли, но и стадия может иметь свою: у роли может быть
+  // несколько стадий, и у каждой — своя лестница моделей.
+  for (const part of ['roles', 'stages']) {
     const map = ranks[part];
+    if (map === undefined) continue;
     if (!isRecord(map)) fail(`${where}.ranks.${part} должен быть объектом`);
     for (const [name, path] of Object.entries(map)) {
       if (!name.trim()) fail(`${where}.ranks.${part}: пустое имя`);
@@ -459,9 +458,14 @@ export function validateConfig(config) {
   const stageEffort = c.reasoning.stageEffort;
   if (stageEffort !== null && stageEffort !== undefined) {
     if (!isRecord(stageEffort)) fail('reasoning.stageEffort: объект или null');
-    const known = new Set(Object.keys(defaults.roles).filter((name) => name !== 'default'));
+    // Профиль знает и роли, и стадии: у роли может быть несколько стадий, и у каждой
+    // своя планка усилия.
+    const known = new Set([
+      ...Object.keys(defaults.roles).filter((name) => name !== 'default'),
+      ...ENUMS.stages,
+    ]);
     for (const [name, level] of Object.entries(stageEffort)) {
-      if (!known.has(name) && !isRecord(c.customRoles?.[name])) fail(`reasoning.stageEffort.${name}: неизвестная роль`);
+      if (!known.has(name) && !isRecord(c.customRoles?.[name])) fail(`reasoning.stageEffort.${name}: неизвестная роль или стадия`);
       if (!ENUMS.reasoningEfforts.includes(level)) fail(`reasoning.stageEffort.${name}: ${ENUMS.reasoningEfforts.join(' | ')}`);
     }
   }
