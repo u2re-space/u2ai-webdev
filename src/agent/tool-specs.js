@@ -443,16 +443,18 @@ export const TOOL_SPECS = Object.freeze({
     },
     subagent: {
         configKey: 'delegate',
-        description: 'Hand one task to a sub-agent: a separate thread that inherits the role of '
-            + 'markup, styler, coder, editor or iconifier. The sub-agent starts with a clean conversation, '
-            + 'its own instructions, its own tools and its own budget of turns — and it does not see this '
-            + 'one. It inherits your role, your tools and your rights: it works in the same project, with '
-            + 'the same skills and the same memory, and the files it writes are written by your tools. '
-            + 'Use it when the work is one specific bounded piece that belongs to another role. This is '
-            + 'different from `write_ready`: `write_ready` starts no other role and only unlocks your own '
-            + 'writing tools. Never hand over files listed in your current step; write your own step first. '
-            + 'Hand over at most once per run, name every expected output path in `files`, and verify that '
-            + 'those files appeared on disk.',
+        description: 'Hand one task to a sub-agent: a separate worker (a thread or a process) that '
+            + 'inherits the role of markup, styler, coder, editor or iconifier. The sub-agent starts with '
+            + 'a clean conversation, its own instructions, its own tools and its own budget of turns — and '
+            + 'it does not see this one. It inherits your role, your tools and your rights: it works in the '
+            + 'same project, with the same skills and the same memory, and the files it writes are written '
+            + 'by your tools. By default it answers with the model of the role it inherits over the API of '
+            + 'the run; name `model`, `effort` or `apiKey` to run it on another one. Use it when the work '
+            + 'is one specific bounded piece that belongs to another role. This is different from '
+            + '`write_ready`: `write_ready` starts no other role and only unlocks your own writing tools. '
+            + 'Never hand over files listed in your current step; write your own step first. Hand over at '
+            + 'most once per run, name every expected output path in `files`, and verify that those files '
+            + 'appeared on disk.',
         parameters: {
             type: 'object',
             properties: {
@@ -465,6 +467,14 @@ export const TOOL_SPECS = Object.freeze({
                     description: 'Expected output file paths, relative to the project root. Include every file the sub-agent must write.',
                     items: str('Path of an expected output file.'),
                 },
+                model: str('The model of the sub-agent, when it is not the model of the role: '
+                    + 'an id like openai/gpt-6.1-terra. Empty = the model of the role.'),
+                effort: str('The effort of the reasoning of the sub-agent: minimal | low | medium | high '
+                    + '| xhigh. Empty = the effort of the role.'),
+                apiKey: str('The key of the API of the sub-agent, when it is not the key of the run. '
+                    + 'Empty = the key of the run.'),
+                transport: str('Where the sub-agent runs: thread (a worker thread of this process, '
+                    + 'the default) or process (a child process of its own, with its own crash domain).'),
             },
             required: ['role', 'task', 'files'],
             additionalProperties: false,

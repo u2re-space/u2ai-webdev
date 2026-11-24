@@ -842,6 +842,9 @@ export async function runRole({
         effort: currentEffort,
         baseURL: config?.baseURL ?? null,
         apiKey: config?.apiKey ?? null,
+        // The specs of the tools of this role: among the tools of the inherited role only
+        // the ones this process can really run stay.
+        specs,
         signal,
     });
 

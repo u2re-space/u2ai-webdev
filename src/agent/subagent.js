@@ -15,6 +15,12 @@
  *   its own executor, its own rules and its own map of the run — so the files it writes
  *   are written the same way the files of the parent are written.
  *
+ *   The big texts of the hand-over — the instructions of the role, the notes of the
+ *   context — travel in **shared memory**: one buffer the parent writes and the thread
+ *   reads. The texts of the instructions are tens of kilobytes, and a copy of them in the
+ *   thread is a copy nobody needs. The buffer also carries the flag of cancellation: the
+ *   parent sets it, and the thread winds down without a message round trip.
+ *
  *   What comes back is the report of the sub-agent and the list of the files it wrote.
  *   The disk keeps the truth: the files of the goal are checked here, and a file that did
  *   not change is reported as missing.
@@ -31,6 +37,7 @@
 
 import { stat } from 'node:fs/promises';
 import { runSubAgent } from '@u2ai/subagent';
+import { createSharedBlock, readSharedBlock, sharedAvailable } from '@u2ai/subagent/shared';
 import { resolveInside } from './paths.js';
 import { resolveBackends } from '../openai/client.js';
 
@@ -283,12 +290,22 @@ export function createSubagentSpawner({
     effort = null,
     baseURL = null,
     apiKey = null,
+    specs = null,
     signal = null,
 } = {}) {
     return async function spawn(args = {}) {
         const name = String(args?.role ?? '').trim().toLowerCase();
         const task = String(args?.task ?? '').trim();
         const reason = String(args?.reason ?? '').trim();
+        // The model, the effort and the key the caller named: they win over the ones of the
+        // inherited role, and the inherited role wins over the ones of the run. A sub-agent
+        // on another model is the choice of the caller, not a surprise of the run.
+        const askedModel = String(args?.model ?? '').trim();
+        const askedEffort = String(args?.effort ?? '').trim();
+        const askedKey = String(args?.apiKey ?? '').trim();
+        const askedTransport = String(args?.transport ?? '').trim().toLowerCase() === 'process'
+            ? 'process'
+            : 'thread';
         const expected = [];
         for (const file of Array.isArray(args?.files) ? args.files : []) {
             const value = String(file ?? '').trim();
@@ -355,19 +372,37 @@ export function createSubagentSpawner({
             ? await instructionsFor(name)
             : '';
         // The API of the house: the sub-agent talks to the same API with the same key.
-        const backends = resolveBackends(config, { kind: 'text', model, env });
+        // The caller may name another model, another effort or another key: a named one
+        // wins over the inherited role, and the inherited role wins over the run.
+        const backends = resolveBackends(config, { kind: 'text', model: askedModel || model, env });
         const backend = backends[0] ?? null;
-        // The model of the inherited role: the sub-agent answers with the model of the role
-        // it inherits, not with the model of the caller.
-        const modelOf = spec.model ?? model;
-        const effortOf = spec.effort ?? effort;
+        const modelOf = askedModel || spec.model || model || '';
+        const effortOf = askedEffort || spec.effort || effort || null;
+        const keyOf = askedKey || apiKey || backend?.apiKey || '';
+        const addressOf = baseURL || backend?.baseURL || '';
+        // The tools of the sub-agent: the tools of the role it inherits, and among them
+        // only the ones this process can really run. A tool that the executor of the
+        // process does not know is a tool the sub-agent would call into the void. The
+        // specs come from the caller; without them every named tool is runnable.
+        const runnable = new Set((Array.isArray(specs) ? specs : []).map((item) => String(item?.name ?? '')));
+        const inheritedTools = subagentToolNames(name, spec.tools ?? [], resolveRole)
+            .filter((tool) => !runnable.size || runnable.has(tool));
+        // The shared memory of the hand-over: the instructions and the notes travel in one
+        // buffer when the thread transport can carry it. A process gets the texts inside
+        // the spec — shared memory does not cross processes.
+        const useShared = askedTransport === 'thread' && sharedAvailable();
+        const shared = useShared
+            ? createSharedBlock({ instructions: inherited, notes: textOf(context?.notes) })
+            : null;
         const report = await runSubAgent({
             spec: {
                 name: `${name}-${Date.now().toString(36)}`,
                 role: {
                     name,
-                    instructions: inherited,
-                    tools: subagentToolNames(name, spec.tools ?? [], resolveRole),
+                    // In the thread transport the instructions live in the shared memory;
+                    // the spec carries them too, for a reader that has no buffer.
+                    instructions: shared ? '' : inherited,
+                    tools: inheritedTools,
                     schema: spec.schema ?? null,
                     schemaName: spec.schema ?? 'response',
                 },
@@ -378,21 +413,27 @@ export function createSubagentSpawner({
                 budget: { maxTurns: Math.min(spec.maxTurns ?? 8, 8) },
                 model: {
                     model: modelOf,
-                    baseURL: baseURL ?? backend?.baseURL ?? '',
-                    apiKey: apiKey ?? backend?.apiKey ?? '',
+                    baseURL: addressOf,
+                    apiKey: keyOf,
                     effort: effortOf,
                 },
                 context: {
                     reference: Array.isArray(context?.reference) ? context.reference : [],
                     memory: textOf(context?.memory),
                     skills: Array.isArray(context?.skills) ? context.skills : [],
-                    notes: textOf(context?.notes),
+                    notes: shared ? '' : textOf(context?.notes),
                     // The picture of the reference travels with the work: the sub-agent
                     // looks at the same target the caller looked at.
                     parts: Array.isArray(parts) ? parts : [],
                 },
+                // The buffer of the hand-over: the thread reads its texts from here.
+                shared: shared?.buffer ?? null,
             },
+            transport: askedTransport,
             signal,
+            // The stop of the run travels into the shared memory: the thread sees the flag
+            // between its turns, without a message round trip.
+            onCancel: shared ? () => shared.cancel() : null,
             onEvent: (event) => {
                 notify({ type: 'subagent.status', from: role, to: name, event });
             },
