@@ -221,6 +221,37 @@ export function extractToolCalls(raw) {
 }
 
 /**
+ * The outermost balanced `{…}` or `[…]` span of a text. Brackets inside strings are
+ * ignored; a span that never closes returns null.
+ * @param {string} text
+ * @returns {string|null}
+ * @ai.hint pure
+ */
+function findBalancedJson(text) {
+    for (let start = 0; start < text.length; start += 1) {
+        if (text[start] !== '{' && text[start] !== '[') continue;
+        let depth = 0;
+        let inString = false;
+        for (let i = start; i < text.length; i += 1) {
+            const ch = text[i];
+            if (inString) {
+                if (ch === '\\') i += 1;
+                else if (ch === '"') inString = false;
+                continue;
+            }
+            if (ch === '"') { inString = true; continue; }
+            if (ch === '{' || ch === '[') depth += 1;
+            else if (ch === '}' || ch === ']') {
+                depth -= 1;
+                if (depth === 0) return text.slice(start, i + 1);
+                if (depth < 0) break;
+            }
+        }
+    }
+    return null;
+}
+
+/**
  * Parse a Responses API answer into a stable shape.
  *
  * `text` is the whole answer, `data` is the answer parsed as JSON (null when it is not JSON),
@@ -236,6 +267,22 @@ export function parseResponse(raw) {
         // JSON5: ответ роли — это текст модели, и «почти JSON» (одинарные кавычки, висячие
         // запятые) разбирается так же, как строгий JSON.
         try { data = JSON5.parse(trimmed); } catch { data = null; }
+    }
+    if (data === null && trimmed) {
+        // Ответ чат-бота: модель прислала JSON внутри прозы или в Markdown-плашке
+        // («Вот структура: ```json {…} ```»). Такой ответ — не повод терять данные роли:
+        // вынимаем JSON так же, как это делает монолит, — плашка, затем самый внешний
+        // сбалансированный {…}/[…], затем JSON5.
+        const fence = /```(?:json5|json)?\s*\n?([\s\S]*?)```/i.exec(trimmed);
+        if (fence) {
+            try { data = JSON5.parse(fence[1].trim()); } catch { data = null; }
+        }
+        if (data === null) {
+            const span = findBalancedJson(trimmed);
+            if (span) {
+                try { data = JSON5.parse(span); } catch { data = null; }
+            }
+        }
     }
     return {
         id: raw?.id ?? null,

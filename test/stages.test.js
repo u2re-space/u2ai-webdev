@@ -817,6 +817,43 @@ test('a stage without the structure of the project says why', async () => {
     assert.match(result.warnings[0], /The host refused the request/);
 });
 
+test('an architect that answers like a chat bot still hands the structure over', async () => {
+    const root = await makeProject();
+    // Модель вместо вызова схемы прислала JSON текстом чат-бота: проза + плашка.
+    const client = fakeClient([{
+        id: 'resp-1',
+        status: 'completed',
+        model: 'test-model',
+        output: [{ type: 'message', content: [{ type: 'output_text', text: [
+            'Конечно! Вот структура проекта:\n\n```json\n',
+            JSON.stringify({
+                summary: 'One module.',
+                stack: { framework: 'vanilla', markup: 'html', style: 'scss', script: 'javascript', iconSet: 'auto' },
+                modules: [{ name: 'main', path: 'src/main.js', purpose: 'The entry.', exports: [], dependsOn: [] }],
+                tokens: [],
+                notes: '',
+            }, null, 2),
+            '\n```\n\nНужны уточнения — спрашивайте.',
+        ].join('') }] }],
+        usage: { input_tokens: 10, output_tokens: 20 },
+    }]);
+
+    const result = await architectStage({
+        client,
+        config: { output: { work: './.tmp' } },
+        root,
+        task: 'Make a landing.',
+        plan: normalizePlan({ steps: [{ id: 'a', title: 'One' }] }),
+        runId: 'run-3',
+    });
+
+    // Данные вынуты из ответа чат-бота: стадия не говорит «архитектор не вернул структуру».
+    assert.equal(result.ok, true, result.warnings.join(' | '));
+    assert.equal(result.architecture.summary, 'One module.');
+    assert.equal(result.architecture.modules[0]?.path, 'src/main.js');
+    assert.match(result.file ?? '', /architecture\.json$/);
+});
+
 test('the package manager is read from the lock file', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-pm-'));
     assert.equal(await detectPackageManager(root), 'none');

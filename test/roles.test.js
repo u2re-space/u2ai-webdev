@@ -1384,6 +1384,44 @@ test('a role that answers with a text instead of the schema is asked once more',
     }
 });
 
+test('a chat-bot answer that holds the JSON in prose and a fence is read as data', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-loop-chatbot-'));
+    const home = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-home-'));
+    const env = { HOME: home, USERPROFILE: home };
+
+    // Модель — типичный чат-бот: JSON внутри прозы и Markdown-плашки, без вызова схемы.
+    const data = codeData();
+    const api = await mockApi([
+        textAnswer(`Конечно! Вот результат:\n\n\`\`\`json\n${JSON.stringify(data, null, 2)}\n\`\`\`\n\nЕсли нужно что-то поправить — скажите.`),
+        schemaAnswer('code', data),
+    ]);
+
+    try {
+        const config = structuredClone(defaults);
+        config.model = 'test-model';
+        config.backends = [{ baseURL: api.url, apiKey: 'test-key' }];
+        config.reasoning.effort = 'low';
+        const client = await createClient({ config, env });
+
+        const answer = await runRole({
+            client,
+            config,
+            role: 'coder',
+            input: 'Make the page.',
+            root,
+            env,
+        });
+
+        // Данные вынуты из ответа чат-бота: роль не тратит ходы на переспрос.
+        assert.equal(answer.data.summary, 'The page is written.');
+        assert.equal(answer.data.files[0].path, 'index.html');
+        assert.equal(answer.stopped, 'completed');
+        assert.equal(answer.turns, 1, 'the chat-bot answer is parsed, no second turn is spent');
+    } finally {
+        api.close();
+    }
+});
+
 test('a role whose turns ran out still gives the schema of the answer', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-loop-final-'));
     const home = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-home-'));

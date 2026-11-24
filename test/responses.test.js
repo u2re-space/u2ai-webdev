@@ -86,6 +86,41 @@ test('the answer of a role is read as JSON5 as well', () => {
     assert.deepEqual(answer.data, { summary: 'готово', items: [1, 2] });
 });
 
+test('the answer of a chat-bot model is read out of the prose and the fence', () => {
+    // Модель отвечает как типичный чат-бот: проза вокруг JSON. Строгий разбор терял данные
+    // роли целиком, и стадия говорила «архитектор не вернул структуру».
+    const fenced = parseResponse({
+        id: 'resp_1',
+        status: 'completed',
+        output_text: "Вот структура проекта:\n\n```json\n{ 'summary': 'готово', 'modules': [], }\n```\n\nЕсли нужно, могу пояснить.",
+    });
+    assert.deepEqual(fenced.data, { summary: 'готово', modules: [] });
+
+    // JSON без плашки, но в прозе: самый внешний сбалансированный {…}.
+    const prose = parseResponse({
+        id: 'resp_2',
+        status: 'completed',
+        output_text: 'The architecture is ready. Here it is: {"summary": "a page", "stack": {"framework": "vanilla"}} — see the file.',
+    });
+    assert.deepEqual(prose.data, { summary: 'a page', stack: { framework: 'vanilla' } });
+
+    // Скобки внутри строк не сбивают баланс.
+    const braces = parseResponse({
+        id: 'resp_3',
+        status: 'completed',
+        output_text: 'Answer: {"summary": "a } brace", "notes": "{not a span}"} and the end.',
+    });
+    assert.deepEqual(braces.data, { summary: 'a } brace', notes: '{not a span}' });
+
+    // Проза без JSON вообще — данных нет, как и было.
+    const plain = parseResponse({
+        id: 'resp_4',
+        status: 'completed',
+        output_text: 'Я не понял задачу, уточните, пожалуйста.',
+    });
+    assert.equal(plain.data, null);
+});
+
 test('the answer is not pinned when the request carries a tool', () => {
     const body = buildResponsesBody({ model: 'm', schema: SCHEMA, schemaName: 'markup', tools: [TOOL] });
     assert.equal(body.text, undefined);
