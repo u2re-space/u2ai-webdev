@@ -3049,6 +3049,53 @@ CLI `ai-webdev` (`@u2ai/webdev`) с собственным конфигом `~/.
 
 ---
 
+### step-132 — Суб-агент: два транспорта, общая память и наследование API вызова
+
+- [x] Повод: суб-агент жил только в потоке родителя; модель, ключ и endpoint он получал
+      только из конфига, а большие тексты передачи (инструкции роли, заметки контекста)
+      копировались в поток вторым экземпляром
+- [x] **Решение пользователя**: суб-агент должен уметь запускаться и как **процесс** (не
+      только поток); данные вызова API (модель, endpoint, ключ) должны **наследоваться**
+      от родителя, но их можно назвать и явно; большие тексты передачи едут в
+      **SharedArrayBuffer** (строки через `TextEncoder`/`TextDecoder`), включая флаг
+      отмены через `Atomics`
+- [x] `submodules/u2ai-subagent/src/shared/shared.js` — новый модуль: `createSharedBlock`/
+      `readSharedBlock`/`sharedAvailable`; раскладка буфера — заголовок `Int32`
+      (`SHB1`, версия, флаг отмены, число регионов), таблица регионов, байты UTF-8;
+      размер буфера выравнивается до кратного 4 (требование `Int32Array`)
+- [x] `submodules/u2ai-subagent/src/client/interface.js` — два транспорта: `thread`
+      (worker_threads, по умолчанию) и `process` (child_process.fork с IPC); канал
+      переписан на стиль EventEmitter (`on`/`off`/`post`/`stop`/`alive`/`pid`); у
+      `runSubAgent`/`spawnSubAgent` появился `onCancel` — стоп гонит флаг в общую память
+- [x] `submodules/u2ai-subagent/src/server/interface.js` — воркер работает и в потоке
+      (spec из workerData), и в процессе (spec первой рамкой по каналу); `channelOf`
+      сводит оба порта к одному виду
+- [x] `submodules/u2ai-subagent/src/config/spec.js` — `spec.shared` (буфер проходит
+      нормализацию), `specTexts(spec)`: инструкции и заметки читаются из общей памяти,
+      с откатом на строки спеки
+- [x] `submodules/u2ai-subagent/src/agent/core.js` — цикл читает инструкции из общей
+      памяти и проверяет флаг отмены между ходами; остановка по флагу — `stopped:
+      'aborted'` с отчётом о сделанном
+- [x] `submodules/u2ai-subagent/src/cli/interface.js` — команда умеет `--worker` (ждать
+      spec по каналу), `--transport`, `--instructions`, `--quiet`; `bin/ai-subagent-worker.js`
+      работает и как поток, и как процесс
+- [x] `submodules/u2ai-subagent/package.json` — экспорт `./shared`
+- [x] `submodules/u2ai-webdev/src/agent/subagent.js` — спавнер наследует API вызова:
+      `modelOf = askedModel || spec.model || model`, то же для effort; ключ и endpoint —
+      из вызова инструмента, иначе из бэкенда рана (`resolveBackends` читает env-ключи);
+      при потоковом транспорте инструкции и заметки пишутся в `SharedArrayBuffer`
+      (`createSharedBlock`), при процессном едут строками в спеке; `onCancel` ставит
+      флаг отмены в буфере
+- [x] `submodules/u2ai-webdev/src/agent/tool-specs.js` — у `subagent` появились поля
+      `model`, `effort`, `apiKey`, `transport`; описание говорит о потоке и процессе
+- [x] `submodules/u2ai-webdev/src/roles/index.js` — спавнеру передаются `specs` роли:
+      среди инструментов наследуемой роли остаются только те, что этот процесс реально
+      исполняет
+- [x] Проверка: `npm test` (subagent) — 16 тестов, все проходят; `npm test` (webdev) —
+      878 тестов, все проходят
+
+---
+
 
 ## 2. Порядок работы и зависимости шагов
 
