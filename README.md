@@ -667,18 +667,31 @@ she hands it over. The markup that does not fit the design goes to the styler, t
 finds the class names broken goes to the markup, the coder who needs a picture of the page goes
 to the role that can take one.
 
-The work goes to a **separate session**: the role that receives it starts with a clean
-conversation, her own instructions, her own tools and her own budget of turns. The conversation of
-the caller is not continued — a session that has already spent its context on the wrong problem
-is the wrong place to solve the right one. What comes back is the report of the role and the
-list of the files it wrote; the disk keeps the truth. The pictures of the reference and the
-context of the step travel with the work: the role continues the work, not the conversation.
+The work goes to a **sub-agent**: a separate thread of this process, with a clean conversation,
+her own instructions and her own budget of turns. The conversation of the caller is not
+continued — a session that has already spent its context on the wrong problem is the wrong
+place to solve the right one. What comes back is the report of the sub-agent and the list of
+the files it wrote; the disk keeps the truth.
 
-The roles that may be handed work are `markup`, `styler`, `coder`, `editor` and `iconifier`.
+A sub-agent carries no role of its own. Everything it is comes from this process: the **role**
+it inherits (the instructions of that role and the tools of that role), the **goal** of the
+work, the **files** it may touch, and the **rights** it has inside the project. The sub-agent
+never touches a file by itself — it asks this process to run a tool, and this process runs it
+with its own executor, its own rules and its own map of the run. So the skills, the memory, the
+context and the tools are the ones of the run, and the files the sub-agent writes are written
+the same way the files of the parent are written.
+
+The sub-agent is a thread and not a process: it shares the project, the skills and the memory
+with the run, and it dies with it.
+
+The roles that may be inherited are `markup`, `styler`, `coder`, `editor` and `iconifier`.
 The roles of the whole run — the planner, the architect, the reviewer — are not among them:
 they work once for the whole run, and a step does not send them a piece of work.
-The hand-over is one level deep: a delegated role never gets the delegation tool itself, so
-there is no chain of sessions that nobody reads. A role may not hand work to itself.
+The hand-over is one level deep: a sub-agent never gets the hand-over tool itself, so
+there is no chain of threads that nobody reads. A role may not hand work to itself.
+
+The run shows the sub-agents: the dashboard gets a row per thread with the role it inherited
+and what it is doing, and the log of the run says when a thread starts and how it ended.
 
 The markup is the one role with a closed door: on the stage `markup` it may not hand the work
 to `styler`, `coder` or `editor` — not even around the corner through another role. The styles
@@ -1409,8 +1422,8 @@ The step down is a phase of the work, not a one-way road:
 - when it has to write again, the head answers again.
 
 The model of a turn is recomputed every time, so an earlier call never takes the model of the
-house away for good. The delegation follows the same rule: the work of the delegated role is
-the work of the caller, so the delegated role answers with the model of the same stage.
+house away for good. The hand-over follows the same rule: the work of the sub-agent is
+the work of the caller, so the sub-agent answers with the model of the role it inherits.
 
 ### The groups of small models
 

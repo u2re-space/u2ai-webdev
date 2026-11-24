@@ -3001,6 +3001,52 @@ CLI `ai-webdev` (`@u2ai/webdev`) с собственным конфигом `~/.
 - [x] `test/plan-order.test.js`, `test/process.test.js` — тесты под новый порядок
 - [x] Проверка: `npm test` (webdev) — 875 тестов, все проходят
 
+### step-131 — Суб-агент вместо делегации: отдельный поток, наследующий роль и права
+
+- [x] Повод: `delegate_role` передавал работу **внутри** процесса — второй вызов той же
+      роли в том же процессе, с общей памятью и общими инструментами. Роль, получившая
+      чужую работу, писала её теми же руками, что и свои файлы, и размывала зону
+      ответственности: «Markup опять лезет не в своё дело»
+- [x] **Решение пользователя**: система суб-агента отдельным пакетом (`u2ai-subagent`,
+      `ai-subagent`); суб-агент — отдельный поток; роли, прав и зоны ответственности у него
+      своих нет, он их **наследует** от родителя (`ai-webdev`); `delegate_role` упразднён и
+      заменён суб-агентами с передачей целей, ролей, прав и инструментов; skills, контекст,
+      инструменты и память — общие; `ai-subagent` получает собственные внутренние
+      интерфейсы и API; суб-агенты видны в TUI (`ai-webdev`) в логах и в статусе, а сам
+      статус в TUI получает больше строк под возможных суб-агентов
+- [x] `submodules/u2ai-subagent` — новый пакет: `src/client/protocol.js` (кадры протокола
+      родитель↔суб-агент), `src/config/spec.js` (спека: роль, цель, файлы, права, бюджет),
+      `src/agent/core.js` (цикл: модель просит — родитель исполняет — модель отвечает),
+      `src/agent/tools.js` (список инструментов), `src/openai/` (клиент и разбор ответов),
+      `src/access/fs.js` (файлы проекта), `src/cli/interface.js` (команда и инструменты
+      суб-агента, который работает один), `src/server/interface.js` (поток суб-агента),
+      `src/client/interface.js` (API родителя: `runSubAgent`, `spawnSubAgent`), `bin/`
+- [x] `submodules/u2ai-subagent/src/config/spec.js` — модель, бэкенд и ключ API едут в
+      спеке: суб-агент говорит с тем же API, что и родитель
+- [x] `submodules/u2ai-subagent/src/agent/core.js` — цикл идёт целиком в потоке суб-агента,
+      а вызовы инструментов возвращаются родителю: файлы пишет родитель своими руками
+- [x] `submodules/u2ai-webdev/src/agent/subagent.js` — бывший `delegation.js`: реестр
+      наследуемых ролей, «врата» (стадии, которые должны начаться), спавнер суб-агента
+- [x] `submodules/u2ai-webdev/src/agent/tool-specs.js` — инструмент `delegate_role` →
+      `subagent`; описание говорит, что суб-агент наследует роль, инструменты и права
+- [x] `submodules/u2ai-webdev/src/roles/index.js` — роль зовёт `spawnSubagent`; инструкции
+      наследуемой роли строятся для той роли, которую наследует суб-агент; модель — модель
+      наследуемой роли, а не модель вызывающей
+- [x] `submodules/u2ai-webdev/src/roles/{markup,styler,coder}.js` — инструмент `subagent`
+      и правило передачи
+- [x] `submodules/u2ai-webdev/src/tui/state.js` — состояние знает о суб-агентах: роль,
+      статус, ход, инструменты; `subagentLines()`
+- [x] `submodules/u2ai-webdev/src/tui/render.js` — статус получает отдельные строки под
+      суб-агентов: по строке на поток
+- [x] `submodules/u2ai-webdev/src/cli/renderer.js` — события `subagent.start`/`status`/`done`
+      в логе и в JSON
+- [x] `submodules/u2ai-webdev/package.json` — зависимость `@u2ai/subagent` (`file:../u2ai-subagent`)
+- [x] `test/subagent.test.js` — тесты наследования роли, прав и инструментов, потока и
+      проверки файлов; `test/helpers/fake-api.js` — фейковый API дома для потоков
+- [x] `test/tui.test.js` — строки суб-агентов на дашборде
+- [x] README (EN, webdev) — раздел «The hand-over between the roles» переписан под суб-агентов
+- [x] Проверка: `npm test` (webdev) — 874 теста, все проходят; `npm test` (subagent) — 12 тестов
+
 ---
 
 
