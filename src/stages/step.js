@@ -29,6 +29,8 @@
  * @changed 2026-11-16 Размер референса в пикселях едет в роль: по картинке ширину дизайна
  *                       не определить.
  * @changed 2026-11-25 Бюджет хода — часть бюджета своего шага, а не всей стадии.
+ * @changed 2026-11-25 Стадия берёт свои шаги, а не все шаги роли: скелет кода не берёт
+ *                       шаги, что ждут чужих стилей, — они принадлежат полной работе.
  */
 
 import path from 'node:path';
@@ -112,6 +114,78 @@ export function stepsForRole(plan, role) {
     const wanted = String(role ?? '').trim().toLowerCase();
     if (!wanted) return [];
     return steps.filter((step) => String(step?.role ?? '').trim().toLowerCase() === wanted);
+}
+
+/**
+ * The steps of a role that wait for the styles of another role.
+ *
+ * The plan says what a step waits for: a step of the coder that depends on a step of the
+ * styler belongs to the **full** work of the code — it is written after the styles.
+ * The skeleton of the code (`pre-coding`) grows out of the markup and the brief of the
+ * architect, and it never waits for the styles.
+ *
+ * Without this rule the skeleton took every step of the coder, including those that
+ * the plan puts after the styles. Those steps have nothing to stand on: the role
+ * wrote them, waited for the styles that were not there, and the stage spent its
+ * whole budget on the work of another stage.
+ *
+ * @param {object} plan
+ * @param {string} role
+ * @param {string} [waitsFor] the role whose work the step waits for
+ * @returns {object[]}
+ * @exports
+ * @ai.hint pure
+ */
+export function stepsWaitingFor(plan, role, waitsFor = 'styler') {
+    const steps = stepsForRole(plan, role);
+    const wanted = String(waitsFor ?? '').trim().toLowerCase();
+    if (!wanted) return steps;
+    const all = Array.isArray(plan?.steps) ? plan.steps : [];
+    const byAnyId = new Map(all.map((step) => [String(step?.id ?? '').trim(), step]));
+
+    /**
+     * Does the step wait for the wanted role, directly or through another step?
+     * @param {object} step
+     * @param {Set<string>} seen the steps already looked at
+     * @returns {boolean}
+     */
+    const waits = (step, seen = new Set()) => {
+        const id = String(step?.id ?? '').trim();
+        if (!id || seen.has(id)) return false;
+        seen.add(id);
+        for (const dep of Array.isArray(step?.dependsOn) ? step.dependsOn : []) {
+            const other = byAnyId.get(String(dep ?? '').trim());
+            if (!other) continue;
+            if (String(other?.role ?? '').trim().toLowerCase() === wanted) return true;
+            if (waits(other, seen)) return true;
+        }
+        return false;
+    };
+    return steps.filter((step) => !waits(step));
+}
+
+/**
+ * The steps of a stage: the steps of its role, minus the ones that wait for another
+ * role's work.
+ *
+ * The stage of the skeleton (`pre-coding`) takes the steps that grow out of the
+ * markup. The stage of the full work (`coding`) takes them all: the styles are on
+ * the disk by then, and the step that waited for them has something to stand on.
+ *
+ * @param {object} plan
+ * @param {string} role
+ * @param {string} [stage] the name of the stage
+ * @returns {object[]}
+ * @exports
+ * @ai.hint pure
+ */
+export function stepsOfStage(plan, role, stage = '') {
+    const name = String(stage ?? '').trim().toLowerCase();
+    if (!name) return stepsForRole(plan, role);
+    // Стадия черновика контракта не берёт шаги, ждущие чужих стилей: контракт кода
+    // пишется по разметке, а не по стилям, которых ещё нет.
+    if (name === 'pre-coding') return stepsWaitingFor(plan, role, 'styler');
+    return stepsForRole(plan, role);
 }
 
 /**
@@ -888,8 +962,12 @@ export async function resumablePass(root, config = {}, id = null, step = {}, pla
  * @exports
  * @ai.hint io
  */
-export async function roleWorkOnDisk({ root, config = {}, id = null, plan = null, role, pass = null } = {}) {
-    const steps = stepsForRole(plan, role);
+export async function roleWorkOnDisk({ root, config = {}, id = null, plan = null, role, pass = null, stage = '' } = {}) {
+    // Шаги стадии — те же, что берёт стадия: стадия скелета не ждёт чужих стилей,
+    // и проверка «сделано ли» считает ровно её шаги. Иначе стадия, которая сделала
+    // свою часть, выглядит потерянной на каждом продолжении.
+    const name = String(stage ?? '').trim();
+    const steps = name ? stepsOfStage(plan, role, name) : stepsForRole(plan, role);
     if (!steps.length) return true;
     let skipped = 0;
     for (const step of steps) {
@@ -959,7 +1037,10 @@ export async function runStepStage({
 } = {}) {
     if (!client?.responses) throw new Error('Клиент API не передан.');
     const run = id ?? runId();
-    const steps = stepsForRole(plan, role);
+    // Шаги стадии: стадия скелета берёт только те шаги, что не ждут чужих стилей.
+    // Шаг, который план ставит после стилей, принадлежит полной работе кода.
+    const stageName = String(askedStage ?? '').trim() || (stageForRole(role) ?? role);
+    const steps = stepsOfStage(plan, role, stageName);
     const warnings = [];
 
     // The limit of one turn: a part of the budget of the stage.
@@ -970,7 +1051,6 @@ export async function runStepStage({
     // Имя стадии: бюджет и модель берутся от неё, а не от роли. У роли может быть
     // несколько стадий (черновик контракта и полная работа), и у каждой — своя
     // лестница моделей и свой бюджет.
-    const stageName = String(askedStage ?? '').trim() || (stageForRole(role) ?? role);
     const own = Number.isSafeInteger(config?.stages?.[stageName]?.timeoutMs)
         ? config.stages[stageName].timeoutMs
         : null;

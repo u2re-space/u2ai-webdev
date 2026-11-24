@@ -21,6 +21,8 @@
  * @ai.hint legacy-0.2
  * @changed 2026-11-13 Ported from the monolith: стадии описаны в одном реестре.
  * @changed 2026-11-15 Лист измерений обновляется из поля `sheetFile` ответа стадии.
+ * @changed 2026-11-25 Проверка «сделано ли» знает свою стадию: `workOnDisk(role, pass,
+ *                       stage)`.
  */
 
 import { collectStage } from './collect.js';
@@ -58,7 +60,7 @@ import { roleWorkOnDisk } from './step.js';
  * @returns {Function}
  * @ai.hint pure
  */
-function workOnDisk(role, pass = null) {
+function workOnDisk(role, pass = null, stage = '') {
     return (ctx) => roleWorkOnDisk({
         root: ctx.root,
         config: ctx.config,
@@ -66,6 +68,7 @@ function workOnDisk(role, pass = null) {
         plan: ctx.plan,
         role,
         pass,
+        stage,
     });
 }
 
@@ -194,7 +197,7 @@ export const STAGES = Object.freeze([
         dependsOn: ['markup'],
         run: preCodingStage,
         args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
-        verify: workOnDisk('coder', 'draft'),
+        verify: workOnDisk('coder', 'draft', 'pre-coding'),
         apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
     },
     {
@@ -206,7 +209,7 @@ export const STAGES = Object.freeze([
         dependsOn: ['pre-coding'],
         run: preStylingStage,
         args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
-        verify: workOnDisk('styler', 'draft'),
+        verify: workOnDisk('styler', 'draft', 'pre-styling'),
         apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
     },
     {
@@ -239,7 +242,7 @@ export const STAGES = Object.freeze([
         dependsOn: ['styling'],
         run: codingStage,
         args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
-        verify: workOnDisk('coder', 'full'),
+        verify: workOnDisk('coder', 'full', 'coding'),
         apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
     },
     {

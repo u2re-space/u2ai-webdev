@@ -13,7 +13,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promises';
 
-import { stepsForRole, applyFiles, laterSteps, missingFiles, roleWorkOnDisk, stepReportPath, readStepReport, readStepReports, stepScope, inScope, orderOfWork, runStepStage } from '../src/stages/step.js';
+import { stepsForRole, applyFiles, laterSteps, missingFiles, roleWorkOnDisk, stepReportPath, readStepReport, readStepReports, stepScope, inScope, orderOfWork, runStepStage, stepsOfStage } from '../src/stages/step.js';
 import { markupStage } from '../src/stages/markup.js';
 import { codingStage } from '../src/stages/coding.js';
 import { stylingStage, styleTokensText } from '../src/stages/styling.js';
@@ -108,6 +108,48 @@ test('the steps of the plan are filtered by the role', () => {
     assert.equal(stepsForRole(PLAN, 'coder')[0].id, 'code-1');
     assert.deepEqual(stepsForRole(PLAN, 'planner'), []);
     assert.deepEqual(stepsForRole(null, 'coder'), []);
+});
+
+test('the skeleton of the code does not take the steps that wait for the styles', () => {
+    // План ставит шаг кода после стилей — он принадлежит полной работе. Скелет кода
+    // растёт из разметки, и таких шагов у него нет.
+    const plan = {
+        steps: [
+            { id: 'markup-1', title: 'Markup', role: 'markup', dependsOn: [], files: ['index.html'] },
+            { id: 'skeleton-1', title: 'Skeleton', role: 'coder', dependsOn: ['markup-1'], files: ['src/ui/home.js'] },
+            { id: 'style-1', title: 'Styles', role: 'styler', dependsOn: ['skeleton-1'], files: ['src/styles/main.scss'] },
+            { id: 'flow-1', title: 'Flow', role: 'coder', dependsOn: ['style-1'], files: ['src/state/flow.js'] },
+        ],
+    };
+
+    const skeleton = stepsOfStage(plan, 'coder', 'pre-coding');
+    const full = stepsOfStage(plan, 'coder', 'coding');
+
+    assert.deepEqual(skeleton.map((step) => step.id), ['skeleton-1']);
+    // Полная работа берёт все шаги: к её моменту стили уже на диске.
+    assert.deepEqual(full.map((step) => step.id), ['skeleton-1', 'flow-1']);
+});
+
+test('the step that waits for the styles through another step belongs to the full work', () => {
+    // Ожидание может быть не прямым: `pwa` ждёт `secondary-flow`, а тот — стилей.
+    const plan = {
+        steps: [
+            { id: 'style-1', title: 'Styles', role: 'styler', dependsOn: [], files: ['src/styles/main.scss'] },
+            { id: 'flow-1', title: 'Flow', role: 'coder', dependsOn: ['style-1'], files: ['src/state/flow.js'] },
+            { id: 'pwa-1', title: 'Pwa', role: 'coder', dependsOn: ['flow-1'], files: ['src/pwa.js'] },
+        ],
+    };
+
+    const skeleton = stepsOfStage(plan, 'coder', 'pre-coding');
+    assert.deepEqual(skeleton.map((step) => step.id), []);
+    assert.equal(stepsForRole(plan, 'coder').length, 2);
+});
+
+test('a stage without a name takes the steps of its role', () => {
+    assert.deepEqual(
+        stepsOfStage(PLAN, 'coder', '').map((step) => step.id),
+        stepsForRole(PLAN, 'coder').map((step) => step.id),
+    );
 });
 
 test('the files of an answer are written, the old ones go to the backup', async () => {

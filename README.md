@@ -102,7 +102,7 @@ report into the directory of the run and hands the result to the next one.
 | `pictures` | Prepare the crops of the reference that are pictures: the chess piece, the board, the badge. |
 | `markup` | Write the markup of the pages. |
 | `assets` | Place the assets: the prepared pictures and the drawn graphics get their final paths and their final format. |
-| `pre-coding` | Write the skeleton of the code: the modules, the states of the interface, the data, the behaviour — out of the markup and the brief of the architect. |
+| `pre-coding` | Write the skeleton of the code: the modules, the states of the interface, the data, the behaviour — out of the markup and the brief of the architect. It takes the steps of the coder that do not wait for the styles: a step the plan puts after the styles belongs to the full work of the code. |
 | `pre-styling` | Write the contract of the styles: the tokens, the names of the classes, the rules of the components and the states — dressed over the skeleton of the code. |
 | `styling` | Look over the styles once more: what the code needs, the fine tuning. |
 | `animation` | Write the motion of the result: the transitions, the entrances, the reduced motion. |
@@ -213,6 +213,14 @@ The phases of the contract are not fatal. If `pre-styling` fails, the run does n
 the next phase writes against the contract anyway — from the brief of the architect, from
 the markup, from the names that are already on the disk. Stopping there would stop the run
 exactly where it stood before: with a role waiting for another role.
+
+The skeleton of the code takes only the steps that do not wait for the styles. The plan
+says what a step waits for, and a step of the coder that depends on a step of the styler
+belongs to the full work of the code — it is written after the styles, and by then they are
+on the disk. Without this rule the skeleton took every step of the coder, including the
+ones the plan puts after the styles: those steps had nothing to stand on, the role wrote
+them and waited for styles that were not coming, and the stage spent its whole budget on
+the work of another stage.
 
 A page with a state — an app, a PWA, a router — used to be the exception: it was drawn by
 the scripts, so without them the screen was empty, and the code was moved before the

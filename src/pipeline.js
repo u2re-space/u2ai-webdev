@@ -29,6 +29,8 @@
  * @changed 2026-11-15 Порядок стадий, которые делают шаги плана, задаёт сам план.
  * @changed 2026-11-25 Бюджет хода делится на число шагов стадии: восемь шагов одной
  *                       роли не стоят каждый по бюджету всей стадии.
+ * @changed 2026-11-25 Бюджет и таймаут хода считаются по шагам стадии, а не по всем
+ *                       шагам роли.
  */
 
 import { runId as makeRunId } from './stages/workspace.js';
@@ -41,7 +43,7 @@ import { readScan } from './stages/scan.js';
 import { readArchitecture } from './stages/architect.js';
 import { readSetup } from './stages/setup.js';
 import { readReview } from './stages/review.js';
-import { readStepReports } from './stages/step.js';
+import { readStepReports, stepsOfStage as stageStepsOf } from './stages/step.js';
 import { readInputs } from './stages/collect.js';
 import { collectInputs, mergeInputs } from './inputs/index.js';
 import { readPictures } from './stages/pictures.js';
@@ -448,6 +450,10 @@ export async function runPipeline({
      *
      * Стадия берёт шаги своей роли: `markup` — шаги `markup`, `styling` — шаги `styler`.
      * Стадия без шагов своей роли (обрезки, ассеты, сборка) делает один шаг работы.
+     *
+     * Стадия скелета (`pre-coding`) берёт меньше: шаги, что ждут чужих стилей,
+     * принадлежат полной работе кода. Считать надо ровно те шаги, что берёт стадия,
+     * иначе бюджет и таймаут хода считаются не по той работе.
      * @param {string} name имя стадии
      * @param {object|null} plan план прогона
      * @returns {number}
@@ -456,9 +462,7 @@ export async function runPipeline({
     const stepsOfStage = (name, plan = null) => {
         const role = roleByStage[name];
         if (!role) return 1;
-        const steps = Array.isArray(plan?.steps) ? plan.steps : [];
-        const mine = steps.filter((step) => String(step?.role ?? '').trim().toLowerCase() === role);
-        return Math.max(1, mine.length);
+        return Math.max(1, stageStepsOf(plan, role, name).length);
     };
 
     /**
