@@ -2970,6 +2970,37 @@ CLI `ai-webdev` (`@u2ai/webdev`) с собственным конфигом `~/.
 - [x] README (EN, webdev) — раздел «Nothing to wait for»
 - [x] Проверка: `npm test` (webdev) — 875 тестов; `npm test` (корень) — 990 тестов
 
+### step-130 — Скелет кода раньше черновика стилей; ассеты после разметки
+
+- [x] Повод (живой прогон `All-Portfolio/Portfolio-6E`, прогон `20261124-153735`): стадия
+      `pre-styling` провалилась, потому что **разметки ещё не было** — она стояла до
+      `markup`, и стилест ждал классов, которых никто не написал. Стадии `assets` и
+      `illustrator` тоже стояли до разметки и раскладывали картинки для страницы,
+      которой нет
+- [x] **Решение пользователя**: `pre-coding` (скелет кода) — **первым** из pre-фаз, сразу
+      после разметки; `assets` — после `markup`
+- [x] `src/stages/index.js` — порядок реестра: `setup → vector → pictures → markup →
+      assets → pre-coding → pre-styling → styling → animation → coding`. `pictures`
+      встала после `vector` (редактор рисует первым, вырезается то, что он не нарисовал)
+- [x] `src/stages/plan-order.js` — `STYLE_CODE_PHASES`: скелет кода, черновик стилей,
+      полные стили, полный код. `placeAssetsBeforeMarkup` → `placeAssetsAfterMarkup`;
+      новая `placeMarkupBeforePhases` держит разметку перед фазами
+- [x] `src/stages/roles.js` — `ROLE_STAGE_ORDER`: `pre-coding: 0`, `pre-styling: 1`
+- [x] `src/config/constants.js` — перечень стадий в новом порядке
+- [x] `src/stages/pre-coding.js` — скелет пишется по разметке (`hasStyles: false`):
+      стили придут после, по контракту, который скелет даст
+- [x] `src/stages/pre-styling.js` — черновик одевает скелет (`hasCode: true`)
+- [x] `src/stages/pass-tasks.js` — задачи проходов под новый порядок: кодер пишет скелет
+      по разметке, стилест одевает скелет
+- [x] `src/roles/planner.js` — планер говорит тот же порядок: разметка → скелет → стили
+- [x] `src/roles/markup.js` — разметка линкует картинки, которых ещё нет на диске:
+      подготовленные картинки и ассеты — исключение из правила «путь должен лежать на
+      диске», их раскладывает иллюстратор после
+- [x] `src/roles/illustrator.js` — иллюстратор читает разметку и кладёт картинки ровно
+      на те пути, которые она подключила
+- [x] `test/plan-order.test.js`, `test/process.test.js` — тесты под новый порядок
+- [x] Проверка: `npm test` (webdev) — 875 тестов, все проходят
+
 ---
 
 

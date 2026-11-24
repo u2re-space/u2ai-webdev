@@ -137,16 +137,17 @@ export function instructions(context = {}) {
         ? `The review of the step found what has to be fixed, and the request names the file, the defect and the change that is asked for. Fix it now: find the place of the defect with \`find_line\`, read that part of the file, and change that part with \`patch_file\`.
         The answer is the repaired file on the disk, never a description of the change.`
       : '';
-    // Проход роли: черновик контракта или полная работа. В черновике роль пишет то,
-    // что должно быть общим, — и код пишется против этого.
+    // Проход роли: черновик контракта или полная работа. В черновике роль одевает
+    // скелет кода, который уже на диске, — и код пишется против этого.
     const passNote = context.pass === 'draft'
         ? `This is the contract of the styles, and it is written whole: the tokens, the names of the
 classes, the skeleton of the layout, the rules of the components, the rules of the states and the
-responsive behaviour. The next pass of this role is the second look at the same file, and it runs
+responsive behaviour. The skeleton of the code is already on the disk: the modules and the states it
+names are what you dress. The next pass of this role is the second look at the same file, and it runs
 on a cheaper model — everything you leave out here will be written from scratch there, against your
-names or against other ones, and the two will not agree. The code of the project is written next,
-against what you write here: a token that is missing here is a token the code will not use, and a
-class name you invent that the markup does not have is a class nobody wears.`
+names or against other ones, and the two will not agree. The code of the project is written against
+what you write here: a token that is missing here is a token the code will not use, and a class name
+you invent that the markup does not have is a class nobody wears.`
         : (context.pass === 'full'
             ? `The contract of the styles is already on the disk and it is whole: it was written by the
 model that is good at this. This pass is the second look at it — fix what does not match the markup

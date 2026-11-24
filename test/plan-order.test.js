@@ -18,7 +18,7 @@ import {
     placeVectorStage,
     placeAnimationAfterStyles,
     placeAssetsAfterVector,
-    placeAssetsBeforeMarkup,
+    placeAssetsAfterMarkup,
 } from '../src/stages/plan-order.js';
 import { isStateful } from '../src/stages/stateful.js';
 
@@ -61,15 +61,14 @@ test('the edges of the plan are the edges of the stages of its steps', () => {
     const { edges } = planEdges(PLAN);
     const list = edges.map(([from, to]) => `${from}>${to}`).sort();
     // The steps of one role give no edge: their work goes inside the stage.
-    // The stages of one role are ordered among themselves: the draft of the contract
+    // The stages of one role are ordered among themselves: the skeleton of the code
     // comes before the full work.
     assert.deepEqual(list, [
         'iconify>styling',
         'markup>iconify',
         'markup>styling',
         'pre-coding>coding',
-        'pre-coding>styling',
-        'pre-styling>pre-coding',
+        'pre-coding>pre-styling',
         'pre-styling>styling',
         'styling>coding',
     ].sort());
@@ -100,9 +99,9 @@ test('the phases of the styles and the code keep their order, even when the plan
     };
     const { stages, warnings } = planOrder([...STAGES], plan);
     const names = stages.map((stage) => stage.name);
-    // The plan asked for the code before the styles; the order of the phases wins.
-    assert.ok(names.indexOf('pre-styling') < names.indexOf('pre-coding'), names.join(' → '));
-    assert.ok(names.indexOf('pre-coding') < names.indexOf('styling'), names.join(' → '));
+    // The plan asked for the full code before the styles; the order of the phases wins.
+    assert.ok(names.indexOf('pre-coding') < names.indexOf('pre-styling'), names.join(' → '));
+    assert.ok(names.indexOf('pre-styling') < names.indexOf('styling'), names.join(' → '));
     assert.ok(names.indexOf('styling') < names.indexOf('coding'), names.join(' → '));
     assert.ok(warnings.some((item) => /противоречит фазам стилей и кода/.test(item)),
         warnings.join(' | '));
@@ -168,9 +167,10 @@ test('a circle in the plan is broken by the registry and says so', () => {
     // every stage is still there exactly once.
     assert.equal(names.length, STAGES.length);
     assert.equal(new Set(names).size, STAGES.length);
-    // The floor of the phases keeps the order: the code never goes before the styles.
-    assert.ok(names.indexOf('pre-styling') < names.indexOf('pre-coding'), names.join(' → '));
-    assert.ok(names.indexOf('pre-coding') < names.indexOf('styling'), names.join(' → '));
+    // The floor of the phases keeps the order: the skeleton of the code never goes
+    // after the styles.
+    assert.ok(names.indexOf('pre-coding') < names.indexOf('pre-styling'), names.join(' → '));
+    assert.ok(names.indexOf('pre-styling') < names.indexOf('styling'), names.join(' → '));
     assert.ok(names.indexOf('styling') < names.indexOf('coding'), names.join(' → '));
 });
 
@@ -179,13 +179,13 @@ test('the graphics are drawn before the page that links them', () => {
     const registry = STAGES.map((stage) => stage.name);
     assert.ok(registry.indexOf('vector') < registry.indexOf('markup'));
 
-    // The plan of the run: the assets come before the markup, and the circle of the stages
-    // does not throw that order away.
+    // The plan of the run: the assets come after the markup, and the phases of the
+    // styles and the code keep their order.
     const { stages } = planOrder([...STAGES], ART_PLAN);
     const names = stages.map((stage) => stage.name);
     assert.ok(names.indexOf('vector') < names.indexOf('markup'), names.join(' → '));
-    assert.ok(names.indexOf('markup') < names.indexOf('pre-styling'), names.join(' → '));
-    assert.ok(names.indexOf('pre-styling') < names.indexOf('coding'), names.join(' → '));
+    assert.ok(names.indexOf('markup') < names.indexOf('pre-coding'), names.join(' → '));
+    assert.ok(names.indexOf('pre-coding') < names.indexOf('coding'), names.join(' → '));
 });
 
 test('the vector stage does not stand in the middle of the chain', () => {
@@ -242,23 +242,23 @@ test('the motion floor keeps the animation after the styles', () => {
     assert.deepEqual(kept.names, ['markup', 'styling', 'animation', 'coding']);
 });
 
-test('the assets are placed after the vector, even when the plan says the opposite', () => {
-    // The plan asks for the assets before the vector: the floor of the stage wins.
+test('the assets are placed after the markup, even when the plan says the opposite', () => {
+    // The plan asks for the assets before the markup: the floor of the stage wins.
     const plan = {
         steps: [
-            { id: 'art', title: 'Wordmark', role: 'editor', dependsOn: ['place'], files: ['assets/logo.svg'] },
             { id: 'place', title: 'Place the pictures', role: 'illustrator', dependsOn: [], files: ['assets/logo.png'] },
+            { id: 'markup', title: 'Markup', role: 'markup', dependsOn: ['place'], files: ['index.html'] },
         ],
     };
     const { stages, warnings } = planOrder([...STAGES], plan);
     const names = stages.map((stage) => stage.name);
-    assert.ok(names.indexOf('vector') < names.indexOf('assets'), names.join(' → '));
-    assert.ok(warnings.some((item) => /Стадия ассетов перенесена после вектора/.test(item)));
+    assert.ok(names.indexOf('assets') > names.indexOf('markup'), names.join(' → '));
+    assert.ok(warnings.some((item) => /Стадия ассетов перенесена после разметки/.test(item)));
 });
 
 test('a page with a state gets the same phases as a page without one', () => {
-    // Развилка «код раньше стилей» для страницы с состоянием убрана: порядок фаз один
-    // для всех. Без неё кодер не ждал того, что появлялось после него.
+    // Порядок фаз один для всех: скелет кода, черновик стилей, полные стили, полный код.
+    // Скелет растёт из разметки, стили одевают то, что скелет назвал.
     const plan = {
         steps: [
             { id: 'markup-1', title: 'Markup', role: 'markup', dependsOn: [], files: ['index.html'] },
@@ -272,10 +272,10 @@ test('a page with a state gets the same phases as a page without one', () => {
     const app = planOrder([...STAGES], plan, { config: { stack: { frontendFramework: 'lure' }, agent: { kind: 'app' } } });
     const appNames = app.stages.map((stage) => stage.name);
 
-    // Порядок фаз одинаковый: черновик стилей, скелет кода, полные стили, полный код.
+    // Порядок фаз одинаковый: скелет кода, черновик стилей, полные стили, полный код.
     for (const names of [plainNames, appNames]) {
-        assert.ok(names.indexOf('pre-styling') < names.indexOf('pre-coding'), names.join(' → '));
-        assert.ok(names.indexOf('pre-coding') < names.indexOf('styling'), names.join(' → '));
+        assert.ok(names.indexOf('pre-coding') < names.indexOf('pre-styling'), names.join(' → '));
+        assert.ok(names.indexOf('pre-styling') < names.indexOf('styling'), names.join(' → '));
         assert.ok(names.indexOf('styling') < names.indexOf('coding'), names.join(' → '));
     }
     assert.deepEqual(
@@ -297,7 +297,8 @@ test('the page with a state is known by the kind and by the framework', () => {
     assert.equal(isStateful({ config: { stack: { stateful: false }, agent: { kind: 'app' } } }), false);
 });
 
-test('the assets floor keeps the assets after the vector', () => {    const placed = placeAssetsAfterVector(['setup', 'assets', 'vector', 'markup']);
+test('the assets floor keeps the assets after the vector', () => {
+    const placed = placeAssetsAfterVector(['setup', 'assets', 'vector', 'markup']);
     assert.equal(placed.moved, true);
     assert.ok(placed.names.indexOf('assets') > placed.names.indexOf('vector'));
 
@@ -307,17 +308,17 @@ test('the assets floor keeps the assets after the vector', () => {    const plac
     assert.deepEqual(kept.names, ['setup', 'vector', 'assets', 'markup']);
 });
 
-test('the assets do not wait for the markup: the circle of the plan is broken', () => {
-    // План связал картинки с разметкой, а стили — с картинками: без разрыва этого круга
-    // стили не могут начаться, и прогон стоит.
-    const placed = placeAssetsBeforeMarkup(['vector', 'markup', 'assets', 'styling']);
+test('the assets do not stand before the markup: the circle of the plan is broken', () => {
+    // План связал картинки с разметкой кругом (картинки ждут разметку, стили ждут
+    // картинки): ассеты встают после разметки, и круг исчезает.
+    const placed = placeAssetsAfterMarkup(['vector', 'assets', 'markup', 'styling']);
     assert.equal(placed.moved, true);
-    assert.deepEqual(placed.names, ['vector', 'assets', 'markup', 'styling']);
+    assert.deepEqual(placed.names, ['vector', 'markup', 'assets', 'styling']);
 
-    // Ассеты перед разметкой остаются где были.
-    const kept = placeAssetsBeforeMarkup(['vector', 'assets', 'markup', 'styling']);
+    // Ассеты после разметки остаются где были.
+    const kept = placeAssetsAfterMarkup(['vector', 'markup', 'assets', 'styling']);
     assert.equal(kept.moved, false);
-    assert.deepEqual(kept.names, ['vector', 'assets', 'markup', 'styling']);
+    assert.deepEqual(kept.names, ['vector', 'markup', 'assets', 'styling']);
 });
 
 test('the plan of the run breaks the circle of the assets and the markup', () => {
@@ -331,9 +332,10 @@ test('the plan of the run breaks the circle of the assets and the markup', () =>
     };
     const { stages, warnings } = planOrder([...STAGES], plan);
     const names = stages.map((stage) => stage.name);
-    // Ассеты стоят перед разметкой, и стили идут после разметки: круг разорван.
-    assert.ok(names.indexOf('assets') < names.indexOf('markup'), names.join(' → '));
+    // Ассеты стоят после разметки, и стили идут после разметки: круг разорван.
+    assert.ok(names.indexOf('assets') > names.indexOf('markup'), names.join(' → '));
     assert.ok(names.indexOf('markup') < names.indexOf('styling'), names.join(' → '));
-    assert.ok(warnings.some((item) => /Стадия ассетов перенесена перед разметкой/.test(item)),
+    // План и так просит ассеты после разметки: перестраивать нечего.
+    assert.ok(!warnings.some((item) => /Стадия ассетов/.test(item)),
         warnings.join(' | '));
 });

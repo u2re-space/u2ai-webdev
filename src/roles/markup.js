@@ -134,8 +134,9 @@ ${delegationNote(DELEGATE_NAMES)}
   loads it — the styles block above says how the styles reach the page in this project.
 - Every path the page points at has to be on the disk: find it with \`list_files\` and
   \`search_files\` before you link it. A path you have not seen is a path that does not exist.
-  The stylesheet of the project and the script of the project are the two exceptions: other
-  roles write them after you, and the context names them, so link them as they are named there.
+  The stylesheet of the project, the script of the project and the prepared pictures that the
+  context names are the exceptions: other roles write or place them after you, and the context
+  names them, so link them as they are named there.
 - The rules of the document itself come to you at the write gate, right before you write it:
   the semantics, the accessibility, the names and the validity of the markup.
 

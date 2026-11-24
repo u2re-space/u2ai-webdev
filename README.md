@@ -97,13 +97,13 @@ report into the directory of the run and hands the result to the next one.
 | `scan` | Read the project itself: what it is, which files matter, its conventions and its risks. |
 | `plan` | Break the task into steps, each with its role, its files and its check. |
 | `architect` | Decide the structure of the project: the files, the modules and the order. |
-| `pictures` | Prepare the crops of the reference that are pictures: the chess piece, the board, the badge. |
 | `setup` | Prepare the environment: the scaffold, the dependencies and the entry points. |
 | `vector` | Draw the vector graphics as code: the SVG of the ornaments and the illustrations. |
-| `assets` | Place the assets: the prepared pictures and the drawn graphics get their final paths and their final format. |
+| `pictures` | Prepare the crops of the reference that are pictures: the chess piece, the board, the badge. |
 | `markup` | Write the markup of the pages. |
-| `pre-styling` | Write the contract of the styles: the tokens, the names of the classes, the rules of the components and the states. |
-| `pre-coding` | Write the contract of the code: the modules, the states of the interface, the data, the behaviour. |
+| `assets` | Place the assets: the prepared pictures and the drawn graphics get their final paths and their final format. |
+| `pre-coding` | Write the skeleton of the code: the modules, the states of the interface, the data, the behaviour — out of the markup and the brief of the architect. |
+| `pre-styling` | Write the contract of the styles: the tokens, the names of the classes, the rules of the components and the states — dressed over the skeleton of the code. |
 | `styling` | Look over the styles once more: what the code needs, the fine tuning. |
 | `animation` | Write the motion of the result: the transitions, the entrances, the reduced motion. |
 | `coding` | Look over the code once more: the logic, the errors, the fine tuning. |
@@ -144,7 +144,11 @@ its warnings: the rest of the plan keeps its order. The stages that do not work 
 the plan keep their place: the build is after the styles and after the code, the review is after
 everything.
 
-Three stages have a floor of their own. The stage of the vector graphics stands before the markup:
+Three stages have a floor of their own. The stage of the markup stands before the phases of
+the styles and the code: the skeleton of the code grows out of the markup, and a phase that
+starts before it writes against an empty page. The plan may tie the markup to the icons or to
+anything else that comes after the code — the floor wins, and the markup is placed right
+before the first of the phases. The stage of the vector graphics stands before the markup:
 the page links the files of the editor, and a markup that waits for a picture nobody has drawn
 yet is a stage that never ends. The plan may put the vector somewhere else, but never in the
 middle — between the markup and the build the graphics would wait for the page and the page would
@@ -158,17 +162,18 @@ choice — it is the same for every page:
 
 | Phase | What it writes | Model | Effort |
 |---|---|---|---|
-| `pre-styling` | The contract of the styles: the tokens, the names of the classes, the skeleton of the layout, the rules of the components, the rules of the states, the responsive behaviour. | head of the family (the Sol) | `xhigh` |
-| `pre-coding` | The contract of the code: the modules, their exports, the states of the interface, the data, the behaviour. | head of the family (the Sol) | `xhigh` |
+| `pre-coding` | The skeleton of the code: the modules, their exports, the states of the interface, the data, the behaviour — written out of the markup and the brief of the architect. | head of the family (the Sol) | `xhigh` |
+| `pre-styling` | The contract of the styles: the tokens, the names of the classes, the skeleton of the layout, the rules of the components, the rules of the states, the responsive behaviour — dressed over the skeleton of the code. | head of the family (the Sol) | `xhigh` |
 | `styling` | The second look at the same stylesheets: what the code needs, the fine tuning. | tail of the family (the Terra) | `high` |
 | `coding` | The second look at the same files: the logic, the errors, the fine tuning. | tail of the family (the Terra) | `high` |
 
 The phases exist because a role that waits for something that comes after it waits for ever.
-The coder without styles does not know which class names the page will wear, and invents
-its own; the styler without code does not know which states the page will show, and dresses
-none of them. The contract settles both questions before either role writes the real thing:
-the styler writes the tokens and the names first, the coder writes the code against them,
-and then each role does its work with the other one's result on the disk.
+The coder without a skeleton does not know which modules the page will call, and invents
+its own; the styler without a skeleton does not know which states the page will show, and
+dresses none of them. The skeleton comes first: it grows out of the markup, which does not
+need the styles. The contract of the styles is written second, and it dresses exactly the
+states and the modules that the skeleton names — then each role does its work with the other
+one's result on the disk.
 
 **The contract is written whole, and by the better model.** The full work is a second pass
 over the same file — and a second pass is where the money burns: the expensive model would
@@ -251,11 +256,14 @@ The stage of the motion stands after the styles as well, and before the code: th
 changes the same stylesheet — the transitions of the states, the entrances and the exits — and
 the states of the page are a part of the contract the code is written against.
 
-The stage of the assets stands after the vector stage and before the markup. The pictures of
-the project are two stages: `pictures` prepares the crops of the reference before the vector
-graphics are drawn (the editor does not draw a picture that is already prepared), and `assets`
-places every picture of the project — the prepared crops and the drawn graphics — on its final
-path, so the markup links the files that are final.
+The stage of the assets stands after the markup. The pictures of the project are two
+stages: `vector` draws the graphics before the markup is written, `pictures` prepares the
+crops of the reference out of what the editor did not draw, and `assets` places every
+picture of the project — the prepared crops and the drawn graphics — on its final path
+after the markup is written. The markup links the pictures by the names the context gives
+it, and the illustrator puts their final copies on exactly those paths: neither side waits
+for the other, and a circle between the pictures and the page cannot stop the styles from
+starting.
 
 The stage of the icons stands after the code. The icons are put into the markup of the
 finished page, and the page is finished when both the styles and the code are written: when

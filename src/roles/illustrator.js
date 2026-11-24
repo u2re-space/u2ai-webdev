@@ -9,11 +9,16 @@
  *   по местам, приводит их к формату, который грузит страница, и говорит следующим
  *   стадиям, где что лежит.
  *
+ *   Разметка написана раньше и линкует картинки по именам из контекста: файл роли
+ *   ложится ровно на тот путь, который разметка подключила.
+ *
  * @depends roles/untrusted
  * @usedBy roles/index, stages/assets
  * @exports name, schema, tools, maxTurns, instructions
  * @ai.tags roles, pictures, assets
  * @ai.hint pure
+ * @changed 2026-11-24 Ассеты раскладываются после разметки: файл ложится на путь,
+ *                     который разметка подключила.
  */
 
 import { UNTRUSTED } from './untrusted.js';
@@ -83,6 +88,11 @@ ${vectors}
   project (\`${dir}/\`), the name of the file keeps the name of the prepared picture, and the
   extension is the format the page loads. Do not scatter the pictures over the project and do
   not put them into the source folder of the styles or of the scripts.
+- The markup is already written and it links the pictures by the names the context gave it.
+  Your file has to land on exactly the path the markup links: read the markup of the project
+  (\`list_files\`, \`search_files\`) and put every picture on the path that is linked. When the
+  markup names a path that no prepared picture matches, say so in the report — do not invent
+  a picture of your own.
 - A picture is moved, not rewritten: put the prepared file on its place with \`copy_path\`, or
   convert it with \`magick\` (a webp for a photographic picture, a png for a picture with
   transparency, a svg stays a svg). The bytes of the picture are not text — never write a

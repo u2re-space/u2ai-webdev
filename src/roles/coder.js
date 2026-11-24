@@ -121,15 +121,15 @@ defect and the change that is asked for. Fix it now: find the place of the defec
 \`find_line\`, read that part of the file, and change that part with \`patch_file\`. The answer is
 the repaired file on the disk, never a description of the change.`
         : '';
-    // Проход роли: контракт кода или полный код. Контракт — это то, на чём стоит
-    // и стили, и работа.
+    // Проход роли: скелет кода или полная работа. Скелет — это то, на чём стоит
+    // и контракт стилей, и полная работа.
     const passNote = context.pass === 'draft'
         ? `This is the contract of the code, and it is written whole: the modules, the exports, the
-states of the interface, the data that flows between them and the behaviour itself. The next pass
-of this role is the second look at the same files, and it runs on a cheaper model — everything you
-leave out here will be written from scratch there, against your names or against other ones, and the
-two will not agree. The styles of the page are written next, against the names and the states you
-give here: a name you get wrong now is a name the styles will not find.`
+states of the interface, the data that flows between them and the behaviour itself. The markup of
+the page is already on the disk, and your skeleton grows out of it — the styles are written after
+you, against the names and the states you give here. The next pass of this role is the second look
+at the same files, and it runs on a cheaper model — everything you leave out here will be written
+from scratch there, against your names or against other ones, and the two will not agree.`
         : (context.pass === 'full'
             ? `The contract of the code is already on the disk and it is whole: it was written by the
 model that is good at this. This pass is the second look at it — fix the logic that does not do

@@ -4,20 +4,21 @@
  * @purpose Задача прохода: что роль делает в этом заходе и чего от неё ждут.
  *
  *   Проходы нужны не для красоты: без них роль ждёт того, что появляется после неё.
- *   Кодер без стилей не знает, каких имён классов ждёт страница, и пишет свои — а
- *   стилест потом переименовывает их, и код рассыпается. Стилест без кода не знает, каких
- *   состояний ждать, и не пишет правил для них.
+ *   Кодер без контракта не знает, каких имён классов ждёт страница, и пишет свои — а
+ *   стилест потом переименовывает их, и код рассыпается. Стилест без скелета кода не
+ *   знает, каких состояний ждать, и не пишет правил для них.
  *
- *   Черновик контракта решает это: сначала стилест пишет то, что должно быть общим
- *   (токены, палитра, имена, каркас), потом кодер пишет скелет по этому черновику, и
- *   только потом обе роли делают свою работу целиком — видя, что написала другая.
+ *   Порядок решает это: сначала кодер пишет скелет по разметке и брифу архитектора —
+ *   модули, состояния, поток данных, — потом стилест пишет контракт стилей по этому
+ *   скелету, и только потом обе роли делают свою работу целиком — видя, что написала
+ *   другая.
  *
  * @depends stages/pass
  * @usedBy stages/step, roles/coder, roles/styler
  * @exports passTask, passNote, isDraftPass
  * @ai.tags stages, passes, roles
  * @ai.hint pure
- * @changed 2026-11-24 Проходы роли: черновик контракта, потом работа целиком.
+ * @changed 2026-11-24 Проходы роли: скелет кода, потом контракт стилей, потом работа целиком.
  */
 
 import { PASSES } from './pass.js';
@@ -56,8 +57,10 @@ export function passTask(role, pass, context = {}) {
                 `## This pass is the contract of the styles — write it whole`,
                 '',
                 `The step \`${step.id ?? ''}\` names the stylesheets of the project. In this pass you`,
-                'write the **contract** that the rest of the run is written against. The next pass',
-                'of this role is the second pass over the same file, and it runs on a cheaper model:',
+                'write the **contract** that the rest of the run is written against. The skeleton of',
+                'the code is already on the disk: the modules, the states of the interface and the',
+                'data that flows between them. You dress exactly what it names. The next pass of',
+                'this role is the second pass over the same file, and it runs on a cheaper model:',
                 'the work that is not done here will be done there, and it will be done worse.',
                 '',
                 'Write **all of it**, in this order:',
@@ -68,8 +71,8 @@ export function passTask(role, pass, context = {}) {
                 '   token a name that says what it is, not how it looks: `--color-surface`, not',
                 '   `--grey-500`. The tokens are the contract between the styles and the code.',
                 '2. **The names of the classes.** The class names the markup has, as they will be',
-                '   dressed by the rules, and the ones the code will add. A short list with a word',
-                '   about what each one is for.',
+                '   dressed by the rules, and the ones the skeleton of the code will add. A short',
+                '   list with a word about what each one is for.',
                 '3. **The skeleton of the layout.** The regions of the page and their order — the',
                 '   header, the main area, the sidebar, the footer — and the grid or the flex that',
                 '   holds them.',
@@ -77,9 +80,10 @@ export function passTask(role, pass, context = {}) {
                 '   the card, the button, the field, the list, the panel, the dialog, whatever the',
                 '   design asks for. The rule of a component is written here, and the next pass',
                 '   only polishes it.',
-                '5. **The rules of the states.** Every state the brief of the architect names,',
-                '   with the selectors exactly as they are named there, and the pseudo-classes',
-                '   that belong to a control: `:hover`, `:focus-visible`, `:active`, `:disabled`.',
+                '5. **The rules of the states.** Every state the brief of the architect and the',
+                '   skeleton of the code name, with the selectors exactly as they are named there,',
+                '   and the pseudo-classes that belong to a control: `:hover`, `:focus-visible`,',
+                '   `:active`, `:disabled`.',
                 '6. **The responsive behaviour.** The breakpoints and what changes at each of',
                 '   them: the columns that fold, the navigation that collapses, the text that',
                 '   reflows.',
@@ -107,8 +111,8 @@ export function passTask(role, pass, context = {}) {
             '- the rules that do not match the markup or the code — fix them.',
             '- the fine tuning: the spacing that is off, the contrast that is low, the line',
             '  height, the focus ring, the scrollbar, the narrow screen.',
-            '- the states of the interface that the brief of the architect names, with the',
-            '  selectors exactly as they are named there.',
+            '- the states of the interface that the brief of the architect and the skeleton of',
+            '  the code name, with the selectors exactly as they are named there.',
             '',
             'Keep the tokens and the names of the contract: the code is already written against',
             'them, and a name that changes under the written code breaks the page. Do not start',
@@ -130,19 +134,21 @@ export function passTask(role, pass, context = {}) {
                     'tokens of that contract — not tokens of your own.',
                 ]
                 : [
-                    'The stylesheets of the project are not written yet. Take the names of the classes',
-                    'from the markup and the tokens from the brief of the architect, and write them',
-                    'down as the contract of your code — the code and the styles will be written',
-                    'against the same names.',
+                    'The stylesheets of the project are not written yet — they are written after you,',
+                    'against the contract you write here. Take the names of the classes from the',
+                    'markup and the tokens from the brief of the architect, and write them down as',
+                    'the contract of your code — the styles will be written against exactly these',
+                    'names.',
                 ];
             return [
                 `## This pass is the contract of the code — write it whole`,
                 '',
                 `The step \`${step.id ?? ''}\` names the files of the code of the project. In this pass`,
-                'you write the **contract** that the rest of the run is written against. The next',
-                'pass of this role is the second pass over the same files, and it runs on a',
-                'cheaper model: the work that is not done here will be done there, and it will be',
-                'done worse.',
+                'you write the **contract** that the rest of the run is written against. The markup',
+                'of the page is already on the disk: your skeleton grows out of it. The next pass',
+                'of this role is the second pass over the same files, and it runs on a cheaper',
+                'model: the work that is not done here will be done there, and it will be done',
+                'worse.',
                 '',
                 'Write **all of it**:',
                 '',

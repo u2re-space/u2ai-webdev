@@ -20,7 +20,6 @@
  * @ai.hint legacy-0.2
  * @changed 2026-11-13 Ported from the monolith: стили по шагу плана, токены и DESIGN.md.
  */
-
 import { architectureText } from './architect.js';
 import { stylesOf } from './style-entry.js';
 import { projectFiles } from './project-files.js';
@@ -105,7 +104,7 @@ export async function stylingStage({
             styles,
             tokens,
             conflicts,
-            // Контракт кода уже на диске: стилест работает по нему, а не ждёт кода.
+            // Скелет кода уже на диске: стилест работает по нему.
             hasCode: true,
             // Стилей ещё нет — но их контракт есть, и по нему и пишутся стили.
             hasStyles: false,

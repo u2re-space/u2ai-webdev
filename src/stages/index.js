@@ -110,17 +110,35 @@ export const STAGES = Object.freeze([
         dependsOn: ['plan'],
         run: architectStage,
         args: (ctx) => ({ input: ctx.input ?? null }),
-        args: (ctx) => ({ input: ctx.input ?? null }),
         apply: (ctx, result) => { ctx.architecture = result?.architecture ?? null; },
+    },
+    {
+        name: 'setup',
+        title: 'Prepare the environment',
+        dependsOn: ['architect'],
+        run: setupStage,
+        args: (ctx) => ({ input: ctx.input ?? null }),
+        apply: (ctx, result) => { ctx.setup = result?.setup ?? null; },
+    },
+    {
+        name: 'vector',
+        title: 'Draw the vector graphics',
+        // The graphics are drawn before the markup: the page links the files of the editor
+        // by the names the context gives, and a picture that is drawn after the markup is
+        // still linked by its name — but it has to be drawn before the build, or it never
+        // reaches the bundle.
+        dependsOn: ['setup'],
+        run: vectorStage,
+        args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
+        apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
     },
     {
         name: 'pictures',
         title: 'Prepare the pictures',
-        // Existing crops may be prepared here, but the plan and the run do not require a
-        // measurement sheet: roles can work directly from DESIGN.md and the attached reference.
-        // The pictures are prepared after the architect: the structure of the project is
-        // decided first, and the assets it names are cut out of the reference for it.
-        dependsOn: ['architect'],
+        // The crops are prepared after the vector: the editor draws first, and the stage
+        // cuts out of the reference what the editor did not draw. The stage of the assets
+        // stands after both of them and knows the whole set of the pictures.
+        dependsOn: ['vector'],
         run: picturesStage,
         args: (ctx) => ({ apply: ctx.apply !== false }),
         apply: (ctx, result) => {
@@ -136,41 +154,6 @@ export const STAGES = Object.freeze([
         },
     },
     {
-        name: 'setup',
-        title: 'Prepare the environment',
-        dependsOn: ['architect'],
-        run: setupStage,
-        args: (ctx) => ({ input: ctx.input ?? null }),
-        args: (ctx) => ({ input: ctx.input ?? null }),
-        apply: (ctx, result) => { ctx.setup = result?.setup ?? null; },
-    },
-    {
-        name: 'vector',
-        title: 'Draw the vector graphics',
-        // The graphics are drawn before the markup: the page links the files of the editor,
-        // and a markup that waits for a picture nobody draws yet is a stage that never ends.
-        dependsOn: ['setup'],
-        run: vectorStage,
-        args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
-        apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
-    },
-    {
-        name: 'assets',
-        title: 'Place the assets',
-        // The assets are placed after the vector graphics: when the vector is drawn, the whole
-        // set of the pictures is known, and the markup links the files that are final.
-        dependsOn: ['vector', 'pictures'],
-        run: assetsStage,
-        args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
-        apply: (ctx, result) => {
-            ctx.assets = result?.assets ?? [];
-            if (!ctx.inputs || !ctx.assets.length) return;
-            // The roles after this stage see the final paths of the pictures: the markup
-            // links them, and the styles name them.
-            ctx.inputs = { ...ctx.inputs, assets: ctx.assets };
-        },
-    },
-    {
         name: 'markup',
         title: 'Write the markup',
         dependsOn: ['setup'],
@@ -180,36 +163,54 @@ export const STAGES = Object.freeze([
         apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
     },
     {
-        name: 'pre-styling',
-        title: 'Draft the contract of the styles',
-        // The draft of the contract comes before the code: the code is written against the
-        // names of the styles and the tokens, and it has to know them before it starts.
-        // Without this stage the coder invents names of his own, and the styles written
-        // later dress classes that nobody uses.
-        dependsOn: ['markup'],
-        run: preStylingStage,
+        name: 'assets',
+        title: 'Place the assets',
+        // The assets are placed after the markup: the markup links the prepared pictures
+        // that the context names, and the illustrator puts their final copies on their
+        // places afterwards. Neither waits for the other: a circle between them stopped
+        // the styles from ever starting.
+        dependsOn: ['vector', 'pictures', 'markup'],
+        run: assetsStage,
         args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
-        verify: workOnDisk('styler', 'draft'),
-        apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
+        apply: (ctx, result) => {
+            ctx.assets = result?.assets ?? [];
+            if (!ctx.inputs || !ctx.assets.length) return;
+            // The roles after this stage see the final paths of the pictures: the styles
+            // and the code name them.
+            ctx.inputs = { ...ctx.inputs, assets: ctx.assets };
+        },
     },
     {
         name: 'pre-coding',
         title: 'Draft the contract of the code',
-        // The skeleton of the code comes after the draft of the styles and before the full
-        // styles: the skeleton names the modules and the states, and the styles are written
-        // against them.
-        dependsOn: ['pre-styling'],
+        // The skeleton of the code comes right after the markup: the skeleton is written
+        // against the markup and the brief of the architect — the modules, the states and
+        // the data flow. Without it the styler invents the states nobody wears, and the
+        // coder invents the names the styles never dress.
+        dependsOn: ['markup'],
         run: preCodingStage,
         args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
         verify: workOnDisk('coder', 'draft'),
         apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
     },
     {
+        name: 'pre-styling',
+        title: 'Draft the contract of the styles',
+        // The draft of the styles comes after the skeleton of the code: the styler dresses
+        // exactly the states and the modules the skeleton names. Without this stage the
+        // styles written later dress classes that nobody uses.
+        dependsOn: ['pre-coding'],
+        run: preStylingStage,
+        args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
+        verify: workOnDisk('styler', 'draft'),
+        apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
+    },
+    {
         name: 'styling',
         title: 'Write the styles',
-        // The full styles come after the skeleton of the code: the skeleton says which
-        // modules and which states the page has, and the styles dress exactly them.
-        dependsOn: ['pre-coding'],
+        // The full styles come after the draft of the styles: the draft is the contract,
+        // and the full work is the second look at the same file.
+        dependsOn: ['pre-styling'],
         run: stylingStage,
         args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
         verify: workOnDisk('styler', 'full'),

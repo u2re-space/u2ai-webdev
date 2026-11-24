@@ -24,10 +24,10 @@ export const ENUMS = Object.freeze({
   backendRoutes: Object.freeze(['responses', 'chat']),
   /** Pipeline stages in execution order. */
   stages: Object.freeze([
-    'collect', 'scan', 'plan', 'architect', 'pictures', 'setup',
-    'vector', 'assets', 'markup',
-    // Фазы стилей и кода: черновик контракта, скелет, полные стили, полный код.
-    'pre-styling', 'pre-coding', 'styling', 'animation', 'coding',
+    'collect', 'scan', 'plan', 'architect', 'setup',
+    'vector', 'pictures', 'markup', 'assets',
+    // Фазы стилей и кода: скелет кода, черновик контракта стилей, полные стили, полный код.
+    'pre-coding', 'pre-styling', 'styling', 'animation', 'coding',
     'iconify', 'build', 'sight',
     'review', 'audit', 'learn',
   ]),

@@ -12,6 +12,10 @@
  *   object stays. The result lands in the project, and the roles get the path of it in the
  *   context of the run.
  *
+ *   The stage stands after the vector: the editor draws first, and the stage cuts out of
+ *   the reference what the editor did not draw. The stage of the assets stands after the
+ *   markup and knows the whole set of the pictures.
+ *
  *   The sheet is not the only source of the crops: the measurer cuts the fragments before it
  *   writes the sheet, and a run that died in the middle leaves the fragments on the disk.
  *   When the sheet names no crops, the fragments that are on the disk are taken — an asset
@@ -35,6 +39,8 @@
  *                       none: the fragments are cut before the sheet is written.
  * @changed 2026-11-15 The sheet is returned as `sheetFile`: the field `files` of the result of
  *                       a stage is the list of the written paths.
+ * @changed 2026-11-24 Стадия стоит после вектора: редактор рисует первым, и вырезается то,
+ *                     что редактор не нарисовал.
  */
 
 import path from 'node:path';
