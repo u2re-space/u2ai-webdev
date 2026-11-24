@@ -9,12 +9,13 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
 import { resolveRole, runRole } from '../src/roles/index.js';
 import { defaults } from '../src/config.js';
+import { startFakeApi } from './helpers/fake-api.js';
 
 const configFor = (overrides = {}) => ({
     ...structuredClone(defaults),
@@ -198,22 +199,15 @@ test('the model of the run is the head of its family, the roles keep their own l
     assert.equal(resolveRole('styler', config).model, 'openai/gpt-6.2-sol');
 });
 
-test('a delegated role answers with the model of the same stage', async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-ranks-delegate-'));
+test('a sub-agent answers with the model of the role it inherits', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-ranks-subagent-'));
     const requests = [];
     const queue = [
         // The markup hands the work of the styles to the styler.
-        schemaAnswer('delegate_role', {
+        schemaAnswer('subagent', {
             role: 'styler',
             task: 'Write the styles of the page.',
             files: ['style.scss'],
-        }),
-        // The styler answers in its own session.
-        schemaAnswer('style', {
-            summary: 'The styles are written.',
-            tokens: [],
-            files: [{ path: 'style.scss', content: '/* styles */', language: 'scss' }],
-            notes: '',
         }),
         // The markup answers after the hand-over.
         schemaAnswer('markup', {
@@ -229,18 +223,29 @@ test('a delegated role answers with the model of the same stage', async () => {
         return queue[Math.min(requests.length - 1, queue.length - 1)];
     } } };
 
-    await runRole({
-        client,
-        config: configFor(),
-        role: 'markup',
-        input: 'Write the page.',
-        root,
-        // The door of the markup is open: the stages of the code and of the styles started.
-        runContext: { startedStages: new Set(['markup', 'coding', 'styling']) },
-    });
+    // The API of the house answers for the thread of the sub-agent.
+    const api = await startFakeApi([
+        { type: 'function_call', name: 'read_file', arguments: { path: 'style.scss' } },
+        { text: 'The styles are written.' },
+    ]);
+    try {
+        await runRole({
+            client,
+            config: { ...configFor(), baseURL: api.url, apiKey: 'test-key' },
+            role: 'markup',
+            input: 'Write the page.',
+            root,
+            // The door of the markup is open: the stages of the code and of the styles started.
+            runContext: { startedStages: new Set(['markup', 'coding', 'styling']) },
+        });
 
-    assert.ok(requests.length >= 2, `requests: ${requests.length}`);
-    // The delegated styler answers with the model of the house for the styles — not with the
-    // model of the run and not with the cheap tail of the ladder.
-    assert.equal(requests[1].model, 'openai/gpt-6.2-sol');
+        assert.ok(requests.length >= 2, `requests: ${requests.length}`);
+        // The sub-agent of the role `styler` answers with the model of the house for the
+        // styles — not with the model of the run and not with the cheap tail of the ladder.
+        assert.ok(api.requests.length >= 1, `subagent requests: ${api.requests.length}`);
+        assert.equal(api.requests[0].model, 'openai/gpt-6.2-sol');
+    } finally {
+        api.stop();
+        await rm(root, { recursive: true, force: true });
+    }
 });

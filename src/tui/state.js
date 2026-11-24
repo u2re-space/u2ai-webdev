@@ -8,9 +8,14 @@
  *   the pending question and the final result. The reducer is pure so every part of
  *   the interface can be tested without a terminal.
  *
+ *   The sub-agents are part of the state too: a sub-agent is a separate thread of the
+ *   run, and the operator has to see it — how many there are, which role each of them
+ *   inherited and what it is doing right now.
+ *
  * @depends none
  * @usedBy tui/app, tui/render
- * @exports LOG_LIMIT, STREAM_LIMIT, createTuiState, reduceTuiState
+ * @exports LOG_LIMIT, STREAM_LIMIT, SUBAGENT_LIMIT, createTuiState, reduceTuiState,
+ *          subagentLines
  * @ai.tags tui, state, reducer
  */
 
@@ -21,6 +26,9 @@ export const LOG_LIMIT = 1000;
 
 /** How much of the stream of the model the shell keeps for the scroll of the thought. */
 export const STREAM_LIMIT = 4000;
+
+/** How many sub-agents the shell shows at once. */
+export const SUBAGENT_LIMIT = 4;
 
 /**
  * The initial state of the shell.
@@ -49,6 +57,10 @@ export function createTuiState({ command = '', task = '' } = {}) {
         observed: [],
         logs: [],
         outputs: [],
+        // The sub-agents of the run: the threads that work beside the main one. The shell
+        // shows them, so a run that is busy in three places does not look like a run that
+        // stands still.
+        subagents: [],
         question: null,
         location: null,
         statusText: '',
@@ -129,6 +141,52 @@ export function stageProgress(state) {
 }
 
 /**
+ * Add a sub-agent to the list of the state.
+ *
+ * The list keeps the sub-agents of the run in the order they were started: the newest
+ * one is the last, and the finished ones stay until there are more than the shell shows.
+ *
+ * @param {object} state
+ * @param {object} subagent the sub-agent
+ * @returns {object[]}
+ * @ai.hint pure
+ */
+function withSubagent(state, subagent) {
+    const list = Array.isArray(state?.subagents) ? state.subagents : [];
+    const name = String(subagent?.name ?? '').trim();
+    if (!name) return list;
+    const at = list.findIndex((item) => item?.name === name);
+    if (at < 0) return [...list, { ...subagent, name }];
+    const next = [...list];
+    next[at] = { ...next[at], ...subagent, name };
+    return next;
+}
+
+/**
+ * The lines of the sub-agents: one line per thread, the newest first.
+ *
+ * @param {object} state
+ * @param {number} [limit] how many lines
+ * @returns {string[]}
+ * @exports
+ * @ai.hint pure
+ */
+export function subagentLines(state, limit = SUBAGENT_LIMIT) {
+    const list = Array.isArray(state?.subagents) ? state.subagents : [];
+    const rows = Math.max(0, Math.floor(Number(limit) || 0));
+    return list
+        .slice(-rows)
+        .reverse()
+        .map((item) => {
+            const role = String(item?.role ?? '').trim() || 'subagent';
+            const status = String(item?.status ?? '').trim() || 'working';
+            const turn = Number.isInteger(item?.turn) && item.turn > 0 ? ` · turn ${item.turn}` : '';
+            const tools = Array.isArray(item?.tools) && item.tools.length ? ` · ${item.tools.join(', ')}` : '';
+            return `${role}: ${status}${turn}${tools}`;
+        });
+}
+
+/**
  * Fold one worker event into the state.
  * @param {object} state
  * @param {object} event
@@ -199,6 +257,56 @@ function reduceEvent(state, event) {
         // The thought of the role stays on the screen: it is the last thing the model
         // said. The next role starts its own stream.
         return { ...state, notice: `${role}: ${stopped}`, stream: { ...state.stream, fresh: true } };
+    }
+    if (type === 'subagent.start') {
+        // A sub-agent starts: a separate thread that inherits a role of the run.
+        const to = String(event.to ?? '').trim() || 'subagent';
+        const from = String(event.from ?? '').trim();
+        const subagents = withSubagent(state, {
+            name: `${from || 'run'}→${to}`,
+            role: to,
+            from,
+            status: 'working',
+            turn: 0,
+            tools: [],
+            task: String(event.task ?? ''),
+        });
+        const notice = from
+            ? `The sub-agent of the role ${to} starts (handed over by ${from}): ${String(event.task ?? '')}`
+            : `The sub-agent of the role ${to} starts: ${String(event.task ?? '')}`;
+        return { ...state, subagents, notice };
+    }
+    if (type === 'subagent.status') {
+        // The state of a sub-agent: which turn it is on and what it is doing.
+        const inner = event.event ?? {};
+        const to = String(inner.role ?? event.to ?? '').trim() || 'subagent';
+        const from = String(inner.from ?? event.from ?? '').trim();
+        const subagents = withSubagent(state, {
+            name: `${from || 'run'}→${to}`,
+            role: to,
+            from,
+            status: String(inner.status ?? 'working'),
+            turn: Number.isInteger(inner.turn) ? inner.turn : 0,
+            tools: Array.isArray(inner.tools) ? inner.tools : [],
+        });
+        return { ...state, subagents };
+    }
+    if (type === 'subagent.done') {
+        const to = String(event.to ?? '').trim() || 'subagent';
+        const from = String(event.from ?? '').trim();
+        const files = Array.isArray(event.files) ? event.files : [];
+        const subagents = withSubagent(state, {
+            name: `${from || 'run'}→${to}`,
+            role: to,
+            from,
+            status: event.ok === true ? 'done' : 'not verified',
+            turn: Number.isInteger(event.turns) ? event.turns : 0,
+            tools: [],
+            files,
+        });
+        const notice = `The sub-agent of the role ${to} ${event.ok === true ? 'is done' : 'is not confirmed'}: `
+            + `${event.turns ?? 0} turns${files.length ? `; files: ${files.join(', ')}` : ''}`;
+        return { ...state, subagents, notice };
     }
     if (type === 'role.tool' || type === 'reasoning.start' || type === 'message.start') {
         // A new turn begins: the thought of the last one is over. It stays on the screen

@@ -15,7 +15,7 @@ import { referenceNote } from './reference.js';
 import { PAGE_FRAME_CONTRACT, pageFrameRules, pageWidthNote } from './page-frame.js';
 import { CORE, HTML } from './web-development.js';
 import { markupStyleNote } from './style-note.js';
-import { DELEGATE_NAMES, delegationNote } from '../agent/delegation.js';
+import { SUBAGENT_NAMES, subagentNote } from '../agent/subagent.js';
 import { economyTools } from './economy.js';
 
 /** The name of the role. */
@@ -28,7 +28,7 @@ export const schema = 'markup';
 export const tools = [
     'list_files', 'read_file', 'write_file', 'replace_text', 'search_files', 'read_skill', 'web_guidance',
     'call_ai_memory',
-    'delegate_role',
+    'subagent',
     ...economyTools(),
 ];
 
@@ -117,7 +117,7 @@ ${repair}
 Rules:
 ${INPUTS_IN_CONTEXT}
 ${vectorOnly ? '' : PAGE_FRAME_CONTRACT}
-${delegationNote(DELEGATE_NAMES)}
+${subagentNote(SUBAGENT_NAMES)}
 - The class names are a contract with the styles: a class that the styles describe keeps its
   name. Do not rename a class and do not drop a class that has a rule — the styles are
   another role's work, and they are not changed together with the markup.

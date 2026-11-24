@@ -490,17 +490,17 @@ test('the renderer says what a tool call touches', () => {
     assert.doesNotMatch(text, /x{100}/);
 });
 
-test('the renderer distinguishes a verified delegate output from an empty hand-over', () => {
+test('the renderer distinguishes a verified sub-agent output from an empty hand-over', () => {
     const lines = [];
     const renderer = createRenderer({
         mode: 'plain',
         stdout: { write: (text) => lines.push(text) },
         stderr: { write() {} },
     });
-    renderer.event({ type: 'delegate.done', to: 'coder', turns: 8, ok: false, files: [] });
-    renderer.event({ type: 'delegate.done', to: 'editor', turns: 4, ok: true, files: ['assets/badge.svg'] });
-    assert.match(lines.join(''), /coder не подтверждён/);
-    assert.match(lines.join(''), /editor проверен/);
+    renderer.event({ type: 'subagent.done', to: 'coder', turns: 8, ok: false, files: [] });
+    renderer.event({ type: 'subagent.done', to: 'editor', turns: 4, ok: true, files: ['assets/badge.svg'] });
+    assert.match(lines.join(''), /суб-агент роли coder не подтверждён/);
+    assert.match(lines.join(''), /суб-агент роли editor закончил/);
     assert.match(lines.join(''), /assets\/badge\.svg/);
 });
 

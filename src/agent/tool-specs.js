@@ -441,25 +441,28 @@ export const TOOL_SPECS = Object.freeze({
         required: ['reference', 'result'],
         roles: [],
     },
-    delegate_role: {
+    subagent: {
         configKey: 'delegate',
-        description: 'Hand one task to another role: the markup, the styler, the coder, the editor or the '
-            + 'iconifier. The role that receives the work starts a separate session — a clean conversation, '
-            + 'its own tools and its own budget of turns — and does not see this one. Use it when the work '
-            + 'is one specific bounded piece that belongs to another role. This is different from `write_ready`: '
-            + '`write_ready` starts no other role and only unlocks your own writing tools. Never delegate files '
-            + 'listed in your current step; write your own step first. Hand over at most once per run, name every '
-            + 'expected output path in `files`, and verify that those files appeared on disk.',
+        description: 'Hand one task to a sub-agent: a separate thread that inherits the role of '
+            + 'markup, styler, coder, editor or iconifier. The sub-agent starts with a clean conversation, '
+            + 'its own instructions, its own tools and its own budget of turns — and it does not see this '
+            + 'one. It inherits your role, your tools and your rights: it works in the same project, with '
+            + 'the same skills and the same memory, and the files it writes are written by your tools. '
+            + 'Use it when the work is one specific bounded piece that belongs to another role. This is '
+            + 'different from `write_ready`: `write_ready` starts no other role and only unlocks your own '
+            + 'writing tools. Never hand over files listed in your current step; write your own step first. '
+            + 'Hand over at most once per run, name every expected output path in `files`, and verify that '
+            + 'those files appeared on disk.',
         parameters: {
             type: 'object',
             properties: {
-                role: str('The role that receives the work: markup | styler | coder | editor | iconifier.'),
+                role: str('The role the sub-agent inherits: markup | styler | coder | editor | iconifier.'),
                 task: str('What that role has to do, in full: the file, what is wrong and what the result '
-                    + 'has to be. The role does not see this conversation.'),
+                    + 'has to be. The sub-agent does not see this conversation.'),
                 reason: str('One sentence: why the work goes to that role.'),
                 files: {
                     type: 'array',
-                    description: 'Expected output file paths, relative to the project root. Include every file the delegated task must write.',
+                    description: 'Expected output file paths, relative to the project root. Include every file the sub-agent must write.',
                     items: str('Path of an expected output file.'),
                 },
             },

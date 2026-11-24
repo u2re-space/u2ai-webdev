@@ -157,6 +157,44 @@ test('the dashboard shows the stages, the live log and the operator line', () =>
     assert.match(text, /\/skip/);
 });
 
+test('the sub-agents of the run take their own rows of the dashboard', () => {
+    let state = createTuiState({ command: 'run', task: 'make a landing' });
+    state = reduceTuiState(state, {
+        type: 'frame',
+        frame: createFrame(FRAME.event, {
+            event: { type: 'subagent.start', from: 'markup', to: 'coder', task: 'Write the header script.' },
+        }),
+    });
+    state = reduceTuiState(state, {
+        type: 'frame',
+        frame: createFrame(FRAME.event, {
+            event: { type: 'subagent.status', from: 'markup', to: 'coder', event: { status: 'tools', turn: 2, tools: ['write_file'] } },
+        }),
+    });
+
+    // The state knows about the thread: the role it inherited and what it is doing.
+    assert.equal(state.subagents.length, 1);
+    assert.equal(state.subagents[0].role, 'coder');
+    assert.equal(state.subagents[0].status, 'tools');
+
+    // The dashboard shows it: the status gets more rows for the sub-agents.
+    const layout = createTuiLayout(state, { width: 100, height: 30, input: '' });
+    const text = layout.lines.map((line) => line.text).join('\n');
+    assert.match(text, /coder: tools/);
+    assert.match(text, /turn 2/);
+    assert.match(text, /write_file/);
+
+    // The thread ends: the shell says that it is done.
+    state = reduceTuiState(state, {
+        type: 'frame',
+        frame: createFrame(FRAME.event, {
+            event: { type: 'subagent.done', from: 'markup', to: 'coder', turns: 3, ok: true, files: ['header.js'] },
+        }),
+    });
+    assert.equal(state.subagents[0].status, 'done');
+    assert.match(state.notice, /coder/);
+});
+
 test('the text of the dashboard is cut to the width of the pane', () => {
     assert.equal(truncate('abcdef', 4), 'abc…');
     assert.equal(truncate('abc', 10), 'abc');

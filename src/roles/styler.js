@@ -16,7 +16,7 @@ import { PAGE_FRAME_CONTRACT, pageScaleRules, pageWidthNote } from './page-frame
 import { CORE, CSS } from './web-development.js';
 import { stylerStyleNote } from './style-note.js';
 import { contractNote } from '../stages/contract.js';
-import { DELEGATE_NAMES, delegationNote } from '../agent/delegation.js';
+import { SUBAGENT_NAMES, subagentNote } from '../agent/subagent.js';
 import { economyTools } from './economy.js';
 import { devToolsMarker, devToolsNote } from './devtools.js';
 
@@ -30,7 +30,7 @@ export const schema = 'style';
 export const tools = [
     'list_files', 'read_file', 'write_file', 'replace_text', 'search_files',
     'download_font', 'read_skill', 'web_guidance', 'call_ai_memory',
-    'screenshot', 'delegate_role', 'compare_images',
+    'screenshot', 'subagent', 'compare_images',
     ...economyTools(),
     devToolsMarker(),
 ];
@@ -180,7 +180,7 @@ ${contract}
 
 ${INPUTS_IN_CONTEXT}
 ${pageFrame}
-${delegationNote(DELEGATE_NAMES)}
+${subagentNote(SUBAGENT_NAMES)}
 ${devToolsNote({
     url: context?.pageUrl || context?.config?.browser?.url || null,
     width: context?.config?.browser?.viewport?.width ?? null,

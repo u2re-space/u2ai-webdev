@@ -494,16 +494,29 @@ export function createRenderer({
                 if (json) { emit('text.delta', { text }); return; }
             }
             else if (type === 'role.done') { flushThought(); }
-            else if (type === 'delegate.start') {
+            else if (type === 'subagent.start') {
                 if (json) {
-                    emit('delegate.start', { from: event.from ?? null, to: event.to ?? null, task: event.task ?? '', reason: event.reason ?? '' });
+                    emit('subagent.start', { from: event.from ?? null, to: event.to ?? null, task: event.task ?? '', reason: event.reason ?? '' });
                 } else {
-                    this.note(`роль ${event.from ?? '?'} передаёт работу роли ${event.to ?? '?'}: ${event.task ?? ''}`);
+                    this.note(`суб-агент роли ${event.to ?? '?'} начинает (передал ${event.from ?? '?'}): ${event.task ?? ''}`);
                 }
             }
-            else if (type === 'delegate.done') {
+            else if (type === 'subagent.status') {
+                // The state of a thread: which turn it is on and what it is doing. It goes
+                // to the log as it comes — the run is busy in more than one place, and the
+                // operator has to see it.
+                const inner = event.event ?? {};
                 if (json) {
-                    emit('delegate.done', {
+                    emit('subagent.status', { from: event.from ?? null, to: event.to ?? null, event: inner });
+                } else {
+                    const turn = Number.isInteger(inner.turn) && inner.turn > 0 ? `, ход ${inner.turn}` : '';
+                    const tools = Array.isArray(inner.tools) && inner.tools.length ? `: ${inner.tools.join(', ')}` : '';
+                    this.note(`суб-агент роли ${event.to ?? '?'}: ${inner.status ?? 'работает'}${turn}${tools}`);
+                }
+            }
+            else if (type === 'subagent.done') {
+                if (json) {
+                    emit('subagent.done', {
                         from: event.from ?? null,
                         to: event.to ?? null,
                         turns: event.turns ?? 0,
@@ -514,7 +527,7 @@ export function createRenderer({
                     const files = Array.isArray(event.files) && event.files.length
                         ? `; файлы на диске: ${event.files.join(', ')}`
                         : '';
-                    this.note(`результат роли ${event.to ?? '?'} ${event.ok === true ? 'проверен' : 'не подтверждён'}: `
+                    this.note(`суб-агент роли ${event.to ?? '?'} ${event.ok === true ? 'закончил' : 'не подтверждён'}: `
                         + `${event.turns ?? 0} ходов${files}`);
                 }
             }

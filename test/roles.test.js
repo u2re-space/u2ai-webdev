@@ -715,7 +715,7 @@ test('the vector editor gets no browser, screenshot, command, or delegated tools
     });
     const names = requests.find((request) => request.tools.some((tool) => tool.name === 'write_file'))
         .tools.map((tool) => tool.name);
-    for (const forbidden of ['screenshot', 'run_command', 'delegate_role', 'navigate_page']) {
+    for (const forbidden of ['screenshot', 'run_command', 'subagent', 'navigate_page']) {
         assert.ok(!names.includes(forbidden), forbidden);
     }
     assert.ok(names.includes('write_file'));
@@ -1042,9 +1042,9 @@ test('write_ready is documented as the write gate, not as a hand-off', () => {
     const write = chunkText(chunksFor({ role: 'coder', phase: 'write', files: ['src/main.js'] }));
     assert.match(write, /write_file/);
 
-    const handoff = toolSpecs(defaults.tools, { names: ['delegate_role'] })[0];
+    const handoff = toolSpecs(defaults.tools, { names: ['subagent'] })[0];
     assert.match(handoff.description, /different from `write_ready`/);
-    assert.match(handoff.description, /Never delegate files listed in your current step/);
+    assert.match(handoff.description, /Never hand over files listed in your current step/);
 });
 
 test('a role that writes a summary keeps the full output budget', async () => {

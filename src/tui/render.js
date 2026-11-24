@@ -16,6 +16,7 @@
  */
 
 import { sanitizeText } from '../cli/stdio.js';
+import { subagentLines } from './state.js';
 
 /**
  * Cut a text to the width of a terminal cell.
@@ -337,7 +338,10 @@ export function createTuiLayout(state, {
 
     const footerRows = 11;
     const headerRows = lines.length;
-    const mainRows = Math.max(3, rows - headerRows - footerRows - 1);
+    // The sub-agents take their own rows in the footer: a run that works in three threads
+    // at once must show it, and the status row stays a status row.
+    const subagentRows = subagentLines(state);
+    const mainRows = Math.max(3, rows - headerRows - footerRows - subagentRows.length - 1);
     const leftWidth = Math.max(24, Math.min(44, Math.floor(cols * 0.38)));
     const rightWidth = cols - leftWidth - 3;
     const stageRows = visibleStages(state, mainRows);
@@ -363,6 +367,11 @@ export function createTuiLayout(state, {
     }
 
     push(marks.rule.repeat(cols), 'dim');
+    // The sub-agents of the run: one row per thread, the newest first. The rows are the
+    // answer to the question the operator asks first — "is it working, or is it stuck?".
+    for (const row of subagentRows) {
+        push(truncate(`↳ ${row}`, cols), 'dim');
+    }
     // The stream of the model: the thought while it thinks, the answer while it writes.
     // Four rows, wrapped at the width of the screen and speaking markdown. The window
     // follows the end of the thought; the operator moves it back through the thought

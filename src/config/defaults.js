@@ -347,7 +347,7 @@ export const defaults = {
     compare: true,
     /** Ask the operator a blocking question in interactive runs. */
     ask_user: true,
-    /** Hand the work from one role to another, in a separate session. */
+    /** Hand the work to a sub-agent, in a separate thread of this process. */
     delegate: true,
     /** Call the external `ai-decompose` CLI. */
     external_decompose: true,

@@ -48,6 +48,7 @@
   "dependencies": {
     "@modelcontextprotocol/node": "^2.1.1",
     "@toon-format/toon": "^4.4.0",
+    "@u2ai/subagent": "file:../u2ai-subagent",
     "json5": "^2.2.3",
     "terminal-kit": "^3.1.4"
   },

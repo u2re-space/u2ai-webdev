@@ -15,7 +15,7 @@ import { referenceNote } from './reference.js';
 import { CORE, HTML } from './web-development.js';
 import { coderStyleNote } from './style-note.js';
 import { contractNote } from '../stages/contract.js';
-import { DELEGATE_NAMES, delegationNote } from '../agent/delegation.js';
+import { SUBAGENT_NAMES, subagentNote } from '../agent/subagent.js';
 import { economyTools } from './economy.js';
 import { devToolsMarker, devToolsNote } from './devtools.js';
 
@@ -30,7 +30,7 @@ export const tools = [
     'list_files', 'read_file', 'write_file', 'replace_text', 'delete_file', 'make_dir',
     'copy_path', 'search_files', 'run_command', 'read_skill', 'web_guidance',
     'call_ai_memory',
-    'delegate_role',
+    'subagent',
     ...economyTools(),
     devToolsMarker(),
 ];
@@ -160,7 +160,7 @@ ${contract}
 
 Rules:
 ${INPUTS_IN_CONTEXT}
-${delegationNote(DELEGATE_NAMES)}
+${subagentNote(SUBAGENT_NAMES)}
 ${devToolsNote({
     url: context?.pageUrl || context?.config?.browser?.url || null,
     width: context?.config?.browser?.viewport?.width ?? null,

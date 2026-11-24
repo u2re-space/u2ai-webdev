@@ -40,7 +40,7 @@ import { documentationForRole } from '../agent/docs.js';
 import { sourcesBlock } from '../agent/sources.js';
 import { createToolset } from '../agent/tools.js';
 import { toolSpecs as buildToolSpecs } from '../agent/tool-specs.js';
-import { createDelegator, delegationGateNote } from '../agent/delegation.js';
+import { createSubagentSpawner, subagentGateNote } from '../agent/subagent.js';
 import { effortFor } from '../agent/pace.js';
 import { getModelProfile, maxOutputFor, snapEffort } from '../model/profiles.js';
 import { familyOf, rankPath, resolveModelRef } from '../model/refs.js';
@@ -730,7 +730,7 @@ export async function runRole({
         ].filter(Boolean).join('\n');
     }
     // The hand-over may be closed right now: the role is told before she spends a turn on it.
-    const gateNote = delegationGateNote({
+    const gateNote = subagentGateNote({
         from: key,
         stage: roleStage,
         startedStages: runContext?.startedStages ?? null,
@@ -777,7 +777,7 @@ export async function runRole({
         .filter((spec) => !context?.vectorOnly || VECTOR_TOOLS.has(spec.name))
         .filter((spec) => !context?.vectorOnly || !String(spec.name).startsWith('mcp_'))
         .filter((spec) => spec.name !== 'ask_user' || (inputChannel?.interactive && config?.tools?.ask_user !== false))
-        .filter((spec) => depth === 0 || spec.name !== 'delegate_role');
+        .filter((spec) => depth === 0 || spec.name !== 'subagent');
     const schema = roleSchema(key);
     const readSpecs = specs.filter((spec) => READ_ONLY_TOOLS.has(String(spec?.name ?? '')));
     const hasActionTools = Boolean(requireFiles) && key !== 'reviewer' && readSpecs.length < specs.length;
@@ -805,28 +805,41 @@ export async function runRole({
     const requestedTurns = Number.isInteger(maxTurns) && maxTurns > 0 ? maxTurns : definition.maxTurns;
     const limit = key === 'reviewer' ? Math.min(requestedTurns, 4) : requestedTurns;
 
-    // The hand-over of the work to another role: a separate session of that role.
-    const delegate = createDelegator({
-        run: (options) => runRole({ ...options, client, signal, depth: depth + 1 }),
+    // The hand-over of the work to a sub-agent: a separate thread that inherits this role.
+    const spawnSubagent = createSubagentSpawner({
         config,
         root,
         env,
         notify,
         runContext,
         role: key,
-        // The stage of the caller: the delegated work belongs to it.
+        // The stage of the caller: the handed-over work belongs to it.
         stage: roleStage,
         depth,
-        // The stages the run has started: a gate of the delegation stays closed until the
+        // The stages the run has started: a gate of the hand-over stays closed until the
         // stages it names are among them.
         startedStages: runContext?.startedStages ?? null,
-        // The delegated role is resolved in the context of the caller: the work of the
-        // delegated role is the work of the caller, so the model of the work is the same.
+        // The inherited role is resolved in the context of the caller: the work of the
+        // sub-agent is the work of the caller, so the model of the work is the same.
         resolveRole: (name) => resolveRole(name, config, { stage: roleStage }),
-        // The delegated role sees the same picture of the reference and the same context of
-        // the step: it continues the work, not the conversation.
-        parts,
-        context,
+        // The tools are the tools of this process: the sub-agent asks, this process runs.
+        tools,
+        // The instructions of the inherited role: the sub-agent speaks them as they are.
+        // They are built when the role is known — the model names it in the call.
+        instructionsFor: async (name) => await buildInstructions({
+            role: name,
+            config,
+            context,
+            root,
+            env,
+            runContext,
+        }),
+        // The model of the work: the sub-agent talks to the same API with the same model.
+        model: currentModel,
+        effort: currentEffort,
+        baseURL: config?.baseURL ?? null,
+        apiKey: config?.apiKey ?? null,
+        signal,
     });
 
     const items = [{ role: 'user', content: [textPart(input), ...(parts ?? [])] }];
@@ -931,7 +944,7 @@ export async function runRole({
         fullOutput = false,
     } = {}) => {
     const availableTools = delegationUsed
-            ? toolList.filter((spec) => spec.name !== 'delegate_role')
+            ? toolList.filter((spec) => spec.name !== 'subagent')
             : toolList;
         const boundedTools = key === 'styler' && stylerResearchCalls >= STYLER_RESEARCH_LIMIT
             ? availableTools.filter((spec) => !STYLER_RESEARCH_TOOLS.has(spec.name))
@@ -1263,13 +1276,13 @@ export async function runRole({
                 output = 'Write-ready was already signaled; continue with the requested action.';
             } else if (call.name === WRITE_READY_TOOL.name) {
                 output = 'write_ready is not a tool of this role: it has no writing tools to unlock.';
-            } else if (call.name === 'delegate_role') {
+            } else if (call.name === 'subagent') {
                 if (delegationUsed) {
                     output = 'The tool failed: this role has already handed work over once. Continue with your own step.';
                 } else {
                     delegationUsed = true;
                     try {
-                        output = await delegate(call.arguments ?? {});
+                        output = await spawnSubagent(call.arguments ?? {});
                     } catch (error) {
                         output = `The tool failed: ${error?.message ?? String(error)}`;
                     }
