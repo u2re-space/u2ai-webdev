@@ -45,6 +45,9 @@ import { stageForRole } from './roles.js';
 import { stepScope as scopeOf, inScope as inScopeOf } from './scope.js';
 import { defaultPass, passFor, passKey, passesOf, passReportName, isPassReportName } from './pass.js';
 import { passTask, passNote, isDraftPass } from './pass-tasks.js';
+import { contractNote } from './contract.js';
+import { isWaiting } from './contract.js';
+import { wordsOfAnswer } from '../roles/index.js';
 /** The directory inside the run that holds the reports of the steps. */
 export const STEPS_DIR = 'steps';
 
@@ -1176,6 +1179,10 @@ async function runStepPass({
     // Задача прохода: она говорит роли, что именно она делает в этом заходе.
     const taskOfPass = passTask(role, pass, { step, hasStyles: extra?.hasStyles, hasCode: extra?.hasCode });
     if (taskOfPass) blocks.push(taskOfPass);
+    // Правило контракта: ждать чужую работу нечего. Оно стоит здесь, в запросе, а не
+    // только в инструкции роли: инструкция читается один раз, а запрос — каждый ход.
+    const contract = contractNote(role, { hasStyles: extra?.hasStyles, hasCode: extra?.hasCode });
+    if (contract) blocks.push(contract);
     // What is on the disk now: the role changes the files, it does not replace them with
     // a guess of what they should be. The contracts of the neighbouring phases are part of
     // that: the tables of the styles and the modules of the code.
@@ -1393,6 +1400,13 @@ async function runStepPass({
         }
         if (applied.failed.length) {
             warnings.push(`Шаг ${step.id}: файлы не записаны: ${applied.failed.join(', ')}.`);
+        }
+        // Роль, которая сказала, что ждёт чужую работу, — это тот самый застой. Шаг
+        // может быть сделан, но прогон говорит об этом: иначе никто не увидит, что роль
+        // не сделала свою часть и ждёт чужую.
+        if (isWaiting(wordsOfAnswer(answer))) {
+            warnings.push(`Шаг ${step.id}: роль ${role} сказала, что ждёт работу другой роли. `
+                + 'Ждать нечего: у сторон есть контракт, и обе пишутся по нему.');
         }
 
         const report = {

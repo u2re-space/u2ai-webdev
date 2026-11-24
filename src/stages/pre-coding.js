@@ -82,6 +82,8 @@ export async function preCodingStage({
             styles,
             // Черновик стилей уже на диске — кодер пишет по нему.
             hasStyles: true,
+            // Кода ещё нет: кодер работает по контракту состояний, а не ждёт его.
+            hasCode: false,
         },
     });
 }

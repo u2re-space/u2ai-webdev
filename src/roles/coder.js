@@ -14,6 +14,7 @@ import { INPUTS_IN_CONTEXT } from './inputs.js';
 import { referenceNote } from './reference.js';
 import { CORE, HTML } from './web-development.js';
 import { coderStyleNote } from './style-note.js';
+import { contractNote } from '../stages/contract.js';
 import { DELEGATE_NAMES, delegationNote } from '../agent/delegation.js';
 import { economyTools } from './economy.js';
 import { devToolsMarker, devToolsNote } from './devtools.js';
@@ -137,6 +138,13 @@ are on the disk too, written against that contract. Keep the names of the contra
 stylesheets: a name that changes under the written styles breaks the page. Do not start the code
 over.`
             : '');
+
+    // Контракт вместо ожидания: у кода есть соглашение со стилями, и ждать чужую
+    // работу не нужно — обе стороны пишутся по одному списку.
+    const contract = contractNote('coder', {
+        hasStyles: Boolean(context.hasStyles),
+        hasCode: Boolean(context.hasCode),
+    });
     return `You are the coder of a web project. You write the code of one step, in the files the
 step names, and you make it work.
 
@@ -148,6 +156,7 @@ ${styles}
 ${reference}
 ${repair}
 ${passNote}
+${contract}
 
 Rules:
 ${INPUTS_IN_CONTEXT}

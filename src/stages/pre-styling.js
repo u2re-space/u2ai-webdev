@@ -83,6 +83,10 @@ export async function preStylingStage({
             styles,
             tokens: architecture?.tokens ?? [],
             conflicts: inputs?.conflicts ?? [],
+            // Кода ещё нет: стилест работает по контракту состояний, а не ждёт кода.
+            hasCode: false,
+            // Стилей ещё нет — но их контракт есть, и по нему и пишутся стили.
+            hasStyles: false,
         },
     });
 }

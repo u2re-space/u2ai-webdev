@@ -46,6 +46,7 @@ import { getModelProfile, maxOutputFor, snapEffort } from '../model/profiles.js'
 import { familyOf, rankPath, resolveModelRef } from '../model/refs.js';
 import { houseModelRef } from '../model/trust.js';
 import { stageForRole } from '../stages/roles.js';
+import { isWaiting } from '../stages/contract.js';
 import { pageFrameContractFor } from './page-frame.js';
 import { memoryNote } from './memory-note.js';
 import { PHASES, chunkText, chunksFor } from './chunks.js';
@@ -163,6 +164,42 @@ export const PROMISED_WORK = 'Nothing of the work is on the disk. Your answer na
  * @ai.hint pure
  */
 export const REFUSAL_RECOVERY = 'The work of this step is the ordinary files of the project: reading them, writing them, patching them. That is allowed and expected — there is no permission to ask for and no rule that forbids it. The step is not done until the files of the step are on the disk. Do the work now with your tools: read what you need, write the files the step names, and answer with them. If a part of the step really cannot be done, do the rest and say in the notes of the answer what was left out and why.';
+
+/**
+ * The answer of a role that is waiting for the work of another role.
+ *
+ * This is the old deadlock in a new shape: the coder says it needs the styles, the styler
+ * says it needs the code, and the run stands still. But the two sides have a contract — the
+ * tokens, the names of the classes and the states of the interface — and the contract is
+ * written before either side works. There is nothing to wait for: the other role writes its
+ * part against the same contract, and it will arrive later.
+ *
+ * The role is told this once, and it goes on with the work of its own step.
+ * @type {string}
+ * @exports
+ * @ai.hint pure
+ */
+export const WAITING_ORDER = 'There is nothing to wait for. The work of another role is not written yet, and it will not be written before you finish: the two sides have a contract — the tokens, the names of the classes and the states of the interface — and that contract is what both sides write against. Your part does not depend on the other part being finished. Work against the contract now and write the files of your step. If a part of your step really needs something that is not there, do the rest, say in the notes what was left out and why, and finish the step. A step that ends with a word is better than a step that never ends.';
+
+/**
+ * The words of an answer of a role: the text of the answer and the notes of the schema.
+ *
+ * The detector of the waiting reads the whole answer: a role that waits says so in the
+ * summary, in the notes, or in both.
+ * @param {object} answer
+ * @returns {string}
+ * @ai.hint pure
+ */
+export function wordsOfAnswer(answer) {
+    const data = answer?.data ?? null;
+    const parts = [
+        String(answer?.text ?? ''),
+        String(data?.summary ?? ''),
+        String(data?.notes ?? ''),
+        Array.isArray(data?.files) ? data.files.map((file) => String(file?.content ?? '')).join('\n') : '',
+    ];
+    return parts.filter(Boolean).join('\n');
+}
 
 /**
  * The correction of a role whose files do not compile.
@@ -1067,6 +1104,17 @@ export async function runRole({
                 ), 0);
                 const withoutWork = wantsFiles && writes.length === 0
                     && files.filter((file) => !isEmptyFile(file)).length + rest === 0;
+                // Роль, которая ждёт чужую работу, вместо того чтобы сделать свою, — это
+                // старый тупик в новой форме. Она говорит: «стилей ещё нет» или «код
+                // появится позже». Ждать нечего: у сторон есть контракт, и обе пишутся
+                // по нему.
+                if (withoutWork && isWaiting(wordsOfAnswer(answer)) && turns < limit && workCorrections < 2) {
+                    workCorrections += 1;
+                    correctedWork = true;
+                    items.push({ role: 'user', content: [textPart(`${WAITING_ORDER}${wantedFiles.length ? ` The step names: ${wantedFiles.join(', ')}.` : ''}`)] });
+                    schemaChannel = 'tool';
+                    continue;
+                }
                 if (withoutWork && turns < limit && workCorrections < 2) {
                     const list = wantedFiles.length ? ` The step names: ${wantedFiles.join(', ')}.` : '';
                     workCorrections += 1;
@@ -1150,6 +1198,20 @@ export async function runRole({
             const useful = files.filter((file) => !isEmptyFile(file)).length + rest;
             const promised = Array.isArray(answer?.data?.commands) && answer.data.commands.length > 0;
             const withoutWork = wantsFiles && !wrote && useful === 0;
+            // Роль, которая ждёт чужую работу, вместо того чтобы сделать свою, — это
+            // старый тупик в новой форме. Она говорит: «стилей ещё нет» или «код появится
+            // позже». Ждать нечего: у сторон есть контракт, и обе пишутся по нему.
+            const waiting = withoutWork && isWaiting(wordsOfAnswer(answer));
+            if (waiting && turns < limit && workCorrections < 2) {
+                workCorrections += 1;
+                correctedWork = true;
+                // Роль сказана: ждать нечего, работай по контракту.
+                items.push({ role: 'user', content: [textPart(`${WAITING_ORDER}${wantedFiles.length ? ` The step names: ${wantedFiles.join(', ')}.` : ''}`)] });
+                // Схема уходит в канал инструментов: модель, пришпиленная к ответу JSON,
+                // описывает работу вместо того, чтобы её делать.
+                schemaChannel = 'tool';
+                continue;
+            }
             if (withoutWork && turns < limit && workCorrections < 2) {
                 // The first correction asks, the second one orders and names the tools.
                 const list = wantedFiles.length ? ` The step names: ${wantedFiles.join(', ')}.` : '';

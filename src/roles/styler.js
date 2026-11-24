@@ -15,6 +15,7 @@ import { referenceNote } from './reference.js';
 import { PAGE_FRAME_CONTRACT, pageScaleRules, pageWidthNote } from './page-frame.js';
 import { CORE, CSS } from './web-development.js';
 import { stylerStyleNote } from './style-note.js';
+import { contractNote } from '../stages/contract.js';
 import { DELEGATE_NAMES, delegationNote } from '../agent/delegation.js';
 import { economyTools } from './economy.js';
 import { devToolsMarker, devToolsNote } from './devtools.js';
@@ -153,6 +154,13 @@ or the code, add the rules the code needs, tune the spacing, the contrast and th
 the tokens and the names of the contract: the code is written against them, and a name that changes
 under the written code breaks the page. Do not start the styles over.`
             : '');
+
+    // Контракт вместо ожидания: у стилей есть соглашение с кодом, и ждать чужую
+    // работу не нужно — обе стороны пишутся по одному списку.
+    const contract = contractNote('styler', {
+        hasStyles: Boolean(context.hasStyles),
+        hasCode: Boolean(context.hasCode),
+    });
     return `You are the styler of a web project. You write the CSS (or SCSS) of one step and you make the result look the way the design direction says.
 
 ${task}
@@ -165,6 +173,7 @@ ${reference}
 ${width}
 ${repair}
 ${passNote}
+${contract}
 
 ## The rules of the work:
 

@@ -184,6 +184,31 @@ the user. Lower it to `contractQuality: 50` and the contract works at the ordina
 A plan that asks for another order is told: the order of the phases is stronger than the
 plan, and the run says which edge of the plan it dropped.
 
+### Nothing to wait for
+
+The old deadlock: the coder needed the styles to know the class names, the styler needed the
+code to know the states, and the run stood still. The phases fix the order — but an order
+alone does not help if the role, inside its own phase, decides that it is missing something.
+
+So the two sides have a **contract** instead of a dependency: the tokens, the names of the
+classes, the states of the interface and the data that flows between the modules. The
+contract is written before either side works, both sides know it in advance, and each one
+writes against it — whether or not the other side's full work is on the disk yet.
+
+The rule reaches the role in two places: in its instructions, and in every turn of the
+request. It says, in plain words, that there is nothing to wait for, and that a step which
+ends with a word is better than a step that never ends.
+
+And the run watches: a role that says it is waiting — "the styles are not written yet, I
+will wait for them" — is told once to work against the contract, and the step says so in
+its warnings. The words are matched narrowly: "missing" or "later" on their own mean
+nothing, and only an explicit wait is one.
+
+The phases of the contract are not fatal. If `pre-styling` fails, the run does not stop:
+the next phase writes against the contract anyway — from the brief of the architect, from
+the markup, from the names that are already on the disk. Stopping there would stop the run
+exactly where it stood before: with a role waiting for another role.
+
 A page with a state — an app, a PWA, a router — used to be the exception: it was drawn by
 the scripts, so without them the screen was empty, and the code was moved before the
 styles. That exception is gone. It was the very reason the coder stood still: it wrote
