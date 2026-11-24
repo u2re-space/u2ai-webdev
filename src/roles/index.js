@@ -824,6 +824,9 @@ export async function runRole({
         resolveRole: (name) => resolveRole(name, config, { stage: roleStage }),
         // The tools are the tools of this process: the sub-agent asks, this process runs.
         tools,
+        // The picture of the reference travels with the work: the sub-agent looks at the
+        // same target the caller looked at.
+        parts,
         // The instructions of the inherited role: the sub-agent speaks them as they are.
         // They are built when the role is known — the model names it in the call.
         instructionsFor: async (name) => await buildInstructions({

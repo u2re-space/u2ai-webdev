@@ -387,6 +387,9 @@ export function createSubagentSpawner({
                     memory: textOf(context?.memory),
                     skills: Array.isArray(context?.skills) ? context.skills : [],
                     notes: textOf(context?.notes),
+                    // The picture of the reference travels with the work: the sub-agent
+                    // looks at the same target the caller looked at.
+                    parts: Array.isArray(parts) ? parts : [],
                 },
             },
             signal,
