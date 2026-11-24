@@ -2,7 +2,7 @@
  * @file src/model/profiles.js
  * @module model/profiles
  * @purpose Model profiles: context window, max output, effort ceiling and effort ladder.
- * @exports MODEL_PROFILES, getModelProfile, snapEffort, contextBytes, maxOutputFor
+ * @exports MODEL_PROFILES, getModelProfile, snapEffort, contextBytes, maxOutputFor, writeBudgetFor
  * @ai.tags model, profiles
  * @ai.hint pure
  */
@@ -161,4 +161,40 @@ export function maxOutputFor(model, config = null, requested = null, { readOnly 
         : (profile.maxOutput > 0 ? profile.maxOutput : null);
     if (readOnly && cap !== null) return Math.max(1, Math.floor(cap / 4));
     return cap;
+}
+
+/** The lower bound of the estimate of the write: the half of the write cap. */
+const WRITE_ESTIMATE_FLOOR = 0.5;
+
+/**
+ * The output budget of the write turn, from the estimate the model gave at the gate.
+ *
+ * The gate may say how big the write of the step is expected to be, in output tokens. The
+ * estimate is a wish, not a fact: the budget it earns is clamped into the band between the
+ * half of the write cap and the write cap itself — the write must always be able to finish,
+ * and a model that asked for the whole budget gets it.
+ *
+ * A missing estimate, an estimate that is not a number, and an estimate that is not positive
+ * all mean the same thing: the model did not say how big the work is, so the write turn gets
+ * the whole cap. A model that says "0" or "-5" is saying "I do not know", not "write nothing".
+ *
+ * @param {string|null} model the model of the turn
+ * @param {object|null} [config] the config of the run
+ * @param {number|null} [requested] the cap the config asks for
+ * @param {unknown} [estimate] the estimate the model gave at the gate
+ * @returns {number|null} the budget of the write turn
+ * @exports
+ * @ai.hint pure
+ */
+export function writeBudgetFor(model, config = null, requested = null, estimate = null) {
+    const cap = maxOutputFor(model, config, requested);
+    if (cap === null) return null;
+    // A fraction is rounded up: the estimate is a wish, and the round must not cut it.
+    const wanted = Math.ceil(Number(estimate));
+    // No estimate, a broken one, or one that is not positive: the whole cap.
+    if (!Number.isFinite(wanted) || wanted <= 0) return cap;
+    // The estimate is clamped into the band: the half of the cap at the bottom, the cap at
+    // the top.
+    const floor = Math.ceil(cap * WRITE_ESTIMATE_FLOOR);
+    return Math.min(Math.max(wanted, floor), cap);
 }

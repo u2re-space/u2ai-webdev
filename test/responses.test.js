@@ -11,7 +11,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { buildResponsesBody, parseResponse, extractToolCalls } from '../src/openai/responses.js';
-import { getModelProfile, maxOutputFor, MODEL_PROFILES, snapEffort } from '../src/model/profiles.js';
+import { getModelProfile, maxOutputFor, writeBudgetFor, MODEL_PROFILES, snapEffort } from '../src/model/profiles.js';
 import { fallbackChain } from '../src/openai/fallback.js';
 import { defaults } from '../src/config/defaults.js';
 
@@ -167,6 +167,32 @@ test('read-only requests use one quarter of the model output cap', () => {
     assert.equal(maxOutputFor('google/gemini-4-hydrogen'), 65_536, 'write-ups keep the full cap');
     assert.equal(maxOutputFor('google/gemini-4-hydrogen', null, 48_000), 48_000);
     assert.equal(maxOutputFor('google/gemini-4-hydrogen', null, 16, { readOnly: true }), 4);
+});
+
+test('the estimate of the write sizes the budget of the write turn', () => {
+    const model = 'google/gemini-4-hydrogen';
+    const cap = 65_536;
+    // No estimate at all: the whole cap.
+    assert.equal(writeBudgetFor(model, null, null, null), cap);
+    assert.equal(writeBudgetFor(model, null, null, undefined), cap);
+    // An estimate inside the band is taken as it is.
+    assert.equal(writeBudgetFor(model, null, null, 40_000), 40_000);
+    // An estimate below the half of the cap is raised to the half.
+    assert.equal(writeBudgetFor(model, null, null, 1_000), Math.ceil(cap / 2));
+    assert.equal(writeBudgetFor(model, null, null, Math.ceil(cap / 2) - 1), Math.ceil(cap / 2));
+    // An estimate above the cap is pulled down to the cap.
+    assert.equal(writeBudgetFor(model, null, null, 10_000_000), cap);
+    // A broken estimate is no estimate.
+    assert.equal(writeBudgetFor(model, null, null, 'a lot'), cap);
+    assert.equal(writeBudgetFor(model, null, null, Number.NaN), cap);
+    assert.equal(writeBudgetFor(model, null, null, Infinity), cap);
+    // A zero or a negative estimate means "I do not know", not "write nothing".
+    assert.equal(writeBudgetFor(model, null, null, 0), cap);
+    assert.equal(writeBudgetFor(model, null, null, -5), cap);
+    // A fraction is rounded up before the clamp.
+    assert.equal(writeBudgetFor(model, null, null, 40_000.5), 40_001);
+    // The cap of the config wins over the cap of the model.
+    assert.equal(writeBudgetFor(model, null, 32_000, 40_000), 32_000);
 });
 
 test('the Gemini is the alternative to the Kimi and the Kimi is the fallback', () => {

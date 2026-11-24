@@ -905,6 +905,19 @@ The writes of the turn of the gate wait for the next turn — that turn is the t
 inspection, and its budget is the reduced one — and the answer says so instead of blaming the
 model.
 
+The gate may also carry an estimate: `write_ready` takes an optional `outputTokens` — how many
+output tokens the write of the step is expected to take. The estimate sizes the budget of the
+write turn, and the run clamps it into the band between the half of the write cap and the write
+cap itself. A missing estimate, an estimate that is not a number, and an estimate that is not
+positive all mean the same thing: the model did not say how big the work is, so the write turn
+gets the whole cap. A model that says `0` or `-5` is saying "I do not know", not "write
+nothing" — it gets the whole cap too, and never nothing.
+
+The estimate is a wish, not a fact, and the clamp is what makes it safe to take: a model that
+underestimates cannot starve its own write, and a model that overestimates cannot buy more than
+the cap. The answer turn and the polish of what is already on the disk keep the full cap — the
+answer is not the write.
+
 ### The writing of several files
 
 A step often owns more than one file, and a role writes them in one turn: several `write_file`

@@ -477,6 +477,17 @@ export function createRenderer({
             }
             else if (type === 'role.tool') { flushThought(); this.tool(event.name, event.arguments ?? null); }
             else if (type === 'role.tool.result') { flushThought(); this.toolResult(event); }
+            else if (type === 'role.write_ready') {
+                // The gate opened: the run shows how much the write of the step will get,
+                // so the economy of the run is visible and not a guess.
+                flushThought();
+                const budget = Number(event.maxOutputTokens ?? 0);
+                const estimate = Number(event.outputTokens ?? 0);
+                if (json) { emit('role.write_ready', { role: event.role ?? '', turn: event.turn ?? null, outputTokens: estimate || null, maxOutputTokens: budget || null }); return; }
+                if (!budget) return;
+                const detail = estimate ? `оценка ${estimate} → ${budget}` : `весь потолок ${budget}`;
+                err(`${paint.dim(`${symbols.info} ворота записи: ${detail} токенов`)}`);
+            }
             else if (type === 'reasoning.delta') {
                 // The thinking of the model, while it thinks: the stage is alive, and the
                 // silence of the terminal is not the hang of the run. The pieces are

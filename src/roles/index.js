@@ -42,7 +42,7 @@ import { createToolset } from '../agent/tools.js';
 import { toolSpecs as buildToolSpecs } from '../agent/tool-specs.js';
 import { createSubagentSpawner, subagentGateNote } from '../agent/subagent.js';
 import { effortFor } from '../agent/pace.js';
-import { getModelProfile, maxOutputFor, snapEffort } from '../model/profiles.js';
+import { getModelProfile, maxOutputFor, snapEffort, writeBudgetFor } from '../model/profiles.js';
 import { familyOf, rankPath, resolveModelRef } from '../model/refs.js';
 import { houseModelRef } from '../model/trust.js';
 import { stageForRole } from '../stages/roles.js';
@@ -308,8 +308,18 @@ export function readOnlyOperation({ schema = null, tools = [], outputMode = null
 const WRITE_READY_TOOL = Object.freeze({
     type: 'function',
     name: 'write_ready',
-    description: 'INTERNAL WRITE GATE — not delegation. Call this exact tool name after the inspection to unlock your own file-writing tools on the next turn. It writes no files and starts no other role. Then write the files named by your step with write_file — every file of the step may be written in that one turn, several write_file calls together.',
-    parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+    description: 'INTERNAL WRITE GATE — not delegation. Call this exact tool name after the inspection to unlock your own file-writing tools on the next turn. It writes no files and starts no other role. Then write the files named by your step with write_file — every file of the step may be written in that one turn, several write_file calls together. You may name `outputTokens`: how many output tokens the write of the step is expected to take. It sizes the budget of the write turn — the run clamps it, so an honest guess costs you nothing and a wild one buys you nothing.',
+    parameters: {
+        type: 'object',
+        properties: {
+            outputTokens: {
+                type: 'integer',
+                description: 'Your estimate of the size of the write of this step, in output tokens. How many tokens the files of the step will take to write. Leave it out if you do not know: the write turn then gets the whole budget.',
+            },
+        },
+        required: [],
+        additionalProperties: false,
+    },
 });
 
 /**
@@ -783,7 +793,7 @@ export async function runRole({
     const hasActionTools = Boolean(requireFiles) && key !== 'reviewer' && readSpecs.length < specs.length;
     const preWriteSpecs = [...readSpecs, ...(hasActionTools ? [WRITE_READY_TOOL] : [])];
     if (hasActionTools) {
-        instructions += '\n\nBefore writing files or using any action-capable tool, call `write_ready` first. Until then, only the read tools are available. After `write_ready`, the next turn has the full output budget and all the writing tools: write every file of the step there — several `write_file` calls in one turn are allowed and are the cheapest way.';
+        instructions += '\n\nBefore writing files or using any action-capable tool, call `write_ready` first. Until then, only the read tools are available. After `write_ready`, the next turn has the writing tools and the output budget: write every file of the step there — several `write_file` calls in one turn are allowed and are the cheapest way. In `write_ready` you may name `outputTokens`: your estimate of how many output tokens the write of the step will take. It sizes the budget of the write turn — the run clamps it between the half of the budget and the whole budget, so an honest guess costs you nothing. If you do not know the size, leave the field out: the write turn then gets the whole budget.';
     }
     // The instructions come in parts, and every part has its own moment. The rules of
     // reading belong to the beginning of the work; the craft of the files of the step
@@ -866,6 +876,11 @@ export async function runRole({
     let schemaChannel = forcedChannel ?? null;
     let withSchema = true;
     let writeReady = false;
+    // The estimate of the size of the write that the model gave at the gate: it sizes the
+    // budget of the write turn, and it is null when the model said nothing.
+    let writeEstimate = null;
+    // The budget of the write turn that the estimate earned.
+    let writeBudget = null;
     let writeCraftSent = false;
     let doneSent = false;
     let refusalRecovered = false;
@@ -971,6 +986,15 @@ export async function runRole({
         // while it polishes what is on the disk. The last request of the role — the answer
         // alone — is a polish too.
         modelFor(phase);
+        // The budget of the turn. The inspection turn has the reduced one. The write turn
+        // has the budget the model asked for at the gate: its own estimate of the size of
+        // the write, clamped by the run. The answer turn and the polish of what is already
+        // on the disk have the full one — the answer is not the write.
+        const writing = writeReady && hasActionTools && !fullOutput
+            && phase === 'work' && boundedTools.length > 0;
+        const maxOutputTokens = writing
+            ? writeBudgetFor(currentModel, config, definition.maxOutputTokens, writeEstimate)
+            : maxOutputFor(currentModel, config, definition.maxOutputTokens, { readOnly: reduced });
         const raw = await client.responses.create({
             model: currentModel,
             instructions,
@@ -982,7 +1006,7 @@ export async function runRole({
             effort: currentEffort,
             summary: definition.summary,
             temperature: definition.temperature,
-            maxOutputTokens: maxOutputFor(currentModel, config, definition.maxOutputTokens, { readOnly: reduced }),
+            maxOutputTokens,
             verbosity: config?.verbosity ?? (reduced ? 'low' : null),
             // Several calls in one turn are allowed: a step that writes several files writes
             // them in one turn, and not one turn per file.
@@ -1164,7 +1188,7 @@ export async function runRole({
                 answer = { ...parsed, data: null, schemaProblems: [] };
             }
             if (hasActionTools && wantsFiles && workCorrections > 0 && !writeReady && turns < limit && !answer.data
-                && !items.some((item) => item.type === 'function_call_output' && item.output === 'Write-ready. The next turn has the full output budget and the remaining tools.')) {
+                && !items.some((item) => item.type === 'function_call_output' && String(item.output ?? '').startsWith('Write-ready.'))) {
                 const list = wantedFiles.length ? ` The step names: ${wantedFiles.join(', ')}.` : '';
                 // The role has to write again: the head of the ladder answers this turn.
                 phase = 'work';
@@ -1273,8 +1297,23 @@ export async function runRole({
                 // gate that opens only alone makes the model repeat the same turn until the
                 // turns run out.
                 writeReady = true;
-                output = 'Write-ready. The next turn has the full output budget and the remaining tools: write every file of the step there, several calls in one turn.';
-                notify({ type: 'role.write_ready', role: key, turn: turns });
+                // The estimate of the size of the write: the model may say how many output
+                // tokens the write of the step will take. A broken estimate and an estimate
+                // that is not positive are no estimate: the write turn then gets the whole
+                // budget, and the model is told so.
+                const estimate = Number(call.arguments?.outputTokens);
+                writeEstimate = Number.isFinite(estimate) && estimate > 0 ? estimate : null;
+                writeBudget = writeBudgetFor(currentModel, config, definition.maxOutputTokens, writeEstimate);
+                output = writeEstimate === null
+                    ? 'Write-ready. The next turn has the full output budget and the remaining tools: write every file of the step there, several calls in one turn.'
+                    : `Write-ready. The next turn has the output budget of ${writeBudget} tokens for the write, and the remaining tools: write every file of the step there, several calls in one turn.`;
+                notify({
+                    type: 'role.write_ready',
+                    role: key,
+                    turn: turns,
+                    outputTokens: writeEstimate,
+                    maxOutputTokens: writeBudget,
+                });
             } else if (call.parseError) {
                 // Invalid arguments are reported as such even if the tool was not yet enabled.
                 output = `The tool failed: the arguments of the call are not a JSON object (${call.parseError}). Call the tool again with valid JSON.`;
@@ -1283,7 +1322,7 @@ export async function runRole({
                 // inspection, and its budget is the reduced one.
                 output = writeReady
                     ? 'The write gate is open, but this turn was the turn of the inspection and its budget is the reduced one. Write the file in the next turn: every file of the step may be written there, several calls in one turn.'
-                    : 'The tool was not run: the write gate is closed. Call `write_ready` first — alone or together with your reads — and write the files in the next turn, where the full output budget is.';
+                    : 'The tool was not run: the write gate is closed. Call `write_ready` first — alone or together with your reads — and write the files in the next turn, where the writing budget is.';
             } else if (call.name === 'ask_user' && !inputChannel?.interactive) {
                 output = 'No interactive operator is available. Make a reasonable assumption, continue, and state it in your final answer.';
             } else if (call.name === WRITE_READY_TOOL.name && readyAtTurnStart) {

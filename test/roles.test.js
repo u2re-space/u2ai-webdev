@@ -1047,6 +1047,87 @@ test('write_ready is documented as the write gate, not as a hand-off', () => {
     assert.match(handoff.description, /Never hand over files listed in your current step/);
 });
 
+test('the estimate of the gate sizes the budget of the write turn', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-write-estimate-'));
+    const home = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-home-'));
+    const env = { HOME: home, USERPROFILE: home };
+
+    const api = await mockApi([
+        // The model says how big the write of the step is expected to be.
+        toolAnswer('write_ready', { outputTokens: 40_000 }),
+        toolAnswer('write_file', { path: 'index.html', content: '<h1>Привет</h1>' }),
+        schemaAnswer('code', codeData()),
+    ]);
+
+    try {
+        const config = structuredClone(defaults);
+        config.model = 'google/gemini-4-hydrogen';
+        config.backends = [{ baseURL: api.url, apiKey: 'test-key' }];
+        config.reasoning.effort = 'low';
+        const client = await createClient({ config, env });
+
+        const events = [];
+        const answer = await runRole({
+            client,
+            config,
+            role: 'coder',
+            input: 'Make the page.',
+            context: { task: 'Make the page.' },
+            root,
+            env,
+            notify: (event) => events.push(event),
+            requireFiles: true,
+        });
+
+        assert.equal(answer.stopped, 'completed');
+        // The inspection turn keeps the reduced budget.
+        assert.equal(api.requests[0].max_output_tokens, 16_384);
+        // The write turn takes the budget of the estimate.
+        assert.equal(api.requests[1].max_output_tokens, 40_000);
+        // The gate says what the budget of the next turn is.
+        const ready = events.find((event) => event.type === 'role.write_ready');
+        assert.equal(ready.outputTokens, 40_000);
+    } finally {
+        api.close();
+    }
+});
+
+test('a gate without an estimate keeps the whole budget of the write turn', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-write-estimate-none-'));
+    const home = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-home-'));
+    const env = { HOME: home, USERPROFILE: home };
+
+    const api = await mockApi([
+        toolAnswer('write_ready', {}),
+        toolAnswer('write_file', { path: 'index.html', content: '<h1>Привет</h1>' }),
+        schemaAnswer('code', codeData()),
+    ]);
+
+    try {
+        const config = structuredClone(defaults);
+        config.model = 'google/gemini-4-hydrogen';
+        config.backends = [{ baseURL: api.url, apiKey: 'test-key' }];
+        config.reasoning.effort = 'low';
+        const client = await createClient({ config, env });
+
+        await runRole({
+            client,
+            config,
+            role: 'coder',
+            input: 'Make the page.',
+            context: { task: 'Make the page.' },
+            root,
+            env,
+            requireFiles: true,
+        });
+
+        // No estimate, no guess: the whole cap of the write turn.
+        assert.equal(api.requests[1].max_output_tokens, 65_536);
+    } finally {
+        api.close();
+    }
+});
+
 test('a role that writes a summary keeps the full output budget', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-readonly-budget-'));
     const home = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-home-'));
