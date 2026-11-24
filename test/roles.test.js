@@ -191,7 +191,7 @@ test('the effort of a role comes from the profile of the stages', () => {
     // The styles carry the look of the reference: they get the deepest reasoning; the scripts
     // and the mechanical work get the cheapest one. The planner and the architect stay in
     // between: they decide, but they do not build.
-    assert.equal(resolveRole('styler', config).effort, 'xhigh');
+    assert.equal(resolveRole('styler', config).effort, 'high');
     assert.equal(resolveRole('coder', config).effort, 'high');
     assert.equal(resolveRole('planner', config).effort, 'high');
     assert.equal(resolveRole('architect', config).effort, 'high');

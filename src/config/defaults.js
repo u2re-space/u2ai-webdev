@@ -27,7 +27,7 @@ export const STAGE_EFFORT = Object.freeze({
     director: 'high',
     coder: 'high',
     markup: 'xhigh',
-    styler: 'xhigh',
+    styler: 'high',
     animator: 'high',
     illustrator: 'high',
     iconifier: 'high',
@@ -40,10 +40,10 @@ export const STAGE_EFFORT = Object.freeze({
     // работа: токены, имена классов, состояния. Ошибка в них стоит дороже, чем
     // ошибка в самой работе, поэтому контракт пишется с самой глубокой планкой, а
     // полная работа — с обычной для своего вида.
-    'pre-styling': 'xhigh',
-    'pre-coding': 'xhigh',
-    styling: 'high',
-    coding: 'high',
+    'pre-styling': 'high',
+    'pre-coding': 'high',
+    styling: 'xhigh',
+    coding: 'xhigh',
 });
 
 /**

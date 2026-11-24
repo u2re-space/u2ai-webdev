@@ -92,7 +92,7 @@ test('the effort of the markup is pulled down to what the Kimi takes', () => {
     // seconds there.
     assert.equal(resolveRole('markup', config).effort, 'xhigh');
     // The styles stay on the model of the run and keep the deepest reasoning.
-    assert.equal(resolveRole('styler', config).effort, 'xhigh');
+    assert.equal(resolveRole('styler', config).effort, 'high');
 });
 
 test('the pin of the default role moves the roles without a model of their own', () => {
