@@ -769,8 +769,7 @@ test('the styles of a project without a plan keep the name of the house', () => 
     assert.equal(architecture.styles.from, 'house');
 });
 
-test('the stage of the architecture asks the architect and writes the file', async () => {
-    const root = await makeProject();
+test('the stage of the architecture asks the architect and writes the file', async () => {    const root = await makeProject();
     const client = fakeClient([schemaAnswer('architecture', {
         summary: 'One module.',
         stack: { framework: 'vanilla', markup: 'html', style: 'scss', script: 'javascript', iconSet: 'auto' },
@@ -791,6 +790,31 @@ test('the stage of the architecture asks the architect and writes the file', asy
     assert.equal(result.ok, true);
     assert.match(result.file, /architecture\.json$/);
     assert.match(result.brief, /# The architecture of the project/);
+});
+
+test('a stage without the structure of the project says why', async () => {
+    const root = await makeProject();
+    // The host did not answer: the error of the role is an object, and the stage reads it.
+    const client = fakeClient([{
+        id: 'resp-1',
+        status: 'failed',
+        error: { message: 'The host refused the request', status: 503, code: 'API_ERROR' },
+    }]);
+
+    const result = await architectStage({
+        client,
+        config: { output: { work: './.tmp' } },
+        root,
+        task: 'Make a landing.',
+        plan: normalizePlan({ steps: [{ id: 'a', title: 'One' }] }),
+        runId: 'run-2',
+    });
+
+    assert.equal(result.ok, false);
+    // The warning names the reason: "the host did not answer (HTTP 503): ..." — not silence.
+    assert.match(result.warnings[0], /хост не ответил/);
+    assert.match(result.warnings[0], /503/);
+    assert.match(result.warnings[0], /The host refused the request/);
 });
 
 test('the package manager is read from the lock file', async () => {

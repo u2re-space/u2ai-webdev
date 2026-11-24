@@ -94,7 +94,7 @@ export const STAGES = Object.freeze([
         dependsOn: ['collect'],
         run: scanStage,
         args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
-        apply: (ctx, result) => { ctx.scan = result?.scan ?? null; },
+        apply: (ctx, result) => { ctx.scan = result?.scan ?? ctx.scan ?? null; },
     },
     {
         name: 'plan',
@@ -102,7 +102,9 @@ export const STAGES = Object.freeze([
         dependsOn: ['collect'],
         run: planStage,
         args: (ctx) => ({ input: ctx.input ?? null }),
-        apply: (ctx, result) => { ctx.plan = result?.plan ?? null; },
+        // The plan that is there stays: a continued run reads it back, and a stage that
+        // ran once is not asked to plan again.
+        apply: (ctx, result) => { ctx.plan = result?.plan ?? ctx.plan ?? null; },
     },
     {
         name: 'architect',
@@ -110,7 +112,9 @@ export const STAGES = Object.freeze([
         dependsOn: ['plan'],
         run: architectStage,
         args: (ctx) => ({ input: ctx.input ?? null }),
-        apply: (ctx, result) => { ctx.architecture = result?.architecture ?? null; },
+        // The structure that is there stays: a stage that failed once but wrote its work
+        // is not asked to write it again when the run continues.
+        apply: (ctx, result) => { ctx.architecture = result?.architecture ?? ctx.architecture ?? null; },
     },
     {
         name: 'setup',

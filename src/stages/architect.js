@@ -20,7 +20,7 @@
  * @changed 2026-11-13 Ported from the monolith: the architecture is a file of the run.
  */
 
-import { runRole } from '../roles/index.js';
+import { runRole, roleReason } from '../roles/index.js';
 import { inputContext } from '../inputs/index.js';
 import { readReferences } from '../inputs/references.js';
 import { ENUMS } from '../config/constants.js';
@@ -263,8 +263,7 @@ export async function readArchitecture(root, config = {}, id = null) {
  * @exports
  * @ai.hint io
  */
-export async function architectStage({
-    client,
+export async function architectStage({    client,
     config = {},
     root = process.cwd(),
     task = '',
@@ -323,7 +322,10 @@ export async function architectStage({
             architecture: null,
             brief: '',
             file: null,
-            warnings: ['Архитектор не вернул структуру проекта.'],
+            // The stage says why the structure is not there: the reason of the role —
+            // a refusal, a host that did not answer, or an answer without data — is the
+            // only thing a reader of the progress can act on.
+            warnings: [`Архитектор не вернул структуру проекта (${roleReason(result)}).`],
             turns: result.turns,
             usage: result.usage,
             runId: run,

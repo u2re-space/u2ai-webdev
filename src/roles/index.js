@@ -1091,6 +1091,14 @@ export async function runRole({
         }
 
         if (!work.length) {
+            // The host answered with an error (a status of 'failed' with the reason in the
+            // body): asking again right away burns the turns on a host that is dead, and
+            // the empty retry would erase the reason. The role stops here and says why.
+            if (parsed.error && !parsed.data && !parsed.toolCalls.length) {
+                answer = parsed;
+                stopped = 'failed';
+                break;
+            }
             if (deferredSteering.length && turns < limit) {
                 const pendingText = items.map((item) => item.content?.map?.((part) => part.text ?? '').join('\n') ?? '').join('\n');
                 items[items.length - 1] = { role: 'user', content: [textPart(`${pendingText}\n\n## Operator steering for this turn\n${deferredSteering.map((line) => `- ${line}`).join('\n')}`)] };
@@ -1493,7 +1501,9 @@ export async function runRole({
     const answerText = String(answer?.text ?? '').trim()
         || (answer?.data ? JSON.stringify(answer.data).slice(0, 2000) : '');
     if (answerText) await runContext?.answer?.(answerText, { role: key, stage });
-    if (answer?.error) await runContext?.note?.(String(answer.error), { role: key, stage });
+    // The error of the role is an object ({ message, status, code }) when the host failed:
+    // String(object) is '[object Object]', and the reason is lost. roleReason reads it.
+    if (answer?.error) await runContext?.note?.(roleReason({ error: answer.error, refusal: answer.refusal, text: answer.text }), { role: key, stage });
 
     return {
         role: key,

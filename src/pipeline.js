@@ -154,6 +154,10 @@ export function pipelineFiles(result = {}) {
 function reportOf(result = {}) {
     const text = String(result?.text ?? result?.summary ?? '').trim();
     if (text) return text;
+    // The warnings of a stage that failed are its reason: a stage that says what went
+    // wrong is read, and a stage that says nothing is guessed at.
+    const warnings = Array.isArray(result?.warnings) ? result.warnings.filter(Boolean) : [];
+    if (warnings.length) return warnings.join('\n');
     const steps = Array.isArray(result?.steps) ? result.steps : [];
     return steps.map((step) => `${step?.step?.id ?? 'step'}: ${step?.summary ?? ''}`).join('\n');
 }
