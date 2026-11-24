@@ -977,7 +977,7 @@ export async function runStepStage({
         ? own
         : (Number.isSafeInteger(config?.limits?.stageTimeoutMs) ? config.limits.stageTimeoutMs : 0);
     const budget = base > 0 ? base * Math.min(Math.max(steps.length, 1), 3) : 0;
-    const turnTimeoutMs = turnLimit ?? (budget > 0 ? Math.max(60_000, Math.round(budget / 4)) : null);
+    const turnTimeoutMs = turnLimit ?? (budget > 0 ? Math.max(60_000, Math.round(budget / 8)) : null);
 
     if (!steps.length) {
         // The plan is the work: a stage whose role has no step has nothing to do. It is

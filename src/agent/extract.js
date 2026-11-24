@@ -96,7 +96,7 @@ export async function extractFragment({ root, file, startLine = null, endLine = 
         const slice = sliceLines(body, startLine, endLine);
         text = `# ${rel} — строки ${slice.from}-${slice.to} из ${slice.total}\n${slice.text}`;
     }
-    const clipped = Buffer.byteLength(text) > maxBytes ? `${text.slice(0, Math.floor(maxBytes / 4))}\n…фрагмент усечён` : text;
+    const clipped = Buffer.byteLength(text) > maxBytes ? `${text.slice(0, Math.floor(maxBytes / 8))}\n…фрагмент усечён` : text;
     return { rel, text: clipped, bytes: Buffer.byteLength(clipped) };
 }
 

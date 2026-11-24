@@ -869,7 +869,7 @@ test('a role that answers with the schema and writes nothing is told to work, an
         assert.equal(api.requests[0].text?.format, undefined);
         assert.ok(api.requests[0].tools.some((tool) => tool.name === 'write_ready'));
         assert.equal(api.requests[1].text?.format, undefined, 'the second request has no JSON format');
-        assert.equal(api.requests[1].max_output_tokens, 131_072);
+        assert.equal(api.requests[1].max_output_tokens, 655_36);
         assert.equal(api.requests[2].max_output_tokens, 524_288);
         assert.equal(api.requests[3].max_output_tokens, 524_288);
         // The correction names the file of the step.
@@ -1026,7 +1026,7 @@ test('write_ready is private to the role loop and is not executed as a project t
 
         assert.equal(executed.length, 0, 'write is rejected before ready');
         assert.ok(!answer.toolCalls.some((call) => call.name === 'write_ready'));
-        assert.equal(api.requests[0].max_output_tokens, 16384);
+        assert.equal(api.requests[0].max_output_tokens, 8192);
         assert.equal(api.requests[0].tools.some((tool) => tool.name === 'write_file'), false);
         assert.equal(api.requests[0].tools.some((tool) => tool.name === 'write_ready'), true);
     } finally {
@@ -1081,9 +1081,9 @@ test('the estimate of the gate sizes the budget of the write turn', async () => 
 
         assert.equal(answer.stopped, 'completed');
         // The inspection turn keeps the reduced budget.
-        assert.equal(api.requests[0].max_output_tokens, 16_384);
+        assert.equal(api.requests[0].max_output_tokens, 8192);
         // The write turn takes the budget of the estimate.
-        assert.equal(api.requests[1].max_output_tokens, 40_000);
+        assert.equal(api.requests[1].max_output_tokens, 51_200);
         // The gate says what the budget of the next turn is.
         const ready = events.find((event) => event.type === 'role.write_ready');
         assert.equal(ready.outputTokens, 40_000);
@@ -1261,7 +1261,7 @@ test('the loop of a role runs the tools and returns the answer', async () => {
         const call = events.find((event) => event.type === 'role.tool' && event.name === 'write_file');
         assert.equal(call.arguments.path, 'index.html');
         assert.ok(call.arguments.content.length <= 200);
-        assert.equal(api.requests[0].max_output_tokens, 16384, 'the inspection/ready turn uses a quarter cap');
+        assert.equal(api.requests[0].max_output_tokens, 8192, 'the inspection/ready turn uses a quarter cap');
         assert.equal(api.requests[0].text?.verbosity, 'low');
         assert.equal(api.requests[1].max_output_tokens, 65536, 'the write turn restores the full cap');
         assert.equal(api.requests[1].text?.verbosity, undefined);

@@ -655,7 +655,7 @@ export async function runPipeline({
         // The limit of one turn: a part of the budget of the stage. A host that says nothing
         // longer than that loses the turn, and the stage says which turn it was — instead of
         // the whole stage standing still until the budget is over.
-        ctx.turnTimeoutMs = budget > 0 ? Math.max(60_000, Math.round(budget / 4)) : null;
+        ctx.turnTimeoutMs = budget > 0 ? Math.max(60_000, Math.round(budget / 8)) : null;
         let result = null;
         try {
             const args = typeof stage.args === 'function' ? { ...ctx, ...stage.args(ctx) } : ctx;

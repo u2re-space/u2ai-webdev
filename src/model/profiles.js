@@ -159,12 +159,12 @@ export function maxOutputFor(model, config = null, requested = null, { readOnly 
     const cap = Number.isSafeInteger(requested) && requested > 0
         ? (profile.maxOutput > 0 ? Math.min(requested, profile.maxOutput) : requested)
         : (profile.maxOutput > 0 ? profile.maxOutput : null);
-    if (readOnly && cap !== null) return Math.max(1, Math.floor(cap / 4));
+    if (readOnly && cap !== null) return Math.max(4, Math.floor(cap / 8));
     return cap;
 }
 
 /** The lower bound of the estimate of the write: the half of the write cap. */
-const WRITE_ESTIMATE_FLOOR = 0.5;
+const WRITE_ESTIMATE_FLOOR = 0.25;
 
 /**
  * The output budget of the write turn, from the estimate the model gave at the gate.
@@ -190,7 +190,7 @@ export function writeBudgetFor(model, config = null, requested = null, estimate 
     const cap = maxOutputFor(model, config, requested);
     if (cap === null) return null;
     // A fraction is rounded up: the estimate is a wish, and the round must not cut it.
-    const wanted = Math.ceil(Number(estimate));
+    const wanted = Math.ceil(Math.sqrt(Number(estimate) / cap) * cap);
     // No estimate, a broken one, or one that is not positive: the whole cap.
     if (!Number.isFinite(wanted) || wanted <= 0) return cap;
     // The estimate is clamped into the band: the half of the cap at the bottom, the cap at
