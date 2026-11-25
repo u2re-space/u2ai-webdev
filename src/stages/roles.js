@@ -59,9 +59,9 @@ export const LIVE_ROLES = Object.freeze({
     coder: 'write',
     styler: 'write',
     animator: 'write',
-    editor: 'vector',
+    // Роль, что делает графику: рисует вектор, режет вырезки и кладёт картинки на места.
+    artist: 'graphics',
     iconifier: 'iconify',
-    illustrator: 'assets',
     // Роль, которая пишет всё: разметку, стили, код и движение. Её шаг — любой шаг
     // плана, кроме тех, что принадлежат другой роли.
     builder: 'write',
@@ -81,9 +81,8 @@ export const ROLE_STAGES = Object.freeze({
     styler: Object.freeze(['write']),
     animator: Object.freeze(['write']),
     builder: Object.freeze(['write']),
-    editor: Object.freeze(['vector']),
+    artist: Object.freeze(['graphics']),
     iconifier: Object.freeze(['iconify']),
-    illustrator: Object.freeze(['assets']),
 });
 
 /**
@@ -127,7 +126,7 @@ const ROLE_BY_EXTENSION = Object.freeze({
     '.scss': 'styler',
     '.sass': 'styler',
     '.less': 'styler',
-    '.svg': 'editor',
+    '.svg': 'artist',
 });
 
 /**
@@ -189,12 +188,12 @@ const ROLE_BY_STEP_NAME = Object.freeze({
     style: 'styler',
     motion: 'animator',
     animation: 'animator',
-    vector: 'editor',
+    vector: 'artist',
     icons: 'iconifier',
-    imagery: 'illustrator',
-    assets: 'illustrator',
-    images: 'illustrator',
-    pictures: 'illustrator',
+    imagery: 'artist',
+    assets: 'artist',
+    images: 'artist',
+    pictures: 'artist',
     code: 'coder',
     script: 'coder',
     scripts: 'coder',

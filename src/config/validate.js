@@ -428,7 +428,11 @@ function validatePictures(pictures, fail) {
  * система изменилась.
  * @type {ReadonlySet<string>}
  */
-const GONE_STAGES = new Set(['markup', 'pre-coding', 'pre-styling', 'styling', 'animation', 'coding']);
+const GONE_STAGES = new Set([
+    'markup', 'pre-coding', 'pre-styling', 'styling', 'animation', 'coding',
+    // Стадии графики слились в одну: `vector`, `pictures` и `assets` ушли.
+    'vector', 'pictures', 'assets',
+]);
 
 /**
  * Убрать из конфига то, чего больше нет в системе.

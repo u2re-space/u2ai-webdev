@@ -33,8 +33,7 @@ import { defaults } from '../src/config.js';
 /** Стадии, которые берут шаги плана, и роль каждой из них. */
 const modules = {
     write: { role: 'builder' },
-    vector: { role: vectorRole },
-    assets: { role: assetsRole },
+    graphics: { role: 'artist' },
     iconify: { role: iconifyRole },
 };
 
@@ -135,9 +134,9 @@ test('a step of a role that no stage executes is given to the role that owns its
             { id: 'c', title: 'The script', role: 'reviewer', files: ['src/main.js'] },
         ],
     });
-    assert.deepEqual(plan.steps.map((step) => step.role), ['editor', 'markup', 'coder']);
+    assert.deepEqual(plan.steps.map((step) => step.role), ['artist', 'markup', 'coder']);
     assert.ok(plan.warnings.some((item) => /Шаг a: роль "planner" не исполняется/.test(item)));
-    assert.ok(plan.warnings.some((item) => /взята роль "editor"/.test(item)));
+    assert.ok(plan.warnings.some((item) => /взята роль "artist"/.test(item)));
 });
 
 test('a step of a role that no stage executes leaves the plan when the role cannot be guessed', () => {
@@ -164,14 +163,14 @@ test('a file of another role leaves the step that named it', () => {
             {
                 id: 'imagery',
                 title: 'The pictures of the carousel',
-                role: 'illustrator',
+                role: 'artist',
                 files: ['index.html', 'public/images/event-01.webp'],
             },
         ],
     });
 
     const step = plan.steps[0];
-    assert.equal(step.role, 'illustrator');
+    assert.equal(step.role, 'artist');
     assert.deepEqual(step.files, ['public/images/event-01.webp']);
     assert.ok(plan.warnings.some((item) => /чужие файлы отданы их ролям/.test(item) && /index\.html/.test(item)),
         plan.warnings.join(' | '));
@@ -181,7 +180,7 @@ test('a step that named only foreign files is given to the role that owns them',
     const plan = normalizePlan({
         summary: 'A landing.',
         steps: [
-            { id: 'page', title: 'The page', role: 'illustrator', files: ['index.html'] },
+            { id: 'page', title: 'The page', role: 'artist', files: ['index.html'] },
         ],
     });
 
@@ -269,13 +268,13 @@ test('the name of a step tells its role, not only the extension of its files', (
         plan.warnings.join(' | '));
 });
 
-test('the illustrator works on the junior model of the family', () => {
-    // Раскладка картинок — дешёвая работа, и старшая модель на ней сгорает.
+test('the artist works on the senior model of the family', () => {
+    // Графика — работа старшей: рисунок и вырезка стоят дорого, и младшая модель на них
+    // сгорает.
     const config = structuredClone(defaults);
-    assert.equal(resolveRole('illustrator', config, { stage: 'assets' }).model, 'openai/gpt-6.1-terra');
-    // А движение и вектор — по-прежнему работа старшей.
-    assert.equal(resolveRole('animator', config, { stage: 'animation' }).model, 'openai/gpt-6.2-sol');
-    assert.equal(resolveRole('editor', config, { stage: 'vector' }).model, 'openai/gpt-6.2-sol');
+    assert.equal(resolveRole('artist', config, { stage: 'graphics' }).model, 'openai/gpt-6.2-sol');
+    // А движение — по-прежнему работа старшей.
+    assert.equal(resolveRole('animator', config, { stage: 'write' }).model, 'openai/gpt-6.2-sol');
 });
 
 test('a step of the environment leaves the plan, whoever the role is', () => {    const plan = normalizePlan({
@@ -509,7 +508,7 @@ test('the stage of the plan says that a step of a dead role leaves the plan', as
     assert.deepEqual(result.plan.steps.map((step) => step.id), ['b']);
     assert.match(result.warnings.join('\n'), /Шаг a:.*не исполняется ни одной стадией/s);
     // The step whose files belong to a role is given to that role.
-    assert.equal(result.plan.steps[0].role, 'editor');
+    assert.equal(result.plan.steps[0].role, 'artist');
 });
 
 test('the correction of the planner does not offer the command that is gone', async () => {

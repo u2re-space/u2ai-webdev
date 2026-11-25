@@ -71,6 +71,14 @@ export const SUBAGENTS = Object.freeze({
         description: 'The vector graphics of the page: the ornaments and the illustrations, as SVG '
             + 'code. Use it when something has to be drawn.',
     },
+    artist: {
+        description: 'The graphics of the page: the vector drawings, the pictures cut out of the '
+            + 'reference and their places. Use it when something has to be drawn or cut out.',
+    },
+    builder: {
+        description: 'The files of the page: the markup, the styles, the scripts and the motion. '
+            + 'Use it when the page is written.',
+    },
     iconifier: {
         description: 'The icons of the interface: the set, the names, the integration into the '
             + 'markup. Use it when a control needs a sign.',
@@ -104,25 +112,20 @@ export const SUBAGENT_NAMES = Object.freeze(Object.keys(SUBAGENTS));
  */
 export const SUBAGENT_GATES = Object.freeze([
     Object.freeze({
-        from: 'markup',
-        stage: 'markup',
-        targets: Object.freeze(['styler', 'coder', 'editor']),
-        requires: Object.freeze(['coding', 'styling']),
-        reason: 'стили и код пишут свои стадии',
-    }),
-    Object.freeze({
-        from: 'coder',
-        stage: 'coding',
-        targets: Object.freeze(['styler', 'iconifier']),
+        // Роль письма отдаёт работу роли иконок: иконки ложатся в разметку, а разметка
+        // переписывается под них.
+        from: 'builder',
+        stage: 'write',
+        targets: Object.freeze(['iconifier']),
         requires: Object.freeze(['iconify']),
-        reason: 'стили пишутся раньше кода и задают его контракт, а иконки — на своей стадии',
+        reason: 'иконки ложатся в разметку, а разметка переписывается под них',
     }),
     Object.freeze({
-        // Кодер не отдаёт разметку маркупу: разметка уже написана, и её правка после кода
-        // ломает то, что код уже опирается. Кодер, что меняет разметку, меняет её сам —
-        // своей правкой, а не через чужую роль.
-        from: 'coder',
-        stage: 'coding',
+        // Роль письма не отдаёт разметку маркупу: разметка уже написана, и её правка
+        // после кода ломает то, что код уже опирается. Роль, что меняет разметку, меняет
+        // её сам — своей правкой, а не через чужую роль.
+        from: 'builder',
+        stage: 'write',
         targets: Object.freeze(['markup']),
         forbids: true,
         reason: 'разметка уже написана, и её правка после кода ломает то, на что код опирается — '

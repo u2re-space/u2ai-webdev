@@ -145,7 +145,7 @@ function codeData() {
 test('every built-in role is in the registry', () => {
     for (const name of [
         'scanner', 'planner', 'architect', 'director', 'coder', 'markup', 'styler',
-        'animator', 'illustrator', 'iconifier', 'installer', 'editor', 'reviewer',
+        'animator', 'artist', 'iconifier', 'installer', 'editor', 'reviewer',
         'auditor', 'learner',
     ]) {
         assert.ok(ROLES[name], `the role ${name} is missing`);
@@ -153,7 +153,7 @@ test('every built-in role is in the registry', () => {
         assert.ok(Array.isArray(ROLES[name].tools));
         assert.ok(Number.isInteger(ROLES[name].maxTurns));
     }
-    assert.equal(ROLE_NAMES.length, 16);
+    assert.equal(ROLE_NAMES.length, 17);
 });
 
 test('the builder writes everything, and its craft comes by the kind of the file', () => {
@@ -377,7 +377,7 @@ test('the roles that write the assets take the prepared pictures as they are', (
 test('the editor gets a precise image-edit, flag and optional-crop workflow', () => {
     // The contract of an edit of a picture comes with the craft of the picture, at the
     // write gate.
-    const text = chunkText(chunksFor({ role: 'editor', phase: 'write', files: ['assets/hero.png'] }));
+    const text = chunkText(chunksFor({ role: 'artist', phase: 'write', files: ['assets/hero.png'] }));
     assert.match(text, /what to remove or change,\s+what must remain pixel-faithful/i);
     assert.match(text, /measurements are optional/i);
     assert.match(text, /--background transparent/);
@@ -1822,7 +1822,7 @@ test('a role that repeats the same call is stopped', async () => {
         await runRole({
             client,
             config,
-            role: 'illustrator',
+            role: 'artist',
             input: 'Draw the picture.',
             context: { task: 'Draw the picture.', step: { id: 'assets', files: ['out.png'] } },
             root,
@@ -1867,7 +1867,7 @@ test('a role that keeps coming back to one file is stopped', async () => {
         await runRole({
             client,
             config,
-            role: 'illustrator',
+            role: 'artist',
             input: 'Draw the picture.',
             context: { task: 'Draw the picture.', step: { id: 'assets', files: ['out.png'] } },
             root,
@@ -1901,7 +1901,7 @@ test('a role whose host refused ends the step and says why', async () => {
         const answer = await runRole({
             client,
             config,
-            role: 'illustrator',
+            role: 'artist',
             input: 'Draw the picture.',
             context: { task: 'Draw the picture.', step: { id: 'assets', files: ['out.png'] } },
             root,

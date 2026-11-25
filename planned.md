@@ -3260,6 +3260,37 @@ CLI `ai-webdev` (`@u2ai/webdev`) с собственным конфигом `~/.
       тесты под новую схему
 - [x] Проверка: `npm test` — 901 тест, все проходят; `npm run check` — 244 файла
 
+### step-138 — Графика одна: роль artist и стадия graphics
+
+- [x] Повод: та же болезнь в другой части дома. Роли `editor`, `illustrator` и стадии
+      `vector`, `pictures`, `assets` — три сущности для одной работы: нарисовать
+      графику, вырезать её из референса и положить на место
+- [x] **Решение пользователя**: слить их в одну роль `artist` и одну стадию `graphics`
+- [x] `src/roles/artist.js` — **одна роль делает графику**: рисует вектор, режет вырезки
+      мостом `ai-image` и кладёт картинки на места. Ремесло — по виду файла: `.svg`
+      получает правила вектора, `.png` и `.webp` — правила картинки
+- [x] `src/stages/graphics.js` — **одна стадия графики**: вырезки референса (бывшая
+      `pictures`), рисунки и их проверка (бывшая `vector`), раскладка (бывшая `assets`)
+- [x] `src/stages/roles.js` — `LIVE_ROLES`: `artist` → `graphics`. Роли `editor` и
+      `illustrator` остались в реестре как **источники ремесла** (`SVG_RULES`,
+      `IMAGE_RULES`), а не как стадии
+- [x] `src/agent/tool-specs.js` — `call_ai_image`, `magick` и `generate_svg` открыты и
+      роли `artist`: мост и ImageMagick — её инструменты
+- [x] `src/agent/subagent.js` — ворота суб-агента знают новые стадии: роль письма
+      отдаёт иконки только после стадии `iconify`, а разметку не отдаёт никогда
+- [x] `src/config/validate.js` — `dropGoneFromConfig` знает и ушедшие стадии графики:
+      конфиг под прошлую систему теряет их молча
+- [x] `src/stages/plan-order.js` — `placeGraphicsStage` вместо `placeVectorStage`: графика
+      стоит до письма, до сборки или в конце цепочки
+- [x] `src/config/defaults.js` — ранг роли `artist`: `[1]`, старшая модель на графике
+- [x] `test/plan-order.test.js`, `test/stages.test.js`, `test/subagent.test.js`,
+      `test/chunks.test.js`, `test/vector.test.js`, `test/motion.test.js`,
+      `test/process.test.js`, `test/config.test.js` — тесты под новую схему
+- [x] Проверка: `npm test` — 899 тестов, все проходят; `npm run check` — 246 файлов
+- [x] **Живой прогон** `All-Portfolio/Portfolio-6` (`20261125-122101`): стадия `write`
+      прошла **целиком** — 24 файла (разметка, 8 таблиц стилей, скрипты, иконки, SVG,
+      PWA). Это первый прогон, который дошёл до конца письма
+
 ---
 
 

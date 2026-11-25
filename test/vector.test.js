@@ -144,7 +144,7 @@ test('the stage of the vector checks and tidies the SVG of the step', async () =
         config: { output: { work: './.tmp' } },
         root,
         task: 'Make a landing.',
-        plan: { steps: [{ id: 'vector-1', title: 'The logo', role: 'editor', files: ['assets/logo.svg'], criteria: ['opens'] }] },
+        plan: { steps: [{ id: 'vector-1', title: 'The logo', role: 'artist', files: ['assets/logo.svg'], criteria: ['opens'] }] },
         runId: 'run-1',
     });
 
@@ -159,8 +159,8 @@ test('the stage of the vector checks and tidies the SVG of the step', async () =
 test('the plan of the vector leaves out the SVG of a prepared picture', () => {
     const plan = {
         steps: [
-            { id: 'vector-1', role: 'editor', files: ['assets/award-badge.svg'] },
-            { id: 'vector-2', role: 'editor', files: ['assets/ornament.svg', 'assets/award-badge.svg'] },
+            { id: 'vector-1', role: 'artist', files: ['assets/award-badge.svg'] },
+            { id: 'vector-2', role: 'artist', files: ['assets/ornament.svg', 'assets/award-badge.svg'] },
             { id: 'markup-1', role: 'markup', files: ['index.html'] },
         ],
     };
@@ -181,7 +181,7 @@ test('one graphic is one step: the model does not draw three SVG in one turn', (
             {
                 id: 'graphics',
                 title: 'Graphics',
-                role: 'editor',
+                role: 'artist',
                 files: ['public/images/mark.svg', 'public/images/stack.svg', 'public/images/dashboard.svg'],
                 criteria: ['drawn'],
             },
@@ -206,7 +206,7 @@ test('one graphic is one step: the model does not draw three SVG in one turn', (
 });
 
 test('a step with one graphic is not split', () => {
-    const plan = { steps: [{ id: 'art', role: 'editor', files: ['assets/logo.svg'] }] };
+    const plan = { steps: [{ id: 'art', role: 'artist', files: ['assets/logo.svg'] }] };
     assert.equal(splitVectorSteps(plan).steps.length, 1);
     assert.equal(splitVectorSteps(plan).steps[0].id, 'art');
     assert.equal(splitVectorSteps(null), null);
@@ -222,7 +222,7 @@ test('the stage of the vector does not draw a picture that is already prepared',
         config: { output: { work: './.tmp' } },
         root,
         task: 'Make a landing.',
-        plan: { steps: [{ id: 'vector-1', title: 'The badge', role: 'editor', files: ['assets/award-badge.svg'], criteria: ['opens'] }] },
+        plan: { steps: [{ id: 'vector-1', title: 'The badge', role: 'artist', files: ['assets/award-badge.svg'], criteria: ['opens'] }] },
         inputs: { pictures: [{ name: 'award-badge', kind: 'image', file: 'assets/import/award-badge.png' }] },
         runId: 'run-1',
     });

@@ -98,9 +98,7 @@ report into the directory of the run and hands the result to the next one.
 | `plan` | Break the task into steps, each with its role, its files and its check. |
 | `architect` | Decide the structure of the project: the files, the modules and the order. |
 | `setup` | Prepare the environment: the scaffold, the dependencies and the entry points. |
-| `vector` | Draw the vector graphics as code: the SVG of the ornaments and the illustrations. |
-| `pictures` | Prepare the crops of the reference that are pictures: the chess piece, the board, the badge. |
-| `assets` | Place the assets: the prepared pictures and the drawn graphics get their final paths and their final format. |
+| `graphics` | Make the graphics: the crops of the reference, the vector drawings and their places. One role does it all — the artist cuts, draws and puts. |
 | `write` | Write the project: the markup, the styles, the scripts and the motion. One role writes them all — the craft of a file comes by its kind, and the guides by the purpose of the write. |
 | `iconify` | Choose the icons of the interface and check that every one of them is on the disk. |
 | `build` | Connect the styles: the entry point, the compilation, the links of the markup. |
@@ -1557,7 +1555,6 @@ The sections of the file:
 | `stages` | Every stage: `enabled`, `maxTurns` and `timeoutMs` (the budget of the stage; it wins over `limits.stageTimeoutMs`). The stage `review` also has `repair` and `repairRounds`. |
 | `output` | Where the artifacts go: `dir` (`.ai/`), `work` (`.ai/tmp/`) and `assets` (`.ai/assets/`). |
 | `inputs` | The names of the input files: the design, the measurements, the palette, the tokens, the files of the essence (`extra`) and the reference. |
-| `pictures` | The crops of the reference that are prepared: the kinds, the command of `ai-image`, the subject, the model, the directory, the limit. |
 | `memory` | The permanent memory: the file, the scope, the limit, the summaries of the files, the finished tasks. |
 | `context` | The context of the run: `enabled`, `cache` and `maxBriefChars`. It lives in `<output.work>/<id>/context/` and dies with the run. |
 | `map` | The map of the run: `enabled`, `depth`, `maxFiles`, `maxFileBytes`, `maxLines`. It lives in `<output.work>/<id>/map.json` and dies with the run. |

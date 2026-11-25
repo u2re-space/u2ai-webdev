@@ -29,7 +29,7 @@ import { runStepStage } from './step.js';
 import { optimizeSvg, validateSvg } from '../vector/svg.js';
 
 /** Роль, чьи шаги исполняет эта стадия. */
-export const role = 'editor';
+export const role = 'artist';
 
 /**
  * Шаги редактора — по одному рисунку на шаг.
@@ -50,7 +50,7 @@ export function splitVectorSteps(plan = null) {
     const out = [];
     for (const step of steps) {
         const who = String(step?.role ?? '').trim().toLowerCase();
-        if (who !== 'editor') {
+        if (who !== 'artist') {
             out.push(step);
             continue;
         }
@@ -158,7 +158,7 @@ export function preparedVectorPlan(plan = null, pictures = []) {
     const skipped = [];
     const kept = [];
     for (const step of steps) {
-        if (String(step?.role ?? '').trim().toLowerCase() !== 'editor') {
+        if (String(step?.role ?? '').trim().toLowerCase() !== 'artist') {
             kept.push(step);
             continue;
         }
@@ -221,7 +221,7 @@ export async function vectorStage({
         config,
         root,
         task,
-        role: 'editor',
+        role: 'artist',
         plan: work,
         brief,
         inputs,

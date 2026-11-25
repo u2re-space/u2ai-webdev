@@ -102,7 +102,7 @@ function baseName(file) {
  */
 export async function assetFiles(root, plan = null) {
     const files = new Set();
-    for (const step of stepsForRole(plan, 'editor')) {
+    for (const step of stepsForRole(plan, 'artist')) {
         for (const file of Array.isArray(step?.files) ? step.files : []) {
             const rel = String(file ?? '').trim().replace(/\\/g, '/');
             if (!rel.toLowerCase().endsWith('.svg')) continue;

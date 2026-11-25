@@ -202,11 +202,11 @@ test('the registry of the stages knows the order and the dependencies', () => {
     assert.ok(order.stages.findIndex((stage) => stage.name === 'write')
         < order.stages.findIndex((stage) => stage.name === 'build'));
 
-    // The pictures come after the vector: the editor draws first, and the stage cuts out
-    // of the reference what the editor did not draw.
-    assert.deepEqual(stageDependencies('pictures'), ['vector']);
-    assert.ok(order.stages.findIndex((stage) => stage.name === 'vector')
-        < order.stages.findIndex((stage) => stage.name === 'pictures'));
+    // The graphics come before the writing: the artist draws and cuts first, and the
+    // writing links the pictures by the names the context gives.
+    assert.deepEqual(stageDependencies('graphics'), ['setup']);
+    assert.ok(order.stages.findIndex((stage) => stage.name === 'graphics')
+        < order.stages.findIndex((stage) => stage.name === 'write'));
     assert.ok(order.stages.findIndex((stage) => stage.name === 'plan')
         < order.stages.findIndex((stage) => stage.name === 'architect'));
 

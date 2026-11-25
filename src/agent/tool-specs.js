@@ -498,7 +498,7 @@ export const TOOL_SPECS = Object.freeze({
             additionalProperties: false,
         },
         required: ['prompt'],
-        roles: ['iconifier', 'editor'],
+        roles: ['iconifier', 'editor', 'artist'],
     },
     download_font: {
         configKey: 'fonts',
@@ -619,7 +619,7 @@ export const TOOL_SPECS = Object.freeze({
             additionalProperties: false,
         },
         required: ['args'],
-        roles: ['editor'],
+        roles: ['editor', 'artist'],
     },
     call_ai_memory: {
         configKey: 'external_memory',
@@ -674,7 +674,7 @@ export const TOOL_SPECS = Object.freeze({
             additionalProperties: false,
         },
         required: ['args'],
-        roles: ['editor', 'illustrator'],
+        roles: ['editor', 'illustrator', 'artist'],
     },
     ai_cli: {
         configKey: 'external_cli',

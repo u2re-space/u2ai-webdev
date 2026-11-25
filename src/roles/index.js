@@ -62,6 +62,7 @@ import * as architect from './architect.js';
 import * as director from './director.js';
 import * as coder from './coder.js';
 import * as builder from './builder.js';
+import * as artist from './artist.js';
 import * as markup from './markup.js';
 import * as styler from './styler.js';
 import * as animator from './animator.js';
@@ -84,6 +85,7 @@ export const ROLES = Object.freeze({
     director,
     coder,
     builder,
+    artist,
     markup,
     styler,
     animator,

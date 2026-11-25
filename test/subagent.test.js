@@ -26,7 +26,7 @@ import { defaults } from '../src/config.js';
 import { startFakeApi } from './helpers/fake-api.js';
 
 test('the roles that a sub-agent may inherit are known', () => {
-    for (const name of ['markup', 'styler', 'coder', 'editor', 'iconifier']) {
+    for (const name of ['markup', 'styler', 'coder', 'artist', 'builder', 'iconifier']) {
         assert.ok(SUBAGENTS[name], name);
         assert.ok(SUBAGENTS[name].description.length > 20, name);
     }
@@ -34,7 +34,7 @@ test('the roles that a sub-agent may inherit are known', () => {
     for (const name of ['planner', 'architect', 'reviewer', 'auditor', 'learner']) {
         assert.equal(SUBAGENTS[name], undefined, name);
     }
-    assert.deepEqual([...SUBAGENT_NAMES], ['markup', 'styler', 'coder', 'editor', 'iconifier']);
+    assert.deepEqual([...SUBAGENT_NAMES], ['markup', 'styler', 'coder', 'editor', 'artist', 'builder', 'iconifier']);
 });
 
 test('a sub-agent never gets the hand-over tool itself', () => {
@@ -154,137 +154,86 @@ test('the roles of the project may hand the work over', async () => {
     }
 });
 
-test('the door of the markup stays closed until the coding and the styling stages started', () => {
-    const closed = subagentGate({ from: 'markup', stage: 'markup', to: 'styler', startedStages: [] });
-    assert.ok(closed);
-    assert.deepEqual(closed.missing, ['coding', 'styling']);
-    // The code and the vector graphics are behind the same door.
-    assert.ok(subagentGate({ from: 'markup', stage: 'markup', to: 'coder', startedStages: ['coding'] }));
-    assert.ok(subagentGate({ from: 'markup', stage: 'markup', to: 'editor', startedStages: ['styling'] }));
-    // The icons are not behind it.
-    assert.equal(subagentGate({ from: 'markup', stage: 'markup', to: 'iconifier', startedStages: [] }), null);
-    // The other roles are not behind it.
-    assert.equal(subagentGate({ from: 'styler', stage: 'styling', to: 'coder', startedStages: [] }), null);
-    // The door opens when both stages started.
-    assert.equal(subagentGate({
-        from: 'markup',
-        stage: 'markup',
-        to: 'styler',
-        startedStages: ['coding', 'styling'],
-    }), null);
-});
-
-test('the door of the coder stays closed until the stage after the code started', () => {
-    // The styles are the contract the code is written against, and the icons belong to the
-    // stage that comes after the code.
-    const closed = subagentGate({ from: 'coder', stage: 'coding', to: 'styler', startedStages: ['styling', 'coding'] });
+test('the door of the writing stays closed until the icons are picked', () => {
+    // Иконки ложатся в разметку, а разметка переписывается под них: пока стадия иконок
+    // не началась, отдать её работу другой роли нельзя.
+    const closed = subagentGate({ from: 'builder', stage: 'write', to: 'iconifier', startedStages: [] });
     assert.ok(closed);
     assert.deepEqual(closed.missing, ['iconify']);
-    assert.ok(subagentGate({ from: 'coder', stage: 'coding', to: 'iconifier', startedStages: ['coding'] }));
-    // The door opens when the stage after the code has started.
+    // Дверь открывается, когда стадия иконок началась.
     assert.equal(subagentGate({
-        from: 'coder',
-        stage: 'coding',
-        to: 'styler',
-        startedStages: ['styling', 'coding', 'iconify'],
+        from: 'builder',
+        stage: 'write',
+        to: 'iconifier',
+        startedStages: ['iconify'],
+    }), null);
+    // Разметку отдавать нельзя: она уже написана.
+    const markup = subagentGate({ from: 'builder', stage: 'write', to: 'markup', startedStages: [] });
+    assert.ok(markup);
+    assert.deepEqual(markup.missing, []);
+    assert.match(markup.reason, /разметка уже написана/);
+    // Другие роли не за дверью.
+    assert.equal(subagentGate({ from: 'builder', stage: 'write', to: 'coder', startedStages: [] }), null);
+    assert.equal(subagentGate({ from: 'artist', stage: 'graphics', to: 'builder', startedStages: [] }), null);
+});
+
+test('the door of the writing opens to the icons only when their stage started', () => {
+    // Иконки ложатся в разметку, а разметка переписывается под них: пока стадия иконок
+    // не началась, отдать её работу другой роли нельзя.
+    const closed = subagentGate({ from: 'builder', stage: 'write', to: 'iconifier', startedStages: ['graphics'] });
+    assert.ok(closed);
+    assert.deepEqual(closed.missing, ['iconify']);
+    assert.ok(subagentGate({ from: 'builder', stage: 'write', to: 'iconifier', startedStages: ['coding'] }));
+    // Дверь открывается, когда стадия иконок началась.
+    assert.equal(subagentGate({
+        from: 'builder',
+        stage: 'write',
+        to: 'iconifier',
+        startedStages: ['iconify'],
     }), null);
 });
 
-test('the coder never hands the work of the markup over', () => {
+test('the writing never hands the work of the markup over', () => {
     // Разметка уже написана, когда пишется код: её правка после кода ломает то, на что
-    // код опирается. Кодер, что меняет разметку, меняет её сам.
-    const closed = subagentGate({ from: 'coder', stage: 'coding', to: 'markup', startedStages: ['coding', 'styling', 'iconify'] });
-    assert.ok(closed, 'кодер передал разметку маркупу');
+    // код опирается. Роль письма, что меняет разметку, меняет её сама.
+    const closed = subagentGate({ from: 'builder', stage: 'write', to: 'markup', startedStages: ['coding', 'iconify'] });
+    assert.ok(closed, 'роль передала разметку маркупу');
     assert.match(closed.reason, /разметка уже написана/);
     // Рука закрыта навсегда: никакая стадия её не открывает.
-    assert.ok(subagentGate({ from: 'coder', stage: 'coding', to: 'markup', startedStages: [] }));
-    // Кодеру стилист и иконщик по-прежнему доступны — по прежним правилам.
-    assert.equal(subagentGate({
-        from: 'coder',
-        stage: 'coding',
-        to: 'styler',
-        startedStages: ['styling', 'coding', 'iconify'],
-    }), null);
+    assert.ok(subagentGate({ from: 'builder', stage: 'write', to: 'markup', startedStages: [] }));
+    // Остальные роли доступны — по прежним правилам.
+    assert.equal(subagentGate({ from: 'builder', stage: 'write', to: 'coder', startedStages: [] }), null);
 });
 
-test('the markup is told that the hand-over is closed', () => {
-    const note = subagentGateNote({ from: 'markup', stage: 'markup', startedStages: [] });
+test('the role of the writing is told that the hand-over is closed', () => {
+    const note = subagentGateNote({ from: 'builder', stage: 'write', startedStages: [] });
     assert.match(note, /closed for now/);
-    assert.match(note, /styler, coder, editor/);
-    assert.match(note, /coding and styling/);
-    assert.equal(subagentGateNote({
-        from: 'markup',
-        stage: 'markup',
-        startedStages: ['coding', 'styling'],
-    }), '');
-    assert.equal(subagentGateNote({ from: 'styler', stage: 'styling', startedStages: [] }), '');
+    assert.match(note, /iconifier/);
+    assert.match(note, /iconify/);
+    // Запрет на разметку вечен: он не открывается ни одной стадией.
+    const forbidden = subagentGateNote({
+        from: 'builder',
+        stage: 'write',
+        startedStages: ['iconify'],
+    });
+    assert.match(forbidden, /hand-over is closed/);
+    assert.match(forbidden, /markup/);
 });
 
-test('the spawner refuses the hand-over of the markup before the stages started', async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-subagent-gate-'));
-    const api = await startFakeApi([
-        { type: 'function_call', name: 'read_file', arguments: { path: 'note.txt' } },
-        { text: 'done' },
-    ]);
-    try {
-        let started = false;
-        const spawn = createSubagentSpawner({
-            root,
-            role: 'markup',
-            stage: 'markup',
-            config: { baseURL: api.url, apiKey: 'test-key' },
-            tools: { execute: async () => { started = true; return ''; } },
-            resolveRole: () => ({ tools: [], maxTurns: 8 }),
-            startedStages: new Set(['markup']),
-        });
-        for (const target of ['styler', 'coder', 'editor']) {
-            await assert.rejects(
-                () => spawn({ role: target, task: 'Do the work.', files: ['file.txt'] }),
-                /не может передать работу роли/,
-            );
-        }
-        assert.equal(started, false);
-
-        // The door opens with the stages that it waits for.
-        let opened = false;
-        const open = createSubagentSpawner({
-            root,
-            role: 'markup',
-            stage: 'markup',
-            config: { baseURL: api.url, apiKey: 'test-key' },
-            tools: { execute: async () => { opened = true; return 'done'; } },
-            resolveRole: () => ({ tools: ['read_file'], maxTurns: 8 }),
-            instructionsFor: async () => 'You are the styler.',
-            model: 'test-model',
-            startedStages: new Set(['markup', 'coding', 'styling']),
-        });
-        await writeFile(path.join(root, 'note.txt'), 'the note\n', 'utf8');
-        await open({ role: 'styler', task: 'Do the work.', files: ['file.txt'] });
-        assert.equal(opened, true);
-    } finally {
-        api.stop();
-        await rm(root, { recursive: true, force: true });
-    }
-});
-
-test('the coder does not hand the styles to the styler while the code is written', async () => {
+test('the role of the writing does not hand the icons over before their stage started', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-subagent-coder-'));
     try {
         let started = false;
         const spawn = createSubagentSpawner({
             root,
-            role: 'coder',
-            stage: 'coding',
+            role: 'builder',
+            stage: 'write',
             tools: { execute: async () => { started = true; return ''; } },
             resolveRole: () => ({ tools: [], maxTurns: 8 }),
-            startedStages: new Set(['markup', 'styling', 'coding']),
+            startedStages: new Set(['graphics', 'write']),
         });
-        // The styles are the contract the code is written against: their repair under the
-        // written code breaks the page, and the icons belong to the stage that comes next.
-        await assert.rejects(
-            () => spawn({ role: 'styler', task: 'Fix the styles.', files: ['src/styles/main.scss'] }),
-            /не может передать работу роли styler/,
-        );
+        // Иконки ложатся в разметку, а разметка переписывается под них: пока стадия
+        // иконок не началась, отдать её работу нельзя.
         await assert.rejects(
             () => spawn({ role: 'iconifier', task: 'Pick the icons.', files: ['src/assets/icons/'] }),
             /не может передать работу роли iconifier/,

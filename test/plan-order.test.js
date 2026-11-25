@@ -16,8 +16,7 @@ import {
     planEdges,
     planOrder,
     placeIconifyStage,
-    placeVectorStage,
-    placeAssetsAfterVector,
+    placeGraphicsStage,
 } from '../src/stages/plan-order.js';
 import { isStateful } from '../src/stages/stateful.js';
 
@@ -30,8 +29,8 @@ const ART_PLAN = {
     summary: 'A landing with drawn assets.',
     steps: [
         { id: 'setup', title: 'Manifest', role: 'coder', dependsOn: [], files: ['package.json'] },
-        { id: 'primary-art', title: 'Wordmark', role: 'editor', dependsOn: [], files: ['public/assets/wordmark.svg'] },
-        { id: 'secondary-art', title: 'Screens', role: 'editor', dependsOn: [], files: ['public/assets/crt.svg'] },
+        { id: 'primary-art', title: 'Wordmark', role: 'artist', dependsOn: [], files: ['public/assets/wordmark.svg'] },
+        { id: 'secondary-art', title: 'Screens', role: 'artist', dependsOn: [], files: ['public/assets/crt.svg'] },
         { id: 'markup', title: 'Markup', role: 'markup', dependsOn: ['primary-art', 'secondary-art'], files: ['index.html'] },
         { id: 'styles', title: 'Styles', role: 'styler', dependsOn: ['setup', 'markup'], files: ['src/styles/main.scss'] },
         { id: 'interactions', title: 'Interactions', role: 'coder', dependsOn: ['setup', 'markup', 'styles'], files: ['src/main.js'] },
@@ -144,27 +143,26 @@ test('the graphics are drawn before the page that links them', () => {
     assert.ok(names.indexOf('vector') < names.indexOf('write'), names.join(' → '));
 });
 
-test('the vector stage does not stand in the middle of the chain', () => {
-    // The vector between the writing and the build: it goes to the end of the chain.
-    const placed = placeVectorStage(['setup', 'write', 'vector', 'build', 'sight', 'review']);
+test('the graphics stage does not stand in the middle of the chain', () => {
+    // The graphics between the writing and the build: it goes to the end of the chain.
+    const placed = placeGraphicsStage(['setup', 'write', 'graphics', 'build', 'sight', 'review']);
     assert.equal(placed.moved, true);
     assert.equal(placed.reason, 'end');
-    assert.ok(placed.names.indexOf('vector') > placed.names.indexOf('sight'));
-    assert.ok(placed.names.indexOf('vector') < placed.names.indexOf('review'));
+    assert.ok(placed.names.indexOf('graphics') > placed.names.indexOf('sight'));
+    assert.ok(placed.names.indexOf('graphics') < placed.names.indexOf('review'));
 
-    // The vector before the writing stays where it is.
-    const kept = placeVectorStage(['setup', 'vector', 'write', 'build', 'sight', 'review']);
+    // The graphics before the writing stay where they are.
+    const kept = placeGraphicsStage(['setup', 'graphics', 'write', 'build', 'sight', 'review']);
     assert.equal(kept.moved, false);
-    assert.deepEqual(kept.names, ['setup', 'vector', 'write', 'build', 'sight', 'review']);
+    assert.deepEqual(kept.names, ['setup', 'graphics', 'write', 'build', 'sight', 'review']);
 });
-
-test('the vector stage of a continued run comes before the build', () => {
-    // Стадии письма в прогоне нет: она уже сделана. Вектор должен встать до сборки,
+test('the graphics stage of a continued run comes before the build', () => {
+    // Стадии письма в прогоне нет: она уже сделана. Графика должна встать до сборки,
     // иначе бандл останется без ассетов.
-    const placed = placeVectorStage(['build', 'sight', 'vector', 'iconify', 'review']);
+    const placed = placeGraphicsStage(['build', 'sight', 'graphics', 'iconify', 'review']);
     assert.equal(placed.moved, true);
     assert.equal(placed.reason, 'build');
-    assert.ok(placed.names.indexOf('vector') < placed.names.indexOf('build'));
+    assert.ok(placed.names.indexOf('graphics') < placed.names.indexOf('build'));
 });
 
 test('a page with a state gets the same stages as a page without one', () => {
@@ -205,23 +203,12 @@ test('the page with a state is known by the kind and by the framework', () => {
     assert.equal(isStateful({ config: { stack: { stateful: false }, agent: { kind: 'app' } } }), false);
 });
 
-test('the assets floor keeps the assets after the vector', () => {
-    const placed = placeAssetsAfterVector(['setup', 'assets', 'vector', 'write']);
-    assert.equal(placed.moved, true);
-    assert.ok(placed.names.indexOf('assets') > placed.names.indexOf('vector'));
-
-    // The assets after the vector stay where they are.
-    const kept = placeAssetsAfterVector(['setup', 'vector', 'assets', 'write']);
-    assert.equal(kept.moved, false);
-    assert.deepEqual(kept.names, ['setup', 'vector', 'assets', 'write']);
-});
-
 test('the plan of the run breaks the circle of the assets and the markup', () => {
     const plan = {
         steps: [
-            { id: 'graphics', title: 'Graphics', role: 'editor', dependsOn: [], files: ['public/images/logo.svg'] },
+            { id: 'graphics', title: 'Graphics', role: 'artist', dependsOn: [], files: ['public/images/logo.svg'] },
             { id: 'markup', title: 'Markup', role: 'markup', dependsOn: ['graphics'], files: ['index.html'] },
-            { id: 'imagery', title: 'Imagery', role: 'illustrator', dependsOn: ['markup'], files: ['public/images/event-01.webp'] },
+            { id: 'imagery', title: 'Imagery', role: 'artist', dependsOn: ['markup'], files: ['public/images/event-01.webp'] },
             { id: 'styles', title: 'Styles', role: 'styler', dependsOn: ['imagery'], files: ['src/styles/main.scss'] },
         ],
     };

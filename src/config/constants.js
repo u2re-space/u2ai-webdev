@@ -25,7 +25,8 @@ export const ENUMS = Object.freeze({
   /** Pipeline stages in execution order. */
   stages: Object.freeze([
     'collect', 'scan', 'plan', 'architect', 'setup',
-    'vector', 'pictures', 'assets',
+    // Стадия графики одна: вырезки, вектор и раскладка делает роль `artist`.
+    'graphics',
     // Стадия письма одна: разметка, стили, код и движение пишет роль `builder`.
     'write',
     'iconify', 'build', 'sight',

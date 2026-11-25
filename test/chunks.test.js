@@ -173,7 +173,7 @@ test('the craft of the styles is the craft of the styles and not of the code', (
     assert.match(code, /Semantic HTML5/);
     assert.doesNotMatch(code, /The cascade is held by the layers/);
 
-    const svg = chunkText(chunksFor({ role: 'editor', phase: PHASES.WRITE, files: ['assets/logo.svg'] }));
+    const svg = chunkText(chunksFor({ role: 'artist', phase: PHASES.WRITE, files: ['assets/logo.svg'] }));
     assert.match(svg, /The SVG is XML text/);
     assert.match(svg, /A change is a patch/);
 });
@@ -224,7 +224,7 @@ test('the vector editor patches an SVG by the lines of the file', async () => {
     await runRole({
         client,
         config: structuredClone(defaults),
-        role: 'editor',
+        role: 'artist',
         input: 'Draw the logo.',
         context: {
             vectorOnly: true,
@@ -255,7 +255,7 @@ test('the vector editor keeps the tools of the picture and of the patch', async 
     await runRole({
         client,
         config: structuredClone(defaults),
-        role: 'editor',
+        role: 'artist',
         input: 'Draw the logo.',
         context: {
             vectorOnly: true,

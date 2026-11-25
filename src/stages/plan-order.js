@@ -19,8 +19,8 @@
  *
  * @depends stages/roles
  * @usedBy pipeline
- * @exports PLAN_STAGES, STYLE_CODE_PHASES, planEdges, planOrder, placeVectorStage,
- *          placeIconifyStage, placeAssetsAfterVector
+ * @exports PLAN_STAGES, STYLE_CODE_PHASES, planEdges, planOrder, placeGraphicsStage,
+ *          placeIconifyStage
  * @ai.tags stages, plan, order
  * @ai.hint pure
  * @changed 2026-11-15 Порядок стадий, которые делают шаги плана, задаёт сам план.
@@ -156,30 +156,6 @@ export function planEdges(plan) {
 }
 
 /**
- * Поставить стадию ассетов после вектора.
- *
- * Ассеты раскладываются по местам, когда известно всё множество картинок: вырезки
- * референса и нарисованный вектор.
- *
- * @param {string[]} names имена стадий в порядке прогона
- * @returns {{ names: string[], moved: boolean }}
- * @exports
- * @ai.hint pure
- */
-export function placeAssetsAfterVector(names = []) {
-    const list = Array.isArray(names) ? [...names] : [];
-    const assets = list.indexOf(ASSETS_STAGE);
-    const vector = list.indexOf(ASSETS_AFTER);
-    if (assets < 0 || vector < 0) return { names: list, moved: false };
-    if (assets > vector) return { names: list, moved: false };
-    // Ассеты после вектора: они встают прямо после него.
-    list.splice(assets, 1);
-    const target = list.indexOf(ASSETS_AFTER);
-    list.splice(target < 0 ? list.length : target + 1, 0, ASSETS_STAGE);
-    return { names: list, moved: true };
-}
-
-/**
  * Стадия вектора и её место в цепочке.
  *
  * Ассеты рисует редактор, и разметка их подключает по именам из контекста. Ставить
@@ -192,14 +168,12 @@ export function placeAssetsAfterVector(names = []) {
  * переносит `public/` в бандл, и ассет, нарисованный после неё, в дистрибутив не
  * попадает.
  */
-const VECTOR_STAGE = 'vector';
-const VECTOR_BEFORE = 'write';
-const VECTOR_AFTER = 'sight';
-const VECTOR_BEFORE_BUILD = 'build';
+const GRAPHICS_STAGE = 'graphics';
+const GRAPHICS_BEFORE = 'write';
+const GRAPHICS_AFTER = 'sight';
+const GRAPHICS_BEFORE_BUILD = 'build';
 const ICONIFY_STAGE = 'iconify';
 const ICONIFY_AFTER = 'write';
-const ASSETS_STAGE = 'assets';
-const ASSETS_AFTER = 'vector';
 const WRITE_STAGE = 'write';
 
 /**
@@ -221,45 +195,55 @@ export const STYLE_CODE_PHASES = Object.freeze([
 
 
 /**
- * Поставить стадию вектора на её место: до разметки, до сборки или в конец цепочки.
+ * Поставить стадию графики на её место: до письма, до сборки или в конец цепочки.
+ *
+ * Графика — это вырезки референса, векторные рисунки и их места. Ставить её между
+ * письмом и сборкой нельзя: картинка, сделанная после письма, ещё может быть
+ * подключена по имени, но ассет, которого нет при сборке, в дистрибутив не попадает.
+ * Стадия графики стоит либо до письма, либо в самом конце цепочки — после сборки и
+ * взгляда на страницу.
+ *
+ * Когда письмо уже позади (продолжение прогона), графика встаёт до сборки: сборка
+ * переносит `public/` в бандл, и ассет, сделанный после неё, в дистрибутив не
+ * попадает.
  *
  * @param {string[]} names имена стадий в порядке прогона
  * @returns {{ names: string[], moved: boolean, reason: string|null }}
  * @exports
  * @ai.hint pure
  */
-export function placeVectorStage(names = []) {
+export function placeGraphicsStage(names = []) {
     const list = Array.isArray(names) ? [...names] : [];
     const at = (name) => list.indexOf(name);
-    const vector = at(VECTOR_STAGE);
-    if (vector < 0) return { names: list, moved: false, reason: null };
-    const markup = at(VECTOR_BEFORE);
+    const graphics = at(GRAPHICS_STAGE);
+    if (graphics < 0) return { names: list, moved: false, reason: null };
+    const writing = at(GRAPHICS_BEFORE);
 
-    if (markup >= 0) {
-        if (vector < markup) return { names: list, moved: false, reason: null };
-        // Вектор после разметки: в середине цепочки он не стоит — только в конце.
-        const sight = at(VECTOR_AFTER);
-        if (sight >= 0 && vector < sight) {
-            list.splice(vector, 1);
-            const target = list.indexOf(VECTOR_AFTER);
-            list.splice(target < 0 ? list.length : target + 1, 0, VECTOR_STAGE);
+    if (writing >= 0) {
+        if (graphics < writing) return { names: list, moved: false, reason: null };
+        // Графика после письма: в середине цепочки она не стоит — только в конце.
+        const sight = at(GRAPHICS_AFTER);
+        if (sight >= 0 && graphics < sight) {
+            list.splice(graphics, 1);
+            const target = list.indexOf(GRAPHICS_AFTER);
+            list.splice(target < 0 ? list.length : target + 1, 0, GRAPHICS_STAGE);
             return { names: list, moved: true, reason: 'end' };
         }
-        if (sight < 0 && vector < list.length - 1) {
-            // Взгляда в прогоне нет: вектор уходит в конец цепочки.
-            list.splice(vector, 1);
-            list.push(VECTOR_STAGE);
+        if (sight < 0 && graphics < list.length - 1) {
+            // Взгляда в прогоне нет: графика уходит в конец цепочки.
+            list.splice(graphics, 1);
+            list.push(GRAPHICS_STAGE);
             return { names: list, moved: true, reason: 'end' };
         }
         return { names: list, moved: false, reason: null };
     }
 
-    // Разметки в прогоне нет: она уже сделана. Вектор должен встать до сборки, иначе
+    // Письма в прогоне нет: оно уже сделано. Графика должна встать до сборки, иначе
     // ассеты не попадут в бандл.
-    const build = at(VECTOR_BEFORE_BUILD);
-    if (build >= 0 && vector > build) {
-        list.splice(vector, 1);
-        list.splice(list.indexOf(VECTOR_BEFORE_BUILD), 0, VECTOR_STAGE);
+    const build = at(GRAPHICS_BEFORE_BUILD);
+    if (build >= 0 && graphics > build) {
+        list.splice(graphics, 1);
+        list.splice(list.indexOf(GRAPHICS_BEFORE_BUILD), 0, GRAPHICS_STAGE);
         return { names: list, moved: true, reason: 'build' };
     }
     return { names: list, moved: false, reason: null };
@@ -380,7 +364,7 @@ export function planOrder(stages = [], plan = null, { config = null } = {}) {
     }
 
     // Стадия вектора: до разметки, до сборки или в самом конце цепочки.
-    const placed = placeVectorStage(out);
+    const placed = placeGraphicsStage(out);
     if (placed.moved) {
         warnings.push(placed.reason === 'build'
             ? 'Стадия вектора перенесена перед сборкой: разметка уже сделана, а сборка '
@@ -400,11 +384,6 @@ export function planOrder(stages = [], plan = null, { config = null } = {}) {
     // фаз могла затолкать разметку в их середину — пол ставит её на место.
 
     // Стадия ассетов: после вектора.
-    const withAssets = placeAssetsAfterVector(placed.names);
-    if (withAssets.moved) {
-        warnings.push('Стадия ассетов перенесена после вектора: картинки раскладываются по '
-            + 'местам, когда известно всё множество — вырезки референса и нарисованный вектор.');
-    }
 
     // Стадия ассетов не раньше разметки: разметка линкует картинки, которые контекст
     // уже назвал, и иллюстратор раскладывает их после. План, который связал их кругом
@@ -414,7 +393,7 @@ export function planOrder(stages = [], plan = null, { config = null } = {}) {
     // Стадия анимации: после стилиста.
 
     // Стадия иконок: не раньше кода и не раньше стилей.
-    const withIcons = placeIconifyStage(withAssets.names);
+    const withIcons = placeIconifyStage(placed.names);
     if (withIcons.moved) {
         warnings.push('Стадия иконок перенесена после кода: иконки ложатся в разметку готовой '
             + 'страницы, а страница готова, когда написаны и стили, и код.');

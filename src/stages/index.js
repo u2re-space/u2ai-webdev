@@ -27,16 +27,14 @@
 
 import { collectStage } from './collect.js';
 import { scanStage } from './scan.js';
-import { picturesStage } from './pictures.js';
 import { planStage } from './plan.js';
 import { architectStage } from './architect.js';
 import { setupStage } from './setup.js';
 import { buildStage } from './build.js';
 import { sightStage } from './sight.js';
-import { vectorStage } from './vector.js';
-import { assetsStage } from './assets.js';
 import { writeStage } from './write.js';
 import { iconifyStage } from './iconify.js';
+import { graphicsStage } from './graphics.js';
 import { reviewStage } from './review.js';
 import { auditStage } from './audit.js';
 import { learnStage } from './learn.js';
@@ -123,54 +121,32 @@ export const STAGES = Object.freeze([
         apply: (ctx, result) => { ctx.setup = result?.setup ?? null; },
     },
     {
-        name: 'vector',
-        title: 'Draw the vector graphics',
-        // The graphics are drawn before the markup: the page links the files of the editor
-        // by the names the context gives, and a picture that is drawn after the markup is
-        // still linked by its name — but it has to be drawn before the build, or it never
-        // reaches the bundle.
+        name: 'graphics',
+        title: 'Make the graphics',
+        // The graphics are made before the writing: the page links the files by the names
+        // the context gives, and a picture that is made after the writing is still linked
+        // by its name — but it has to be made before the build, or it never reaches the
+        // bundle.
+        //
+        // One stage and one role: the artist cuts the crops of the reference, draws the
+        // vector graphics and puts the pictures on their places. None of that waits for
+        // another stage — the markup links the pictures by name, and the pictures land on
+        // the names the markup links.
         dependsOn: ['setup'],
-        run: vectorStage,
+        run: graphicsStage,
         args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
-        apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
-    },
-    {
-        name: 'pictures',
-        title: 'Prepare the pictures',
-        // The crops are prepared after the vector: the editor draws first, and the stage
-        // cuts out of the reference what the editor did not draw. The stage of the assets
-        // stands after both of them and knows the whole set of the pictures.
-        dependsOn: ['vector'],
-        run: picturesStage,
-        args: (ctx) => ({ apply: ctx.apply !== false }),
         apply: (ctx, result) => {
+            ctx.reports.push(...(result?.steps ?? []));
             ctx.pictures = result?.pictures ?? [];
+            ctx.assets = result?.assets ?? [];
             if (!ctx.inputs) return;
-            const next = { ...ctx.inputs, pictures: ctx.pictures };
+            const next = { ...ctx.inputs, pictures: ctx.pictures, assets: ctx.assets };
             // If a sheet is already present, keep the refreshed input for the later stages.
             if (result?.measurements) next.measurements = result.measurements;
             if (result?.sheetFile) {
                 next.files = { ...next.files, measurements: result.sheetFile };
             }
             ctx.inputs = next;
-        },
-    },
-    {
-        name: 'assets',
-        title: 'Place the assets',
-        // The assets are placed after the markup: the markup links the prepared pictures
-        // that the context names, and the illustrator puts their final copies on their
-        // places afterwards. Neither waits for the other: a circle between them stopped
-        // the styles from ever starting.
-        dependsOn: ['vector', 'pictures'],
-        run: assetsStage,
-        args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
-        apply: (ctx, result) => {
-            ctx.assets = result?.assets ?? [];
-            if (!ctx.inputs || !ctx.assets.length) return;
-            // The roles after this stage see the final paths of the pictures: the styles
-            // and the code name them.
-            ctx.inputs = { ...ctx.inputs, assets: ctx.assets };
         },
     },
     {

@@ -34,6 +34,7 @@ import { STYLE_RULES } from './styler.js';
 import { MARKUP_RULES } from './markup.js';
 import { CODE_RULES } from './coder.js';
 import { BUILDER_RULES } from './builder.js';
+import { ARTIST_RULES } from './artist.js';
 import { SVG_RULES, IMAGE_RULES } from './editor.js';
 
 /** Моменты работы роли, в которые приходят части инструкции. */
@@ -217,6 +218,9 @@ export function chunksFor({ role = '', phase = PHASES.READ, files = [], tools = 
         // получает правила стилей, шаг с `.js` — правила кода, шаг с `.html` — правила
         // разметки. Ремесло приходит с файлами шага, а не с именем роли.
         if (role === 'builder') out.push({ id: 'builder', text: BUILDER_RULES });
+        // Роль `artist` делает графику, и её ремесло — тоже по виду файла: вектор
+        // получает правила SVG, картинка — правила картинки.
+        if (role === 'artist') out.push({ id: 'artist', text: ARTIST_RULES });
         if (kinds.has(KINDS.STYLE)) out.push({ id: 'styles', text: STYLE_RULES });
         if (kinds.has(KINDS.MARKUP)) out.push({ id: 'markup', text: MARKUP_RULES });
         if (kinds.has(KINDS.CODE)) out.push({ id: 'code', text: CODE_RULES });

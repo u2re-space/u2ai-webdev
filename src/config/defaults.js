@@ -159,9 +159,10 @@ export const defaults = {
     ranks: {
       roles: {
         styler: [1, 0],
-        // Роль, что пишет всё: старшая модель на работе и младшая на полировке.
-        // Ремесло файла приходит по виду файла, а модель — по виду работы.
+        // Роль, что делает графику: старшая модель на работе и младшая на полировке.
+        // Ремесло приходит по виду файла, а модель — по виду работы.
         builder: [1, 0],
+        artist: [1],
         // The architect only answers: there is nothing for it to polish on the disk, so it
         // stays on the head of the ladder.
         architect: [1],
@@ -445,16 +446,14 @@ export const defaults = {
     plan: { enabled: true, maxTurns: 12, timeoutMs: null },
     collect: { enabled: true, maxTurns: 8, timeoutMs: null },
     scan: { enabled: true, maxTurns: 10, timeoutMs: null },
-    pictures: { enabled: true, maxTurns: 4, timeoutMs: null },
     architect: { enabled: true, maxTurns: 16, timeoutMs: null },
     setup: { enabled: true, maxTurns: 8, timeoutMs: null },
     // Стадия письма: разметка, стили, код и движение. Работа длинная — она идёт по
     // всем шагам плана, что пишут файлы.
     write: { enabled: true, maxTurns: 24, timeoutMs: null },
-    // The assets of the project: the pictures are put on their places after the vector
-    // graphics and before the markup links them. The role works with the pictures, and a
-    // picture is a quick job: the stage asks for a budget of its own.
-    assets: { enabled: true, maxTurns: 10, timeoutMs: 10 * 60_000 },
+    // Стадия графики: вырезки референса, векторные рисунки и их места. Рисунок
+    // берёт время, а вырезка — это вызов модели картинок: стадия просит бюджет свой.
+    graphics: { enabled: true, maxTurns: 16, timeoutMs: 30 * 60_000 },
     build: { enabled: true, maxTurns: 1, timeoutMs: null },
     // The stage of the sight looks at the page and asks the styler to fix it, and it does
     // that twice: it needs more time than the stages that write the files.
@@ -462,7 +461,6 @@ export const defaults = {
     // The vector graphics are drawn as text, and a drawing takes time: the editor draws one
     // graphic per step, but a step is still a long turn. The stage asks for a budget of its
     // own, and the run goes on even when the budget is over.
-    vector: { enabled: true, maxTurns: 8, timeoutMs: 30 * 60_000 },
     iconify: { enabled: true, maxTurns: 8, timeoutMs: null },
     // The review judges every step of the plan, repairs what it finds and judges the
     // repaired steps again. That is more work than the stages that write the files, and

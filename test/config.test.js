@@ -282,7 +282,7 @@ test('the environment gives the fields of the config', () => {
         AI_WEBDEV_FRAMEWORK: 'react',
         AI_WEBDEV_FIDELITY: '80',
         AI_WEBDEV_KIND: 'landing',
-        AI_WEBDEV_STAGE_VECTOR: '0',
+        AI_WEBDEV_STAGE_GRAPHICS: '0',
         AI_WEBDEV_BRIDGE_IMAGE: 'false',
     };
     const config = fromEnv(env);
@@ -291,7 +291,7 @@ test('the environment gives the fields of the config', () => {
     assert.equal(config.stack.frontendFramework, 'react');
     assert.equal(config.agent.fidelity, 80);
     assert.equal(config.agent.kind, 'landing');
-    assert.equal(config.stages.vector.enabled, false);
+    assert.equal(config.stages.graphics.enabled, false);
     assert.equal(config.bridges.image.enabled, false);
     assert.equal(envConfigPath({ AI_WEBDEV_CONFIG: 'x.json' }), 'x.json');
 });

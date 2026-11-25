@@ -144,7 +144,7 @@ test('the assets are placed after the vector graphics are drawn', async () => {
 
         const plan = {
             steps: [
-                { id: 'art-1', title: 'Wordmark', role: 'editor', dependsOn: [], files: ['assets/img/wordmark.svg'], criteria: ['drawn'] },
+                { id: 'art-1', title: 'Wordmark', role: 'artist', dependsOn: [], files: ['assets/img/wordmark.svg'], criteria: ['drawn'] },
             ],
         };
 
