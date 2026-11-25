@@ -696,6 +696,53 @@ there is no chain of threads that nobody reads. A role may not hand work to itse
 The run shows the sub-agents: the dashboard gets a row per thread with the role it inherited
 and what it is doing, and the log of the run says when a thread starts and how it ended.
 
+### The worker of the house
+
+The sub-agent is the hand-over of a role to another role. The **worker** is the mechanism
+underneath it, and the same mechanism is open to any parent of the house:
+
+```js
+import { runWebWorker } from '@u2ai/webdev';
+
+const report = await runWebWorker({
+    spec: { role: { name: 'builder', instructions }, goal, files: ['index.html'] },
+    onCall: (call) => tools.execute(call.name, call.arguments),
+});
+```
+
+| Transport | What it is | What crosses the border |
+|---|---|---|
+| `'thread'` (default) | A worker thread of the parent process. | The spec, the frames of the tools, the **shared memory** and the **bytes**. |
+| `'process'` | A child process of its own (`bin/ai-webdev-agent-worker.js`). Its own crash domain, its own env. | The spec, the frames of the tools and the bytes as base64. |
+
+The worker reads its instructions from the shared memory, and it stops when the parent sets
+the flag of cancellation — without a message round trip.
+
+The big texts of a hand-over do not travel as copies: the parent writes them into one
+`SharedArrayBuffer`, and the thread reads them from there. The bytes of a picture travel in
+their own frame — a buffer that moves without a copy — or as base64, for the transport that
+cannot move a buffer.
+
+```js
+import { createSharedBlock } from '@u2ai/webdev/shared';
+import { bytesFrame } from '@u2ai/webdev/protocol';
+
+const shared = createSharedBlock({ instructions, notes });
+const { frame, transfer } = bytesFrame(picture, { name: 'hero.png', mime: 'image/png' });
+```
+
+The tmp cache of the house is the ramdisk: a file system in the memory and a cache of bytes
+that the parent and the worker share.
+
+```js
+import { createRamdisk, createRamdiskFileSystem, allocateMemory } from '@u2ai/webdev/ramdisk';
+
+const block = allocateMemory({ bytes: 4 * 1024 * 1024 * 1024 });  // 4 GB of address space
+```
+
+The block is virtual memory: the pages are taken when the bytes are written, not when the
+block is made.
+
 The markup is the one role with a closed door: on the stage `markup` it may not hand the work
 to `styler`, `coder` or `editor` — not even around the corner through another role. The styles
 and the scripts are the work of their own stages, and those stages have not started yet. The

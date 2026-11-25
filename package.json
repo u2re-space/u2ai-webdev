@@ -4,9 +4,17 @@
   "description": "AI web developer: plans a web project, generates markup, code, styles and components, picks the icons and the setup, and reviews the result.",
   "type": "module",
   "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./shared": "./src/shared/shared.js",
+    "./protocol": "./src/shared/protocol.js",
+    "./worker": "./src/shared/worker.js",
+    "./ramdisk": "./src/access/ramdisk.js"
+  },
   "bin": {
     "ai-webdev": "./bin/ai-webdev.js",
-    "ai-webdev-worker": "./bin/ai-webdev-worker.js"
+    "ai-webdev-worker": "./bin/ai-webdev-worker.js",
+    "ai-webdev-agent-worker": "./bin/ai-webdev-agent-worker.js"
   },
   "repository": {
     "type": "git",

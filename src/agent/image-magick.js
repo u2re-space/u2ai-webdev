@@ -32,7 +32,6 @@
 
 import path from 'node:path';
 import os from 'node:os';
-import { createRequire } from 'node:module';
 import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 
 import { runProgram } from './programs.js';
@@ -311,55 +310,17 @@ export async function wasmBackend({ cwd = process.cwd() } = {}) {
 
 /**
  * Load the wasm of ImageMagick and wrap it into the backend of the house.
+ *
+ * The loader of the wasm lives in `agent/magick-wasm` — the same module the images
+ * system uses, so the two systems speak about the same wasm.
  * @param {string} cwd
  * @returns {Promise<object|null>}
  */
 async function loadWasm(cwd) {
-    // The entry of the package is resolved through the condition of the import: the common
-    // one is the bundle of UMD, and it cannot be imported as a module.
-    let entry = null;
-    let wasmUrl = null;
-    try {
-        entry = import.meta.resolve('@imagemagick/magick-wasm');
-        wasmUrl = import.meta.resolve(process.arch === 'x64'
-            ? '@imagemagick/magick-wasm/x64/magick.wasm'
-            : '@imagemagick/magick-wasm/magick.wasm');
-    } catch {
-        try {
-            const require = createRequire(path.join(cwd, 'noop.js'));
-            const root = path.dirname(require.resolve('@imagemagick/magick-wasm/package.json'));
-            entry = `file://${path.join(root, 'dist', 'index.js').replace(/\\/g, '/')}`;
-            wasmUrl = `file://${require.resolve(process.arch === 'x64'
-                ? '@imagemagick/magick-wasm/x64/magick.wasm'
-                : '@imagemagick/magick-wasm/magick.wasm').replace(/\\/g, '/')}`;
-        } catch {
-            return null;
-        }
-    }
-    let module = null;
-    try {
-        module = await import(entry);
-    } catch {
-        return null;
-    }
-    const init = process.arch === 'x64' ? module.initializeImageMagickx64 : module.initializeImageMagick;
-    if (typeof init !== 'function') return null;
-    let wasmBytes = null;
-    try {
-        wasmBytes = await readFile(new URL(wasmUrl));
-    } catch {
-        try {
-            wasmBytes = await readFile(wasmUrl);
-        } catch {
-            return null;
-        }
-    }
-    try {
-        await init(wasmBytes);
-    } catch {
-        return null;
-    }
-    const { ImageMagick, Magick, MagickGeometry, MagickFormat, ErrorMetric, CompositeOperator } = module;
+    const module = await import('./magick-wasm.js').catch(() => null);
+    const wasm = await module?.wasmLib?.();
+    if (!wasm) return null;
+    const { ImageMagick, Magick, MagickGeometry, MagickFormat, ErrorMetric, CompositeOperator } = wasm;
     return {
         name: 'wasm',
         executable: null,

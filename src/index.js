@@ -83,3 +83,11 @@ export * from './model/profiles.js';
 export * from './model/trust.js';
 export * from './shared/house.js';
 export * from './shared/child-log.js';
+
+// --- the shared memory, the protocol, the worker and the ramdisk of the house -------------
+export * from './shared/shared.js';
+export * from './shared/protocol.js';
+export * from './shared/worker.js';
+export * from './access/ramdisk.js';
+export * from './agent/worker.js';
+export * from './agent/worker-runner.js';
