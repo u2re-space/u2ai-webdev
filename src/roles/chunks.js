@@ -33,6 +33,7 @@ import path from 'node:path';
 import { STYLE_RULES } from './styler.js';
 import { MARKUP_RULES } from './markup.js';
 import { CODE_RULES } from './coder.js';
+import { BUILDER_RULES } from './builder.js';
 import { SVG_RULES, IMAGE_RULES } from './editor.js';
 
 /** Моменты работы роли, в которые приходят части инструкции. */
@@ -212,6 +213,10 @@ export function chunksFor({ role = '', phase = PHASES.READ, files = [], tools = 
     }
     if (phase === PHASES.WRITE) {
         out.push({ id: 'write', text: [WRITE_CHUNK, shellRule(tools)].join('\n') });
+        // Роль `builder` пишет всё, и её ремесло — по виду файла: шаг с `.scss`
+        // получает правила стилей, шаг с `.js` — правила кода, шаг с `.html` — правила
+        // разметки. Ремесло приходит с файлами шага, а не с именем роли.
+        if (role === 'builder') out.push({ id: 'builder', text: BUILDER_RULES });
         if (kinds.has(KINDS.STYLE)) out.push({ id: 'styles', text: STYLE_RULES });
         if (kinds.has(KINDS.MARKUP)) out.push({ id: 'markup', text: MARKUP_RULES });
         if (kinds.has(KINDS.CODE)) out.push({ id: 'code', text: CODE_RULES });

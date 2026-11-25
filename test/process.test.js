@@ -193,13 +193,14 @@ test('the registry of the stages knows the order and the dependencies', () => {
     assert.ok(STAGE_NAMES.includes('learn'));
     assert.equal(stageByName('plan').name, 'plan');
     assert.equal(stageByName('nowhere'), null);
-    assert.deepEqual(stageDependencies('coding'), ['styling']);
+    assert.deepEqual(stageDependencies('write'), ['assets']);
     assert.deepEqual(stageDependencies('nowhere'), []);
 
     const order = stageOrder([...STAGES]);
     assert.equal(order.warnings.length, 0);
-    assert.ok(order.stages.findIndex((stage) => stage.name === 'markup')
-        < order.stages.findIndex((stage) => stage.name === 'coding'));
+    // Стадия письма одна, и она стоит после ассетов и до сборки.
+    assert.ok(order.stages.findIndex((stage) => stage.name === 'write')
+        < order.stages.findIndex((stage) => stage.name === 'build'));
 
     // The pictures come after the vector: the editor draws first, and the stage cuts out
     // of the reference what the editor did not draw.
@@ -331,8 +332,8 @@ test('the live project URL is attached to the browser MCP before coding roles ru
     const stages = [
         { name: 'setup', title: 'Setup', dependsOn: [], run: async () => ({ ok: true }) },
         {
-            name: 'coding',
-            title: 'Coding',
+            name: 'write',
+            title: 'Write',
             dependsOn: ['setup'],
             run: async ({ runContext }) => {
                 assert.equal(runContext.browserUrl, url);
@@ -380,8 +381,7 @@ test('the stages that do the steps of the plan go in the order of the plan', asy
             run: async () => ({ ok: true, plan }),
             apply: (ctx, result) => { ctx.plan = result.plan; },
         },
-        { name: 'markup', title: 'Markup', dependsOn: [], run: async () => { order.push('markup'); return { ok: true }; } },
-        { name: 'styling', title: 'Styles', dependsOn: [], run: async () => { order.push('styling'); return { ok: true }; } },
+        { name: 'write', title: 'Write', dependsOn: [], run: async () => { order.push('write'); return { ok: true }; } },
         { name: 'iconify', title: 'Icons', dependsOn: [], run: async () => { order.push('iconify'); return { ok: true }; } },
     ];
 
@@ -394,11 +394,9 @@ test('the stages that do the steps of the plan go in the order of the plan', asy
         stages,
     });
 
-    // The plan says that the icons are picked before the styles are written; the icons are
-    // put into the markup of the finished page, so the stage stands after the styles.
+    // Стадия письма одна, и иконки кладутся в разметку, которую уже написали.
     assert.equal(result.status, 'completed');
-    assert.deepEqual(order, ['markup', 'styling', 'iconify']);
-    assert.ok(result.warnings.some((item) => /Стадия иконок перенесена после кода/.test(item)));
+    assert.deepEqual(order, ['write', 'iconify']);
 });
 
 test('the pipeline pauses on the border of a stage and may continue', async () => {
@@ -833,8 +831,8 @@ test('a stage with many steps gets a budget for all of them', async () => {
     };
     const stages = [
         {
-            name: 'styling',
-            title: 'Styles',
+            name: 'write',
+            title: 'Write',
             dependsOn: [],
             run: async ({ signal }) => await new Promise((resolve, reject) => {
                 const timer = setTimeout(resolve, 30_000);
@@ -874,8 +872,8 @@ test('the budget of a step is a part of the budget of the stage', async () => {
         ],
     };
     const stages = [{
-        name: 'coding',
-        title: 'Code',
+        name: 'write',
+        title: 'Write',
         dependsOn: [],
         run: async ({ turnTimeoutMs }) => {
             seen.push(turnTimeoutMs);

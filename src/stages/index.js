@@ -31,16 +31,11 @@ import { picturesStage } from './pictures.js';
 import { planStage } from './plan.js';
 import { architectStage } from './architect.js';
 import { setupStage } from './setup.js';
-import { markupStage } from './markup.js';
-import { preStylingStage } from './pre-styling.js';
-import { preCodingStage } from './pre-coding.js';
-import { codingStage } from './coding.js';
-import { stylingStage } from './styling.js';
-import { animationStage } from './animation.js';
 import { buildStage } from './build.js';
 import { sightStage } from './sight.js';
 import { vectorStage } from './vector.js';
 import { assetsStage } from './assets.js';
+import { writeStage } from './write.js';
 import { iconifyStage } from './iconify.js';
 import { reviewStage } from './review.js';
 import { auditStage } from './audit.js';
@@ -161,22 +156,13 @@ export const STAGES = Object.freeze([
         },
     },
     {
-        name: 'markup',
-        title: 'Write the markup',
-        dependsOn: ['setup'],
-        run: markupStage,
-        args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
-        verify: workOnDisk('markup'),
-        apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
-    },
-    {
         name: 'assets',
         title: 'Place the assets',
         // The assets are placed after the markup: the markup links the prepared pictures
         // that the context names, and the illustrator puts their final copies on their
         // places afterwards. Neither waits for the other: a circle between them stopped
         // the styles from ever starting.
-        dependsOn: ['vector', 'pictures', 'markup'],
+        dependsOn: ['vector', 'pictures'],
         run: assetsStage,
         args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
         apply: (ctx, result) => {
@@ -188,61 +174,15 @@ export const STAGES = Object.freeze([
         },
     },
     {
-        name: 'pre-coding',
-        title: 'Draft the contract of the code',
-        // The skeleton of the code comes right after the markup: the skeleton is written
-        // against the markup and the brief of the architect — the modules, the states and
-        // the data flow. Without it the styler invents the states nobody wears, and the
-        // coder invents the names the styles never dress.
-        dependsOn: ['markup'],
-        run: preCodingStage,
+        name: 'write',
+        title: 'Write the project',
+        // One stage for all the writing: the markup, the styles, the scripts and the
+        // motion. The role is one, the craft of the file comes by its kind, and the
+        // guides come by the purpose of the write.
+        dependsOn: ['assets'],
+        run: writeStage,
         args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
-        verify: workOnDisk('coder', 'draft', 'pre-coding'),
-        apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
-    },
-    {
-        name: 'pre-styling',
-        title: 'Draft the contract of the styles',
-        // The draft of the styles comes after the skeleton of the code: the styler dresses
-        // exactly the states and the modules the skeleton names. Without this stage the
-        // styles written later dress classes that nobody uses.
-        dependsOn: ['pre-coding'],
-        run: preStylingStage,
-        args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
-        verify: workOnDisk('styler', 'draft', 'pre-styling'),
-        apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
-    },
-    {
-        name: 'styling',
-        title: 'Write the styles',
-        // The full styles come after the draft of the styles: the draft is the contract,
-        // and the full work is the second look at the same file.
-        dependsOn: ['pre-styling'],
-        run: stylingStage,
-        args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
-        verify: workOnDisk('styler', 'full'),
-        apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
-    },
-    {
-        name: 'animation',
-        title: 'Animate the result',
-        // The motion comes after the styles and before the code: the code is written against
-        // the contract of the styles, and the states of the page are part of that contract.
-        dependsOn: ['styling'],
-        run: animationStage,
-        args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
-        verify: workOnDisk('animator'),
-        apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
-    },
-    {
-        name: 'coding',
-        title: 'Write the code',
-        // The full code comes after the full styles: the scripts use the class names and
-        // the tokens that the stylesheet has already written.
-        dependsOn: ['styling'],
-        run: codingStage,
-        args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
-        verify: workOnDisk('coder', 'full', 'coding'),
+        verify: workOnDisk('builder'),
         apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
     },
     {

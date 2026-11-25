@@ -9,6 +9,7 @@
  */
 
 import { ENUMS } from './constants.js';
+import { KIND_EFFORT } from '../agent/pace.js';
 
 /**
  * The effort of every role of the run, by the stage it works in.
@@ -26,6 +27,7 @@ export const STAGE_EFFORT = Object.freeze({
     architect: 'high',
     director: 'high',
     coder: 'high',
+    builder: 'high',
     markup: 'xhigh',
     styler: 'high',
     animator: 'high',
@@ -36,14 +38,6 @@ export const STAGE_EFFORT = Object.freeze({
     reviewer: 'high',
     auditor: 'high',
     learner: 'high',
-    // Фазы стилей и кода. Черновик контракта — это основа, на которой стоит вся
-    // работа: токены, имена классов, состояния. Ошибка в них стоит дороже, чем
-    // ошибка в самой работе, поэтому контракт пишется с самой глубокой планкой, а
-    // полная работа — с обычной для своего вида.
-    'pre-styling': 'high',
-    'pre-coding': 'high',
-    styling: 'xhigh',
-    coding: 'xhigh',
 });
 
 /**
@@ -165,6 +159,9 @@ export const defaults = {
     ranks: {
       roles: {
         styler: [1, 0],
+        // Роль, что пишет всё: старшая модель на работе и младшая на полировке.
+        // Ремесло файла приходит по виду файла, а модель — по виду работы.
+        builder: [1, 0],
         // The architect only answers: there is nothing for it to polish on the disk, so it
         // stays on the head of the ladder.
         architect: [1],
@@ -193,10 +190,6 @@ export const defaults = {
        * The ladder of the stage wins over the ladder of the role.
        */
       stages: {
-        'pre-styling': [1],
-        'pre-coding': [1],
-        styling: [0],
-        coding: [0],
       },
     },
   },
@@ -247,6 +240,14 @@ export const defaults = {
      * and leaves every role with the effort of `reasoning.effort`.
      */
     stageEffort: { ...STAGE_EFFORT },
+    /**
+     * The effort by the kind of the file: `style`, `markup`, `code`, `svg`, `image`.
+     *
+     * The effort follows the work, not the stage: a stylesheet wants more thought than
+     * a script, and a markup wants less than both. The kind of the file is known before
+     * the first turn — the step names the files it touches.
+     */
+    kindEffort: { ...KIND_EFFORT },
   },
   retries: 3,
   /**
@@ -447,16 +448,9 @@ export const defaults = {
     pictures: { enabled: true, maxTurns: 4, timeoutMs: null },
     architect: { enabled: true, maxTurns: 16, timeoutMs: null },
     setup: { enabled: true, maxTurns: 8, timeoutMs: null },
-    markup: { enabled: true, maxTurns: 16, timeoutMs: null },
-    // Фазы стилей и кода. Черновик контракта — короткая работа: токены, имена и каркас.
-    // Полная работа — длинная: она идёт по тому, что написала другая роль.
-    'pre-styling': { enabled: true, maxTurns: 10, timeoutMs: null },
-    'pre-coding': { enabled: true, maxTurns: 12, timeoutMs: null },
-    coding: { enabled: true, maxTurns: 24, timeoutMs: null },
-    styling: { enabled: true, maxTurns: 16, timeoutMs: null },
-    // The motion of the result: the rules of the animation come after the styles and
-    // before the code.
-    animation: { enabled: true, maxTurns: 14, timeoutMs: null },
+    // Стадия письма: разметка, стили, код и движение. Работа длинная — она идёт по
+    // всем шагам плана, что пишут файлы.
+    write: { enabled: true, maxTurns: 24, timeoutMs: null },
     // The assets of the project: the pictures are put on their places after the vector
     // graphics and before the markup links them. The role works with the pictures, and a
     // picture is a quick job: the stage asks for a budget of its own.
@@ -801,6 +795,7 @@ export const defaults = {
     architect: {},
     director: {},
     coder: {},
+    builder: {},
     markup: {},
     styler: {},
     animator: {},
@@ -878,6 +873,13 @@ export const defaults = {
       ],
       iconifier: ['phosphorIcons', 'lucideIcons', 'googleFonts'],
       editor: ['svg', 'mdnCss', 'phosphorIcons', 'lucideIcons'],
+      // Роль, которая пишет всё. Гайды приходят к ней по назначению работы, а не
+      // лежат в промпте заранее: список здесь — запасной, на случай, когда
+      // назначение не названо.
+      builder: [
+        'htmlSemantics', 'a11y', 'cssColors', 'cssUnits', 'cssGrid', 'cssFlex',
+        'cssMotion', 'cssFonts', 'cssShapes', 'svg', 'phosphorIcons', 'lucideIcons',
+      ],
       animator: [
         'cssAnimation', 'cssMotion', 'cssTransform', 'cssNesting', 'cssSelectors',
         'cssColors', 'mdnCss',

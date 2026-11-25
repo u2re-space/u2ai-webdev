@@ -126,25 +126,22 @@ test('the passes of the house are known', () => {
     assert.ok(PASSES.coder.includes('full'));
 });
 
-test('the dial of the contract lifts the plan of the drafts', () => {
-    // Планка черновиков контракта выше: она поднимает усилие выше потолка прогона.
+test('the effort follows the kind of the file, not the stage', () => {
+    // Фаз больше нет, и усилие следует за работой: таблица стилей требует больше
+    // мысли, чем скрипт, а разметка — меньше обоих.
     const config = structuredClone(defaults);
-    const draft = effortFor({ config, role: 'styler', stage: 'pre-styling' });
-    const work = effortFor({ config, role: 'styler', stage: 'styling' });
-    assert.equal(draft, 'xhigh');
-    assert.equal(work, 'high');
-    assert.ok(draft !== work, 'черновик и работа отвечают с разной планкой');
+    const styles = effortFor({ config, role: 'builder', kind: 'style' });
+    const code = effortFor({ config, role: 'builder', kind: 'code' });
+    const markup = effortFor({ config, role: 'builder', kind: 'markup' });
+    assert.equal(styles, 'high');
+    assert.equal(code, 'medium');
+    assert.equal(markup, 'medium');
+    assert.ok(styles !== code, 'стили и код отвечают с разной планкой');
 
-    // Диал контракта поднимает усилие и над потолком прогона: он и есть то самое
-    // «поднять планку на pre-стадиях».
+    // Потолок прогона — потолок: усилие вида не поднимает его выше.
     const low = structuredClone(defaults);
-    low.pace.contractQuality = 50;
-    assert.equal(effortFor({ config: low, role: 'styler', stage: 'pre-styling' }), 'high');
-
-    // Пользователь может опустить планку контракта до общей.
-    const flat = structuredClone(defaults);
-    flat.pace.contractQuality = 0;
-    assert.equal(effortFor({ config: flat, role: 'styler', stage: 'pre-styling' }), 'low');
+    low.reasoning.effort = 'medium';
+    assert.equal(effortFor({ config: low, role: 'builder', kind: 'style' }), 'medium');
 });
 
 /**

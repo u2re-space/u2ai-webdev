@@ -12,7 +12,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 
-import { animationStage } from '../src/stages/animation.js';
+import { writeStage } from '../src/stages/write.js';
 import { assetsStage, assetFiles, placedAssets, writeAssets, readAssets } from '../src/stages/assets.js';
 import { inputContext } from '../src/inputs/index.js';
 import { ROLES } from '../src/roles/index.js';
@@ -76,22 +76,21 @@ function schemaAnswer(name, args) {
 const PLAN = {
     summary: 'A landing.',
     steps: [
-        { id: 'style-1', title: 'Styles', role: 'styler', dependsOn: [], files: ['src/styles/main.css'], criteria: ['looks'] },
-        { id: 'motion-1', title: 'Motion', role: 'animator', dependsOn: ['style-1'], files: ['src/styles/main.css'], criteria: ['moves'] },
+        { id: 'motion-1', title: 'Motion', role: 'animator', dependsOn: [], files: ['src/styles/main.css'], criteria: ['moves'] },
     ],
 };
 
 test('the animator writes the motion into the styles of the step', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-motion-'));
     try {
-        const client = fakeClient([schemaAnswer('style', {
+        const client = fakeClient([schemaAnswer('code', {
             summary: 'The motion.',
             tokens: [],
             files: [{ path: 'src/styles/main.css', content: '.card { transition: opacity 200ms; }\n', language: 'css' }],
             notes: '',
         })]);
 
-        const result = await animationStage({
+        const result = await writeStage({
             client,
             config: { output: { work: './.tmp' } },
             root,
@@ -111,7 +110,7 @@ test('the animator writes the motion into the styles of the step', async () => {
 test('the stage of the animation is skipped when the plan has no step of the role', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-motion-none-'));
     try {
-        const result = await animationStage({
+        const result = await writeStage({
             client: fakeClient([]),
             config: { output: { work: './.tmp' } },
             root,

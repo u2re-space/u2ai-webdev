@@ -14,9 +14,7 @@ import path from 'node:path';
 import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promises';
 
 import { stepsForRole, applyFiles, laterSteps, missingFiles, roleWorkOnDisk, stepReportPath, readStepReport, readStepReports, stepScope, inScope, orderOfWork, runStepStage, stepsOfStage } from '../src/stages/step.js';
-import { markupStage } from '../src/stages/markup.js';
-import { codingStage } from '../src/stages/coding.js';
-import { stylingStage, styleTokensText } from '../src/stages/styling.js';
+import { writeStage, styleTokensText } from '../src/stages/write.js';
 
 /**
  * A client that answers with the ready answers, one per call.
@@ -92,6 +90,18 @@ function schemaAnswer(name, args) {
             arguments: JSON.stringify(args),
         }],
     };
+}
+
+
+/**
+ * A plan with one step: the stage of the writing takes every step of the writing.
+ * @param {string} id
+ * @param {string} role
+ * @param {string[]} files
+ * @returns {object}
+ */
+function planOf(id, role, files) {
+    return { summary: 'A landing.', steps: [{ id, title: id, role, dependsOn: [], files, criteria: [] }] };
 }
 
 const PLAN = {
@@ -361,7 +371,7 @@ test('a step stage runs the role over its steps and writes the reports', async (
         root,
         task: 'Make a landing.',
         role: 'coder',
-        plan: PLAN,
+        plan: planOf('code-1', 'coder', ['src/main.js']),
         runId: 'run-1',
     });
 
@@ -414,7 +424,7 @@ test('a file that could not be written fails the step', async () => {
         root,
         task: 'Make a landing.',
         role: 'coder',
-        plan: PLAN,
+        plan: planOf('code-1', 'coder', ['src/main.js']),
         runId: 'run-1',
     });
 
@@ -440,7 +450,7 @@ test('a step whose answer was lost is done again', async () => {
         root,
         task: 'Make a landing.',
         role: 'coder',
-        plan: PLAN,
+        plan: planOf('code-1', 'coder', ['src/main.js']),
         runId: 'run-1',
     });
     assert.equal(first.ok, true);
@@ -455,7 +465,7 @@ test('a step whose answer was lost is done again', async () => {
         root,
         task: 'Make a landing.',
         role: 'coder',
-        plan: PLAN,
+        plan: planOf('code-1', 'coder', ['src/main.js']),
         runId: 'run-1',
     });
     assert.ok(asked > 0, 'the step has to be done again');
@@ -478,7 +488,7 @@ test('the work of a role that was lost is not on the disk', async () => {
         root,
         task: 'Make a landing.',
         role: 'coder',
-        plan: PLAN,
+        plan: planOf('code-1', 'coder', ['src/main.js']),
         runId: 'run-1',
     });
     assert.equal(await roleWorkOnDisk({ root, config, id: 'run-1', plan: PLAN, role: 'coder' }), true);
@@ -547,7 +557,7 @@ test('a step that is already done is not done again', async () => {
         root,
         task: 'Make a landing.',
         role: 'coder',
-        plan: PLAN,
+        plan: planOf('code-1', 'coder', ['src/main.js']),
         runId: 'run-1',
     });
     assert.equal(first.ok, true);
@@ -560,7 +570,7 @@ test('a step that is already done is not done again', async () => {
         root,
         task: 'Make a landing.',
         role: 'coder',
-        plan: PLAN,
+        plan: planOf('code-1', 'coder', ['src/main.js']),
         runId: 'run-1',
     });
     assert.equal(asked, 0);
@@ -576,7 +586,7 @@ test('a step that is already done is not done again', async () => {
         root,
         task: 'Make a landing.',
         role: 'coder',
-        plan: PLAN,
+        plan: planOf('code-1', 'coder', ['src/main.js']),
         runId: 'run-1',
     });
     assert.ok(asked > 0, 'the model has to be asked again for a step that is not on the disk');
@@ -605,7 +615,7 @@ test('the request of a step tells the role the order of the work', async () => {
         root,
         task: 'Make a landing.',
         role: 'coder',
-        plan: PLAN,
+        plan: planOf('code-1', 'coder', ['src/main.js']),
         runId: 'run-1',
     });
 
@@ -683,7 +693,7 @@ test('the role sees the files that are on the disk', async () => {
         root,
         task: 'Make a landing.',
         role: 'coder',
-        plan: PLAN,
+        plan: planOf('code-1', 'coder', ['src/main.js']),
         runId: 'run-1',
     });
 
@@ -718,7 +728,7 @@ test('the role of a project without files does not see an empty block', async ()
         root,
         task: 'Make a landing.',
         role: 'coder',
-        plan: PLAN,
+        plan: planOf('code-1', 'coder', ['src/main.js']),
         runId: 'run-1',
     });
 
@@ -734,7 +744,7 @@ test('a plan without a step of the role skips the stage', async () => {
         root,
         task: 'Make a landing.',
         role: 'planner',
-        plan: PLAN,
+        plan: planOf('code-1', 'coder', ['src/main.js']),
         runId: 'run-1',
     });
     assert.equal(result.ok, true);
@@ -768,7 +778,7 @@ test('an operator step skip is written as skipped, not completed', async () => {
 
 test('the stage of the markup keeps the landmarks of the answer', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-markup-'));
-    const client = fakeClient([schemaAnswer('markup', {
+    const client = fakeClient([schemaAnswer('code', {
         summary: 'The page.',
         files: [{ path: 'index.html', content: '<main></main>\n', language: 'html' }],
         landmarks: ['header', 'main', 'footer'],
@@ -776,12 +786,12 @@ test('the stage of the markup keeps the landmarks of the answer', async () => {
         notes: '',
     })]);
 
-    const result = await markupStage({
+    const result = await writeStage({
         client,
         config: { output: { work: './.tmp' } },
         root,
         task: 'Make a landing.',
-        plan: PLAN,
+        plan: planOf('markup-1', 'markup', ['index.html']),
         architecture: { summary: 'x', stack: { markup: 'html' }, modules: [], tokens: [], notes: '' },
         runId: 'run-1',
     });
@@ -802,12 +812,12 @@ test('the stage of the markup reports the files that were not written', async ()
         notes: '',
     })]);
 
-    const result = await markupStage({
+    const result = await writeStage({
         client,
         config: { output: { work: './.tmp' } },
         root,
         task: 'Make a landing.',
-        plan: PLAN,
+        plan: planOf('markup-1', 'markup', ['index.html']),
         architecture: { summary: 'x', stack: { markup: 'html' }, modules: [], tokens: [], notes: '' },
         runId: 'run-1',
     });
@@ -826,12 +836,12 @@ test('the stage of the code writes the files of the step', async () => {
         notes: '',
     })]);
 
-    const result = await codingStage({
+    const result = await writeStage({
         client,
         config: { output: { work: './.tmp' } },
         root,
         task: 'Make a landing.',
-        plan: PLAN,
+        plan: planOf('code-1', 'coder', ['src/main.js']),
         runId: 'run-1',
     });
 
@@ -841,19 +851,19 @@ test('the stage of the code writes the files of the step', async () => {
 
 test('the stage of the styles reports the tokens it declares', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-styling-'));
-    const client = fakeClient([schemaAnswer('style', {
+    const client = fakeClient([schemaAnswer('code', {
         summary: 'The styles.',
         tokens: [{ name: 'color-text', value: '#101828' }],
         files: [{ path: 'src/styles/main.css', content: 'body { color: var(--color-text); }\n', language: 'css' }],
         notes: '',
     })]);
 
-    const result = await stylingStage({
+    const result = await writeStage({
         client,
         config: { output: { work: './.tmp' } },
         root,
         task: 'Make a landing.',
-        plan: PLAN,
+        plan: planOf('style-1', 'styler', ['src/styles/main.css']),
         architecture: {
             summary: 'x',
             stack: { style: 'css' },
@@ -872,14 +882,14 @@ test('the stage of the styles reports the tokens it declares', async () => {
 test('the stage of the styles says that the classes of the markup have no rules', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-styling-pairs-'));
     await writeFile(path.join(root, 'index.html'), '<div class="landing hero__title"></div>', 'utf8');
-    const client = fakeClient([schemaAnswer('style', {
+    const client = fakeClient([schemaAnswer('code', {
         summary: 'The styles.',
         tokens: [],
         files: [{ path: 'styles.scss', content: '.landing { color: red; }\n', language: 'scss' }],
         notes: '',
     })]);
 
-    const result = await stylingStage({
+    const result = await writeStage({
         client,
         config: { output: { work: './.tmp' } },
         root,
@@ -921,7 +931,7 @@ test('a broken file of a step is found and the role is asked to fix it', async (
         root,
         task: 'Make a landing.',
         role: 'coder',
-        plan: PLAN,
+        plan: planOf('code-1', 'coder', ['src/main.js']),
         runId: 'run-1',
     });
 
@@ -946,7 +956,7 @@ test('a broken file that stays broken is an error of the step', async () => {
         root,
         task: 'Make a landing.',
         role: 'coder',
-        plan: PLAN,
+        plan: planOf('code-1', 'coder', ['src/main.js']),
         runId: 'run-1',
     });
 
@@ -980,7 +990,7 @@ test('the file the role wrote beside the files of the step is checked too', asyn
         root,
         task: 'Make a landing.',
         role: 'coder',
-        plan: PLAN,
+        plan: planOf('code-1', 'coder', ['src/main.js']),
         runId: 'run-1',
     });
 
@@ -1017,7 +1027,7 @@ test('the file the role wrote with its own tool is checked too', async () => {
         root,
         task: 'Make a landing.',
         role: 'coder',
-        plan: PLAN,
+        plan: planOf('code-1', 'coder', ['src/main.js']),
         runId: 'run-1',
     });
 
@@ -1292,7 +1302,7 @@ test('the abort signal of the stage reaches the role', async () => {
     };
 
     const controller = new AbortController();
-    const work = codingStage({
+    const work = writeStage({
         client,
         config: { output: { work: './.tmp' }, stages: { coding: { maxTurns: 4 } } },
         root,

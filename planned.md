@@ -3221,6 +3221,45 @@ CLI `ai-webdev` (`@u2ai/webdev`) с собственным конфигом `~/.
       другой шаг тоже считается
 - [x] Проверка: `npm test` — 897 тестов, все проходят; `npm run check` — 246 файлов
 
+### step-137 — Одна роль пишет всё; назначение приносит гайды; усилие — по виду файла
+
+- [x] Повод: прогон `All-Portfolio/Portfolio-6` застрял на `pre-coding`, и роль ждала
+      стилей, которых не будет ещё очень долго. Разбор: роль писала свой файл и ждала
+      чужой — кодер ждал стилей, стилест ждал кода, и прогон стоял
+- [x] **Решение пользователя**: отказаться от намеченных стадий в пользу вольности.
+      Роли `markup`, `styler`, `coder`, `animator` становятся базой знаний и правилами
+      обращения, а не отдельными стадиями. Модель сама говорит, зачем пишет, и получает
+      гайд под это назначение
+- [x] **Инфраструктура уже была**: `src/agent/docs.js` (27 источников) и
+      `documentation.roles` — это и есть база знаний по назначению; `web_guidance` и
+      `read_skill` умеют подкинуть гайд по требованию. Не хватало только назначения
+- [x] `src/roles/purpose.js` — назначение работы и гайды под него: `PURPOSES`,
+      `purposeFor`, `guidesForPurpose`, `purposeBlock`
+- [x] `src/roles/index.js` — `write_ready` знает поле `purpose`: модель говорит, зачем
+      она пишет, и гайды приезжают **в тот же ход записи**. Назначение без слов
+      выводится из вида файла
+- [x] `src/agent/pace.js` — усилие следует за видом работы, а не за стадией:
+      `KIND_EFFORT` (`style: high`, `code: medium`, `markup: medium`, `image: low`) и
+      `kindEffortFor`; профиль в конфиге — `reasoning.kindEffort`
+- [x] `src/roles/builder.js` — **одна роль пишет всё**: разметка, стили, код и движение.
+      Ремесло файла приходит по виду файла (`chunksFor`), а не по имени роли
+- [x] `src/stages/write.js` — **одна стадия письма**: берёт все шаги плана, что пишут
+      файлы (`WRITE_ROLES` в `src/stages/roles.js`)
+- [x] `src/stages/index.js`, `src/config/constants.js` — стадии `markup`, `pre-coding`,
+      `pre-styling`, `styling`, `animation`, `coding` ушли; осталась `write`
+- [x] `src/stages/plan-order.js` — фаз нет, порядок внутри стадии задаёт план. Рёбра
+      `iconify>write` убраны: иконки не ждут письма, они кладутся в написанную разметку
+- [x] `src/config/validate.js` — `dropGoneFromConfig`: конфиг, написанный под прошлую
+      систему, молча теряет то, чего больше нет. Ронять прогон из-за этого — значит
+      наказывать за то, что система изменилась
+- [x] `test/purpose.test.js` — назначение, гайды и усилие по виду файла
+- [x] `test/roles.test.js` — гайды приезжают в ход записи; ремесло роли — по виду файла
+- [x] `test/plan-order.test.js`, `test/stages.test.js`, `test/process.test.js`,
+      `test/ranks.test.js`, `test/pass.test.js`, `test/config.test.js`,
+      `test/tui.test.js`, `test/cli.test.js`, `test/steps.test.js`, `test/motion.test.js` —
+      тесты под новую схему
+- [x] Проверка: `npm test` — 901 тест, все проходят; `npm run check` — 244 файла
+
 ---
 
 

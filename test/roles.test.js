@@ -153,7 +153,35 @@ test('every built-in role is in the registry', () => {
         assert.ok(Array.isArray(ROLES[name].tools));
         assert.ok(Number.isInteger(ROLES[name].maxTurns));
     }
-    assert.equal(ROLE_NAMES.length, 15);
+    assert.equal(ROLE_NAMES.length, 16);
+});
+
+test('the builder writes everything, and its craft comes by the kind of the file', () => {
+    // Роль одна: разметка, стили, код и движение. Ремесло приходит по виду файла,
+    // а не по имени роли, — и это то, что снимает ожидание между ролями.
+    const builder = ROLES.builder;
+    assert.equal(builder.name, 'builder');
+    for (const tool of ['write_file', 'replace_text', 'run_command', 'read_skill', 'web_guidance']) {
+        assert.ok(builder.tools.includes(tool), `the builder has no ${tool}`);
+    }
+    const text = builder.instructions({ task: 'Make the page.' });
+    assert.match(text, /You are the builder of a web project/);
+    // Ничего ждать не надо: это было причиной застоя.
+    assert.match(text, /Nothing has to wait for another role/);
+    // Назначение приходит к воротам записи.
+    assert.match(text, /Say what the write is for/);
+
+    // Ремесло по виду файла: шаг со стилями получает правила стилей, шаг со
+    // скриптом — правила кода, и общее правило есть всегда.
+    const styles = chunkText(chunksFor({ role: 'builder', phase: 'write', files: ['src/styles/main.scss'] }));
+    assert.match(styles, /The rules of the styles/);
+    const code = chunkText(chunksFor({ role: 'builder', phase: 'write', files: ['src/main.js'] }));
+    assert.match(code, /boundaries of the work/);
+    // Общее правило — всегда.
+    assert.match(code, /The rules that hold for every file/);
+    assert.match(styles, /The rules that hold for every file/);
+    // В шаге со скриптом нет правил стилей: ремесло приходит по виду файла.
+    assert.ok(!/The rules of the styles/.test(code));
 });
 
 test('the scanner reads the project and does not plan', () => {
@@ -1126,6 +1154,96 @@ test('the estimate of the gate sizes the budget of the write turn', async () => 
         // The gate says what the budget of the next turn is.
         const ready = events.find((event) => event.type === 'role.write_ready');
         assert.equal(ready.outputTokens, 40_000);
+    } finally {
+        api.close();
+    }
+});
+
+test('the purpose of the write brings the guides of that purpose with the write', async () => {
+    // Модель говорит у ворот, зачем она пишет, и гайды приезжают в тот же ход,
+    // в котором она пишет. Знание приходит вовремя, а не лежит в промпте заранее.
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-write-purpose-'));
+    const home = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-home-'));
+    const env = { HOME: home, USERPROFILE: home };
+
+    const api = await mockApi([
+        toolAnswer('write_ready', { purpose: 'dialog' }),
+        toolAnswer('write_file', { path: 'index.html', content: '<dialog></dialog>' }),
+        schemaAnswer('code', codeData()),
+    ]);
+
+    try {
+        const config = structuredClone(defaults);
+        config.model = 'google/gemini-4-hydrogen';
+        config.backends = [{ baseURL: api.url, apiKey: 'test-key' }];
+        config.reasoning.effort = 'low';
+        const client = await createClient({ config, env });
+
+        const events = [];
+        await runRole({
+            client,
+            config,
+            role: 'coder',
+            input: 'Make the dialog.',
+            context: { task: 'Make the dialog.' },
+            root,
+            env,
+            notify: (event) => events.push(event),
+            requireFiles: true,
+        });
+
+        // Событие ворот несёт назначение.
+        const ready = events.find((event) => event.type === 'role.write_ready');
+        assert.equal(ready.purpose, 'dialog');
+
+        // Гайды назначения пришли в ход записи — во второй запрос.
+        const writeTurn = JSON.stringify(api.requests[1]?.input ?? '');
+        assert.match(writeTurn, /The purpose of this write/);
+        assert.match(writeTurn, /dialog/);
+        // Гайд доступности — по назначению «dialog».
+        assert.match(writeTurn, /Accessibility/);
+    } finally {
+        api.close();
+    }
+});
+
+test('a write without a purpose takes the guides of the kind of the file', async () => {
+    // Модель не сказала ничего — назначение выводится из вида файла: таблица стилей
+    // просит правил цвета и единиц.
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-write-purpose-kind-'));
+    const home = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-home-'));
+    const env = { HOME: home, USERPROFILE: home };
+
+    const api = await mockApi([
+        toolAnswer('write_ready', {}),
+        toolAnswer('write_file', { path: 'styles/main.scss', content: '.a { color: red; }' }),
+        schemaAnswer('code', codeData()),
+    ]);
+
+    try {
+        const config = structuredClone(defaults);
+        config.model = 'google/gemini-4-hydrogen';
+        config.backends = [{ baseURL: api.url, apiKey: 'test-key' }];
+        config.reasoning.effort = 'low';
+        const client = await createClient({ config, env });
+
+        const events = [];
+        await runRole({
+            client,
+            config,
+            role: 'styler',
+            input: 'Make the styles.',
+            context: { task: 'Make the styles.', step: { id: 's-1', files: ['styles/main.scss'] } },
+            root,
+            env,
+            notify: (event) => events.push(event),
+            requireFiles: true,
+        });
+
+        const ready = events.find((event) => event.type === 'role.write_ready');
+        assert.equal(ready.purpose, 'styles');
+        const writeTurn = JSON.stringify(api.requests[1]?.input ?? '');
+        assert.match(writeTurn, /CSS colours/);
     } finally {
         api.close();
     }

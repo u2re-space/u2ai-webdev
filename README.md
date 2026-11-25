@@ -100,13 +100,8 @@ report into the directory of the run and hands the result to the next one.
 | `setup` | Prepare the environment: the scaffold, the dependencies and the entry points. |
 | `vector` | Draw the vector graphics as code: the SVG of the ornaments and the illustrations. |
 | `pictures` | Prepare the crops of the reference that are pictures: the chess piece, the board, the badge. |
-| `markup` | Write the markup of the pages. |
 | `assets` | Place the assets: the prepared pictures and the drawn graphics get their final paths and their final format. |
-| `pre-coding` | Write the skeleton of the code: the modules, the states of the interface, the data, the behaviour — out of the markup and the brief of the architect. It takes the steps of the coder that do not wait for the styles: a step the plan puts after the styles belongs to the full work of the code. |
-| `pre-styling` | Write the contract of the styles: the tokens, the names of the classes, the rules of the components and the states — dressed over the skeleton of the code. |
-| `styling` | Look over the styles once more: what the code needs, the fine tuning. |
-| `animation` | Write the motion of the result: the transitions, the entrances, the reduced motion. |
-| `coding` | Look over the code once more: the logic, the errors, the fine tuning. |
+| `write` | Write the project: the markup, the styles, the scripts and the motion. One role writes them all — the craft of a file comes by its kind, and the guides by the purpose of the write. |
 | `iconify` | Choose the icons of the interface and check that every one of them is on the disk. |
 | `build` | Connect the styles: the entry point, the compilation, the links of the markup. |
 | `sight` | Open the page in a browser, shoot it, and let the styler compare the picture with the reference and fix the styles. |
@@ -157,38 +152,40 @@ chain, after the build and the sight of the page. When the markup is already don
 continues, the vector stands before the build: the build carries `public/` into the bundle, and
 an asset drawn after it never reaches the distribution.
 
-The styles and the code are written in **four phases**, and the order between them is not a
-choice — it is the same for every page:
+The styles and the code are written in **one stage**, by one role. The craft of a file
+comes by its kind, and the guides come by the purpose of the write:
 
-| Phase | What it writes | Model | Effort |
-|---|---|---|---|
-| `pre-coding` | The skeleton of the code: the modules, their exports, the states of the interface, the data, the behaviour — written out of the markup and the brief of the architect. | head of the family (the Sol) | `xhigh` |
-| `pre-styling` | The contract of the styles: the tokens, the names of the classes, the skeleton of the layout, the rules of the components, the rules of the states, the responsive behaviour — dressed over the skeleton of the code. | head of the family (the Sol) | `xhigh` |
-| `styling` | The second look at the same stylesheets: what the code needs, the fine tuning. | tail of the family (the Terra) | `high` |
-| `coding` | The second look at the same files: the logic, the errors, the fine tuning. | tail of the family (the Terra) | `high` |
+| Kind of the file | What it needs | Effort |
+|---|---|---|
+| `.scss`, `.css` | the colours, the units, the shapes, the fonts | `high` |
+| `.js`, `.ts` | the logic, the modules, the data | `medium` |
+| `.html` | the semantics, the accessibility | `medium` |
+| `.svg` | the grid of the icon, `currentColor` | `medium` |
 
-The phases exist because a role that waits for something that comes after it waits for ever.
-The coder without a skeleton does not know which modules the page will call, and invents
-its own; the styler without a skeleton does not know which states the page will show, and
-dresses none of them. The skeleton comes first: it grows out of the markup, which does not
-need the styles. The contract of the styles is written second, and it dresses exactly the
-states and the modules that the skeleton names — then each role does its work with the other
-one's result on the disk.
+The one stage exists because a role that waits for something that comes after it waits
+for ever. The coder without the styles waits for the styles; the styler without the code
+waits for the code; and the run stands still between them.
 
-**The contract is written whole, and by the better model.** The full work is a second pass
-over the same file — and a second pass is where the money burns: the expensive model would
-pay twice for the same stylesheet. So the head of the family writes the contract, and the
-tail of the family polishes it. The contract is written at the deepest effort (`xhigh`),
-because an error in the foundation costs more than an error in the work on top of it.
+**Nothing waits any more.** The role writes every file of the step in one turn — the
+markup, the styles and the scripts together, when the step asks for them — and names the
+classes, the tokens and the data attributes they share. There is no other role that owes
+it something, so there is nothing to wait for. The names are the contract, and the role
+writes them once.
 
-The dial of the contract is its own: `pace.contractQuality`. It stands higher than the dial
-of the work by default (75 against 50), and it lifts the effort above the ceiling of the
-run — the ceiling is the budget of the run, and the dial of a stage is an explicit wish of
-the user. Lower it to `contractQuality: 50` and the contract works at the ordinary depth.
+The profile of the effort lives in the config: `reasoning.kindEffort` changes any of them.
+The effort follows the work rather than a stage — a stylesheet wants more thought than a
+script, and a markup wants less than both.
 
-A plan that asks for another order is told: the order of the phases is stronger than the
-plan, and the run says which edge of the plan it dropped.
+**The role says what the write is for, and the guides arrive with the write.** At the write
+gate the role may name the `purpose` of its write — "the dialog that pairs a device", "the
+card grid of the home screen". The run answers with the standards that answer that purpose,
+and they arrive in the very turn where the model writes. Knowledge that comes in time is
+worth more than knowledge that lay in the prompt from the start: a prompt with forty sources
+is noise, and the model loses the main thing in it.
 
+The polish still goes to the tail of the family: a role that has to write again goes back
+to the head, and the polish of what is already on the disk is the second look of the junior
+model.
 ### Nothing to wait for
 
 The old deadlock: the coder needed the styles to know the class names, the styler needed the
@@ -838,7 +835,6 @@ turns.
 | `architect` | Design the structure of the project. |
 | `director` | Lead the steps of the plan and keep the whole in one state. |
 | `coder` | Write the code. |
-| `markup` | Write the markup. |
 | `styler` | Write the styles. |
 | `animator` | Write the motion of the result: the transitions, the entrances, the reduced motion. |
 | `illustrator` | Place the pictures of the project: the final path of every asset and its final format. |

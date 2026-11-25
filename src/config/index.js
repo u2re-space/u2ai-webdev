@@ -18,7 +18,7 @@ import {
   defaultHome, homeConfigFile, homeSkillsDir, homeComponentsDir, homeComponentsDb,
   homeMemoryDb, homeJobsDir, resolveConfigPath, ensureHomeDir,
 } from './paths.js';
-import { validateConfig } from './validate.js';
+import { validateConfig, dropGoneFromConfig } from './validate.js';
 import { resolveModelRef } from '../model/refs.js';
 
 export {
@@ -53,13 +53,21 @@ function pickPrimary(backends, env) {
  * @param {{ configPath?: string|null, overrides?: object, env?: object, cwd?: string, ensureHome?: boolean }} [options]
  * @returns {Promise<object>}
  */
-export async function loadConfig({ configPath = null, overrides = {}, env = process.env, cwd = process.cwd(), ensureHome = true } = {}) {
+export async function loadConfig({ configPath = null, overrides = {}, env = process.env, cwd = process.cwd(), ensureHome = true, warn = null } = {}) {
   const home = defaultHome(env);
   const homeConfig = await readConfigFile(homeConfigFile(home), { optional: true });
   const explicitPath = resolveConfigPath(configPath ?? envConfigPath(env), cwd);
   const fileConfig = explicitPath ? await readConfigFile(explicitPath) : {};
 
   let config = mergeSources(homeConfig, fileConfig, fromEnv(env), overrides);
+  // Стадии и роли, что ушли из системы, молча выпадают: конфиг написан под прошлую
+  // систему, и ронять прогон из-за него — значит наказывать за то, что система
+  // изменилась.
+  const { config: migrated, dropped } = dropGoneFromConfig(config);
+  config = migrated;
+  if (dropped.length) {
+    for (const name of dropped) warn?.(`Конфигурация: убрано то, чего больше нет: ${name}.`);
+  }
   config = await expandPlaceholders(config, {
     env,
     root: cwd,

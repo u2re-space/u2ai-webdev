@@ -185,7 +185,7 @@ test('the stages that were asked for are known apart from the ones they need', (
 });
 
 test('the stage of the pause is checked against the stages of the run', () => {
-    const config = { stages: { plan: { enabled: true }, coding: { enabled: true }, audit: { enabled: false } } };
+    const config = { stages: { plan: { enabled: true }, write: { enabled: true }, audit: { enabled: false } } };
 
     assert.equal(stopAfterStage({}, null, config), null);
     assert.equal(stopAfterStage({ 'stop-after': 'plan' }, null, config), 'plan');
@@ -195,7 +195,7 @@ test('the stage of the pause is checked against the stages of the run', () => {
 
     assert.throws(() => stopAfterStage({ 'stop-after': 'nowhere' }, null, config), /--stop-after: неизвестная стадия "nowhere"/);
     // A stage that is not in the route would never be reached.
-    assert.throws(() => stopAfterStage({ 'stop-after': 'coding' }, ['plan'], config), /--stop-after: стадия "coding" не входит в этот прогон/);
+    assert.throws(() => stopAfterStage({ 'stop-after': 'write' }, ['plan'], config), /--stop-after: стадия "write" не входит в этот прогон/);
     // A stage that is switched off would never be reached either.
     assert.throws(() => stopAfterStage({ 'stop-after': 'audit' }, null, config), /не входит в этот прогон/);
 });

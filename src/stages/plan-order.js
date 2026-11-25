@@ -20,8 +20,7 @@
  * @depends stages/roles
  * @usedBy pipeline
  * @exports PLAN_STAGES, STYLE_CODE_PHASES, planEdges, planOrder, placeVectorStage,
- *          placeIconifyStage, placeAnimationAfterStyles, placeAssetsAfterVector,
- *          placeAssetsAfterMarkup, placeMarkupBeforePhases, placeStyleCodePhases
+ *          placeIconifyStage, placeAssetsAfterVector
  * @ai.tags stages, plan, order
  * @ai.hint pure
  * @changed 2026-11-15 Порядок стадий, которые делают шаги плана, задаёт сам план.
@@ -120,6 +119,13 @@ export function planEdges(plan) {
                 if (!againstPhases.includes(`${from}>${to}`)) againstPhases.push(`${from}>${to}`);
                 continue;
             }
+            // Иконки не ждут письма: они кладутся в разметку, которая уже есть, и
+            // разметка не ждёт их — роль письма сама решает, как назвать значок.
+            //
+            // Без этого правила план, где шаг стилей зависит от шага иконок, а шаг
+            // иконок — от шага разметки, даёт круг `write → iconify → write`. Круг
+            // разрывался бы случаем, и стадия письма вставала бы после сборки.
+            if (from === 'iconify' && to === 'write') continue;
             const key = `${from}>${to}`;
             if (seen.has(key)) continue;
             seen.add(key);
@@ -150,31 +156,6 @@ export function planEdges(plan) {
 }
 
 /**
- * Поставить стадию анимации после стилиста.
- *
- * Движение живёт в стилях: анимация правит ту же таблицу, что и стили, и править её
- * раньше стилей нечего. Анимация стоит прямо после стилей и до кода: код пишется по
- * контракту стилей, и состояния страницы — часть этого контракта.
- *
- * @param {string[]} names имена стадий в порядке прогона
- * @returns {{ names: string[], moved: boolean }}
- * @exports
- * @ai.hint pure
- */
-export function placeAnimationAfterStyles(names = []) {
-    const list = Array.isArray(names) ? [...names] : [];
-    const animation = list.indexOf(ANIMATION_STAGE);
-    const styling = list.indexOf(STYLING_STAGE);
-    if (animation < 0 || styling < 0) return { names: list, moved: false };
-    if (animation > styling) return { names: list, moved: false };
-    // Анимация раньше стилей: она встаёт прямо после стилиста.
-    list.splice(animation, 1);
-    const target = list.indexOf(STYLING_STAGE);
-    list.splice(target < 0 ? list.length : target + 1, 0, ANIMATION_STAGE);
-    return { names: list, moved: true };
-}
-
-/**
  * Поставить стадию ассетов после вектора.
  *
  * Ассеты раскладываются по местам, когда известно всё множество картинок: вырезки
@@ -199,32 +180,6 @@ export function placeAssetsAfterVector(names = []) {
 }
 
 /**
- * Поставить стадию ассетов после разметки.
- *
- * Разметка линкует картинки по именам, которые контекст называет заранее (вырезки
- * референса, нарисованный вектор), и её работа не зависит от того, лежит ли файл уже
- * на своём окончательном месте. Иллюстратор раскладывает файлы после разметки: так
- * круг «картинки ждут разметку, разметка ждёт картинки» не возникает вовсе.
- *
- * @param {string[]} names имена стадий в порядке прогона
- * @returns {{ names: string[], moved: boolean }}
- * @exports
- * @ai.hint pure
- */
-export function placeAssetsAfterMarkup(names = []) {
-    const list = Array.isArray(names) ? [...names] : [];
-    const assets = list.indexOf(ASSETS_STAGE);
-    const markup = list.indexOf(ASSETS_BEFORE);
-    if (assets < 0 || markup < 0) return { names: list, moved: false };
-    if (assets > markup) return { names: list, moved: false };
-    // Ассеты после разметки: они встают прямо после неё.
-    list.splice(assets, 1);
-    const target = list.indexOf(ASSETS_BEFORE);
-    list.splice(target < 0 ? list.length : target + 1, 0, ASSETS_STAGE);
-    return { names: list, moved: true };
-}
-
-/**
  * Стадия вектора и её место в цепочке.
  *
  * Ассеты рисует редактор, и разметка их подключает по именам из контекста. Ставить
@@ -238,102 +193,32 @@ export function placeAssetsAfterMarkup(names = []) {
  * попадает.
  */
 const VECTOR_STAGE = 'vector';
-const VECTOR_BEFORE = 'markup';
+const VECTOR_BEFORE = 'write';
 const VECTOR_AFTER = 'sight';
 const VECTOR_BEFORE_BUILD = 'build';
 const ICONIFY_STAGE = 'iconify';
-const ICONIFY_AFTER = 'styling';
-const STYLING_STAGE = 'styling';
-const CODING_STAGE = 'coding';
-const ANIMATION_STAGE = 'animation';
+const ICONIFY_AFTER = 'write';
 const ASSETS_STAGE = 'assets';
 const ASSETS_AFTER = 'vector';
-const ASSETS_BEFORE = 'markup';
-const MARKUP_STAGE = 'markup';
-const PRE_STYLING_STAGE = 'pre-styling';
-const PRE_CODING_STAGE = 'pre-coding';
+const WRITE_STAGE = 'write';
 
 /**
- * Порядок фаз стилей и кода.
+ * Стадия письма.
  *
- * Четыре фазы, и порядок между ними не выбирается: он один для всех страниц.
+ * Фаз больше нет: разметку, стили, код и движение пишет одна стадия `write` и одна
+ * роль `builder`. Порядок внутри неё задаёт план, а не реестр: шаг идёт после тех
+ * шагов, от которых он зависит.
  *
- *   1. `pre-coding` — скелет кода: модули, состояния, поток данных. Скелет пишется по
- *      разметке и брифу архитектора — ему стили не нужны.
- *   2. `pre-styling` — черновик контракта стилей: токены, имена классов, каркас. Он
- *      одевает ровно те состояния, которые назвал скелет.
- *   3. `styling` — полные стили, по черновику и скелету.
- *   4. `coding` — полный код, по полным стилям.
- *
- * Раньше первым шёл черновик стилей: кодер писал скелет по чужим токенам, ещё не зная,
- * какие модули нужны странице. Теперь скелет стоит первым: он растёт из разметки, а
- * стили одевают то, что скелет назвал.
+ * Раньше здесь стояли четыре фазы — `pre-coding`, `pre-styling`, `styling`, `coding` —
+ * и порядок между ними был полом: он рвал круг плана, когда тот просил код раньше
+ * стилей. Теперь круга нет: стадия одна, и порядок внутри неё — дело плана.
  * @type {ReadonlyArray<string>}
+ * @exports
  */
 export const STYLE_CODE_PHASES = Object.freeze([
-    PRE_CODING_STAGE,
-    PRE_STYLING_STAGE,
-    STYLING_STAGE,
-    CODING_STAGE,
+    WRITE_STAGE,
 ]);
 
-/**
- * Поставить разметку перед фазами стилей и кода.
- *
- * Скелет кода растёт из разметки: кодер пишет модули по тем классам и областям, что
- * разметка назвала. План, который связал разметку с иконками или с чем-то ещё после
- * кода, заталкивает разметку в середину фаз — и скелет пишется против пустоты. Пол
- * сильнее: разметка встаёт прямо перед первой из фаз.
- *
- * @param {string[]} names имена стадий в порядке прогона
- * @returns {{ names: string[], moved: boolean }}
- * @exports
- * @ai.hint pure
- */
-export function placeMarkupBeforePhases(names = []) {
-    const list = Array.isArray(names) ? [...names] : [];
-    const markup = list.indexOf(MARKUP_STAGE);
-    if (markup < 0) return { names: list, moved: false };
-    const at = (name) => list.indexOf(name);
-    const positions = STYLE_CODE_PHASES.map(at).filter((at2) => at2 >= 0);
-    if (!positions.length) return { names: list, moved: false };
-    const first = Math.min(...positions);
-    if (markup < first) return { names: list, moved: false };
-    // Разметка после фазы: она встаёт прямо перед первой из них.
-    list.splice(markup, 1);
-    const target = list.findIndex((name) => STYLE_CODE_PHASES.includes(name));
-    list.splice(target < 0 ? list.length : target, 0, MARKUP_STAGE);
-    return { names: list, moved: true };
-}
-
-/**
- * Поставить фазы стилей и кода в порядок: скелет, черновик стилей, полные стили, код.
- *
- * Стадии, которых в прогоне нет (выключены), не занимают место: порядок строится по
- * тем, что есть. Стадия, которой нет вовсе, не влияет на порядок — прогон без стилей
- * идёт без них.
- *
- * @param {string[]} names имена стадий в порядке прогона
- * @returns {{ names: string[], moved: boolean }}
- * @exports
- * @ai.hint pure
- */
-export function placeStyleCodePhases(names = []) {
-    const list = Array.isArray(names) ? [...names] : [];
-    const present = STYLE_CODE_PHASES.filter((name) => list.includes(name));
-    if (present.length < 2) return { names: list, moved: false };
-    const at = (name) => list.indexOf(name);
-    // Уже в порядке — двигать нечего.
-    const sorted = [...present].sort((left, right) => at(left) - at(right));
-    if (sorted.join('>') === present.join('>')) return { names: list, moved: false };
-    // Фазы встают в своём порядке на место самой ранней из них: остальные стадии
-    // остаются там, где были.
-    const anchor = Math.min(...present.map((name) => at(name)));
-    const taken = new Set(present);
-    const rest = list.filter((name) => !taken.has(name));
-    const out = [...rest.slice(0, anchor), ...present, ...rest.slice(anchor)];
-    return { names: out, moved: true };
-}
 
 /**
  * Поставить стадию вектора на её место: до разметки, до сборки или в конец цепочки.
@@ -401,10 +286,8 @@ export function placeIconifyStage(names = []) {
     const iconify = list.indexOf(ICONIFY_STAGE);
     if (iconify < 0) return { names: list, moved: false };
     const styling = list.indexOf(ICONIFY_AFTER);
-    const coding = list.indexOf(CODING_STAGE);
-    // Якорь — поздняя из двух стадий.
-    let anchor = ICONIFY_AFTER;
-    if (coding >= 0 && (styling < 0 || coding > styling)) anchor = CODING_STAGE;
+    // Якорь — стадия письма: иконки ложатся в разметку, которую уже написали.
+    const anchor = ICONIFY_AFTER;
     const at = list.indexOf(anchor);
     if (at < 0) return { names: list, moved: false };
     if (iconify > at) return { names: list, moved: false };
@@ -512,23 +395,12 @@ export function planOrder(stages = [], plan = null, { config = null } = {}) {
     // Порядок фаз один для всех: страница с состоянием и страница без состояния идут
     // одинаково. Скелет растёт из разметки, стили одевают то, что скелет назвал, и
     // полный код идёт по полным стилям.
-    const withPhases = placeStyleCodePhases(placed.names);
-    if (withPhases.moved) {
-        warnings.push('Фазы стилей и кода перестроены: скелет кода, черновик контракта '
-            + 'стилей, полные стили, полный код. Скелет пишется по разметке, стили одевают '
-            + 'то, что он назвал.');
-    }
 
     // Разметка перед фазами стилей и кода: скелет кода растёт из разметки. Перестройка
     // фаз могла затолкать разметку в их середину — пол ставит её на место.
-    const withMarkup = placeMarkupBeforePhases(withPhases.names);
-    if (withMarkup.moved) {
-        warnings.push('Стадия разметки перенесена перед фазами стилей и кода: скелет кода '
-            + 'растёт из разметки, и фаза, начавшаяся раньше неё, писалась бы против пустоты.');
-    }
 
     // Стадия ассетов: после вектора.
-    const withAssets = placeAssetsAfterVector(withMarkup.names);
+    const withAssets = placeAssetsAfterVector(placed.names);
     if (withAssets.moved) {
         warnings.push('Стадия ассетов перенесена после вектора: картинки раскладываются по '
             + 'местам, когда известно всё множество — вырезки референса и нарисованный вектор.');
@@ -538,21 +410,11 @@ export function planOrder(stages = [], plan = null, { config = null } = {}) {
     // уже назвал, и иллюстратор раскладывает их после. План, который связал их кругом
     // (картинки ждут разметку, стили ждут картинки), больше не ставит ассеты перед
     // разметкой — стили начинаются после разметки в любом случае.
-    const afterMarkup = placeAssetsAfterMarkup(withAssets.names);
-    if (afterMarkup.moved) {
-        warnings.push('Стадия ассетов перенесена после разметки: разметка линкует картинки '
-            + 'по именам из контекста, и ассеты не ждут её, а она не ждёт их.');
-    }
 
     // Стадия анимации: после стилиста.
-    const withAnimation = placeAnimationAfterStyles(afterMarkup.names);
-    if (withAnimation.moved) {
-        warnings.push('Стадия анимации перенесена после стилиста: движение живёт в стилях, '
-            + 'и править их раньше стилей нечего.');
-    }
 
     // Стадия иконок: не раньше кода и не раньше стилей.
-    const withIcons = placeIconifyStage(withAnimation.names);
+    const withIcons = placeIconifyStage(withAssets.names);
     if (withIcons.moved) {
         warnings.push('Стадия иконок перенесена после кода: иконки ложатся в разметку готовой '
             + 'страницы, а страница готова, когда написаны и стили, и код.');

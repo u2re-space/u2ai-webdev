@@ -324,7 +324,7 @@ test('the bar of the progress counts the whole plan of the run', () => {
         frame: createFrame(FRAME.event, {
             event: {
                 type: 'progress',
-                payload: { stages: [{ name: 'setup', status: 'completed' }, { name: 'markup', status: 'completed' }] },
+                payload: { stages: [{ name: 'setup', status: 'completed' }, { name: 'write', status: 'completed' }] },
             },
         }),
     });

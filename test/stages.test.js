@@ -23,10 +23,6 @@ import { normalizeArchitecture, architectureText, architectStage } from '../src/
 import { detectPackageManager, applySetup, setupReadiness, setupStage, installDependencies, ensureStyleCompiler } from '../src/stages/setup.js';
 import { runId, runDirectory, sanitizeId } from '../src/stages/workspace.js';
 import { LIVE_ROLES, stageForRole, foreignFiles } from '../src/stages/roles.js';
-import { role as markupRole } from '../src/stages/markup.js';
-import { role as codingRole } from '../src/stages/coding.js';
-import { role as stylingRole } from '../src/stages/styling.js';
-import { role as animationRole } from '../src/stages/animation.js';
 import { role as vectorRole } from '../src/stages/vector.js';
 import { role as assetsRole } from '../src/stages/assets.js';
 import { role as iconifyRole } from '../src/stages/iconify.js';
@@ -36,10 +32,7 @@ import { defaults } from '../src/config.js';
 
 /** Стадии, которые берут шаги плана, и роль каждой из них. */
 const modules = {
-    markup: { role: markupRole },
-    coding: { role: codingRole },
-    styling: { role: stylingRole },
-    animation: { role: animationRole },
+    write: { role: 'builder' },
     vector: { role: vectorRole },
     assets: { role: assetsRole },
     iconify: { role: iconifyRole },
@@ -308,10 +301,10 @@ test('a step that touches the environment and the code stays in the plan', () =>
     assert.deepEqual(plan.steps.map((step) => step.id), ['dep']);
 });
 
-test('the live roles are the roles of the stages that take the steps', () => {    assert.deepEqual(
-        Object.keys(LIVE_ROLES).sort(),
-        Object.values(modules).map((module) => module.role).sort(),
-    );
+test('the live roles are the roles of the stages that take the steps', () => {
+    // Роли письма — разметка, стили, код и движение — живут в одной стадии `write`,
+    // и роль `builder` пишет их шаги.
+    assert.equal(LIVE_ROLES.builder, 'write');
     for (const [stage, module] of Object.entries(modules)) {
         assert.equal(LIVE_ROLES[module.role], stage, `the stage ${stage} runs the role ${module.role}`);
         assert.equal(stageForRole(module.role), stage);

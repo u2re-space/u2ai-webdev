@@ -177,10 +177,9 @@ test('the validation of the profile of the stages names the role', () => {
     role.reasoning.stageEffort.sculptor = 'high';
     assert.throws(() => validateConfig(role), /Конфигурация: reasoning\.stageEffort\.sculptor: неизвестная роль или стадия/);
 
-    // В профиле есть и стадии: у роли может быть несколько стадий, и у каждой своя
-    // планка усилия.
+    // В профиле есть и стадии: у стадии письма своя планка усилия.
     const stage = cloneDefaults();
-    stage.reasoning.stageEffort['pre-styling'] = 'xhigh';
+    stage.reasoning.stageEffort.write = 'xhigh';
     assert.doesNotThrow(() => validateConfig(stage));
 
     // The profile may be turned off: every role keeps the effort of the run.
@@ -191,13 +190,13 @@ test('the validation of the profile of the stages names the role', () => {
 
 test('the ladder of the ranks may be set for a stage', () => {
     const config = cloneDefaults();
-    config.house.ranks.stages = { 'pre-styling': [1], styling: [0] };
+    config.house.ranks.stages = { write: [1] };
     assert.doesNotThrow(() => validateConfig(config));
 
     // Ранг — целое не меньше нуля.
     const bad = cloneDefaults();
-    bad.house.ranks.stages = { styling: [-1] };
-    assert.throws(() => validateConfig(bad), /ranks\.stages\.styling/);
+    bad.house.ranks.stages = { write: [-1] };
+    assert.throws(() => validateConfig(bad), /ranks\.stages\.write/);
 
     // Раздел, которого нет, — ошибка.
     const unknown = cloneDefaults();
@@ -205,12 +204,17 @@ test('the ladder of the ranks may be set for a stage', () => {
     assert.throws(() => validateConfig(unknown), /ranks\.sculptors: неизвестное поле/);
 });
 
-test('the dial of the contract is higher than the dial of the work', () => {
+test('the effort of a kind of file may be set in the config', () => {
     const config = cloneDefaults();
-    // Планка черновиков контракта стоит выше: контракт — это основа, на которой
-    // стоит вся работа.
-    assert.ok(config.pace.contractQuality > config.pace.codeQuality);
+    // Усилие следует за видом работы: таблица стилей требует больше мысли, чем
+    // скрипт, и разметка — меньше обоих.
+    assert.ok(config.reasoning.kindEffort.style !== config.reasoning.kindEffort.image);
     assert.doesNotThrow(() => validateConfig(config));
+
+    // Вид, которого нет, — ошибка с именем.
+    const bad = cloneDefaults();
+    bad.reasoning.kindEffort.whatever = 'high';
+    assert.throws(() => validateConfig(bad), /reasoning\.kindEffort\.whatever: неизвестный вид файла/);
 });
 
 test('the validation of the bridges names the bridge', () => {

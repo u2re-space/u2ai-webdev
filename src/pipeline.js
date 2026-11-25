@@ -36,7 +36,7 @@
 import { runId as makeRunId } from './stages/workspace.js';
 import { enabledStages } from './stages/index.js';
 import { planOrder } from './stages/plan-order.js';
-import { LIVE_ROLES, ROLE_STAGES, withoutForeignFiles } from './stages/roles.js';
+import { LIVE_ROLES, ROLE_STAGES, WRITE_ROLES, withoutForeignFiles } from './stages/roles.js';
 import { isStateful } from './stages/stateful.js';
 import { readPlan } from './stages/plan.js';
 import { readScan } from './stages/scan.js';
@@ -436,13 +436,8 @@ export async function runPipeline({
     // run (the review, the audit, the lessons) is non-fatal as well: the project is written,
     // and a run without a verdict is partial, not lost.
     const NON_FATAL_STAGES = new Set([
-        'pictures', 'vector', 'assets', 'animation', 'iconify', 'sight',
+        'pictures', 'vector', 'assets', 'iconify', 'sight',
         'review', 'audit', 'learn',
-        // Фазы контракта. Контракт — это основа, на которой стоит работа, но если он
-        // не сложился, следующая фаза всё равно пишет по нему: по брифу архитектора, по
-        // разметке и по именам, которые уже есть на диске. Остановить прогон здесь —
-        // значит остановить его ровно там, где он стоял раньше: роль ждёт чужую работу.
-        'pre-styling', 'pre-coding',
     ]);
 
     /**
@@ -451,9 +446,8 @@ export async function runPipeline({
      * Стадия берёт шаги своей роли: `markup` — шаги `markup`, `styling` — шаги `styler`.
      * Стадия без шагов своей роли (обрезки, ассеты, сборка) делает один шаг работы.
      *
-     * Стадия скелета (`pre-coding`) берёт меньше: шаги, что ждут чужих стилей,
-     * принадлежат полной работе кода. Считать надо ровно те шаги, что берёт стадия,
-     * иначе бюджет и таймаут хода считаются не по той работе.
+     * Считать надо ровно те шаги, что берёт стадия, иначе бюджет и таймаут хода
+     * считаются не по той работе.
      * @param {string} name имя стадии
      * @param {object|null} plan план прогона
      * @returns {number}
@@ -462,6 +456,13 @@ export async function runPipeline({
     const stepsOfStage = (name, plan = null) => {
         const role = roleByStage[name];
         if (!role) return 1;
+        // Стадия письма берёт шаги всех ролей письма: разметки, стилей, кода и
+        // движения. Роль у неё одна, а шагов — много, и бюджет считается по ним.
+        if (name === 'write') {
+            const steps = Array.isArray(plan?.steps) ? plan.steps : [];
+            const mine = steps.filter((step) => WRITE_ROLES.has(String(step?.role ?? '').trim().toLowerCase()));
+            return Math.max(1, mine.length);
+        }
         return Math.max(1, stageStepsOf(plan, role, name).length);
     };
 
@@ -621,8 +622,8 @@ export async function runPipeline({
         // скрипты уже написаны.
         const hasDevTools = (ctx.mcp ?? []).some((connection) => connection.name === 'chrome-devtools');
         const browserStages = statefulPage
-            ? ['coding', 'sight']
-            : ['coding', 'styling'];
+            ? ['write', 'sight']
+            : ['write'];
         if (!livePage && hasDevTools && browserStages.includes(stage.name)) {
             try {
                 livePage = await ensurePage({

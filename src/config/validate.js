@@ -13,6 +13,7 @@ import { ENUMS, HEADER_NAME, SUPPORT_ALIASES } from './constants.js';
 import { defaults, ROLE_FIELDS } from './defaults.js';
 import { isRecord } from './merge.js';
 import { familyName, groupName } from '../model/refs.js';
+import { KIND_EFFORT } from '../agent/pace.js';
 
 /**
  * Check that a reference to a family or a group names one that exists.
@@ -420,6 +421,69 @@ function validatePictures(pictures, fail) {
 }
 
 /**
+ * Стадии и роли, что ушли из системы.
+ *
+ * Фаз письма было шесть, а стадия письма одна. Конфиг пользователя написан под
+ * прошлую систему, и ронять прогон из-за него — значит наказывать за то, что
+ * система изменилась.
+ * @type {ReadonlySet<string>}
+ */
+const GONE_STAGES = new Set(['markup', 'pre-coding', 'pre-styling', 'styling', 'animation', 'coding']);
+
+/**
+ * Убрать из конфига то, чего больше нет в системе.
+ *
+ * Молча уходят: стадии, роли и усилия, что называют того, чего нет. Остальное —
+ * опечатка пользователя, и о ней по-прежнему говорит проверка.
+ *
+ * @param {object} config
+ * @returns {{ config: object, dropped: string[] }}
+ * @exports
+ * @ai.hint pure
+ */
+export function dropGoneFromConfig(config = {}) {
+    const c = config && typeof config === 'object' ? config : {};
+    const dropped = [];
+
+    // Стадии: `markup`, `pre-coding`, `pre-styling`, `styling`, `animation`, `coding`.
+    if (isRecord(c.stages)) {
+        const stages = { ...c.stages };
+        for (const name of Object.keys(stages)) {
+            if (ENUMS.stages.includes(name)) continue;
+            if (!GONE_STAGES.has(name)) continue;
+            delete stages[name];
+            dropped.push(`stages.${name}`);
+        }
+        c.stages = stages;
+    }
+
+    // Роли: те же имена в профиле усилий и в профиле рангов.
+    if (isRecord(c.reasoning) && isRecord(c.reasoning.stageEffort)) {
+        const profile = { ...c.reasoning.stageEffort };
+        for (const name of Object.keys(profile)) {
+            if (GONE_STAGES.has(name)) {
+                delete profile[name];
+                dropped.push(`reasoning.stageEffort.${name}`);
+            }
+        }
+        c.reasoning = { ...c.reasoning, stageEffort: profile };
+    }
+
+    if (isRecord(c.house) && isRecord(c.house.ranks) && isRecord(c.house.ranks.stages)) {
+        const stages = { ...c.house.ranks.stages };
+        for (const name of Object.keys(stages)) {
+            if (GONE_STAGES.has(name)) {
+                delete stages[name];
+                dropped.push(`house.ranks.stages.${name}`);
+            }
+        }
+        c.house = { ...c.house, ranks: { ...c.house.ranks, stages } };
+    }
+
+    return { config: c, dropped };
+}
+
+/**
  * Throw when any merged value is outside the accepted enums and ranges.
  * @param {object} config
  * @returns {void}
@@ -467,6 +531,17 @@ export function validateConfig(config) {
     for (const [name, level] of Object.entries(stageEffort)) {
       if (!known.has(name) && !isRecord(c.customRoles?.[name])) fail(`reasoning.stageEffort.${name}: неизвестная роль или стадия`);
       if (!ENUMS.reasoningEfforts.includes(level)) fail(`reasoning.stageEffort.${name}: ${ENUMS.reasoningEfforts.join(' | ')}`);
+    }
+  }
+  const kindEffort = c.reasoning.kindEffort;
+  if (kindEffort !== null && kindEffort !== undefined) {
+    if (!isRecord(kindEffort)) fail('reasoning.kindEffort: объект или null');
+    // Профиль знает виды файлов: работа идёт по файлам, и вид говорит, сколько мысли
+    // она требует.
+    const known = new Set(Object.keys(KIND_EFFORT));
+    for (const [name, level] of Object.entries(kindEffort)) {
+      if (!known.has(name)) fail(`reasoning.kindEffort.${name}: неизвестный вид файла`);
+      if (!ENUMS.reasoningEfforts.includes(level)) fail(`reasoning.kindEffort.${name}: ${ENUMS.reasoningEfforts.join(' | ')}`);
     }
   }
   if (c.verbosity !== null && !['low', 'medium', 'high'].includes(c.verbosity)) fail('verbosity: low | medium | high');

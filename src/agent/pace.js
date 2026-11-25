@@ -37,6 +37,48 @@ export const STAGE_OF_ROLE = Object.freeze({
 });
 
 /**
+ * The effort of a kind of file.
+ *
+ * The effort used to follow the stage: the contract of the styles was written with the
+ * deepest reasoning, the full work with a shallower one. The stages are going away, and
+ * the work is not — a stylesheet still wants more thought than a script, and a markup
+ * wants less than both.
+ *
+ * The kind of the file is known before the first turn: the step names the files it
+ * touches, and the extension of a file says what craft it needs.
+ *
+ * The profile lives in the config (`reasoning.kindEffort`) and may change any of them.
+ * @type {Readonly<Record<string, string>>}
+ * @exports
+ */
+export const KIND_EFFORT = Object.freeze({
+    style: 'high',
+    markup: 'medium',
+    code: 'medium',
+    svg: 'medium',
+    image: 'low',
+});
+
+/**
+ * The effort of a kind of file: the profile of the config, or the built-in one.
+ * @param {{ config?: object, kind?: string|null }} request
+ * @returns {string|null}
+ * @exports
+ * @ai.hint pure
+ */
+export function kindEffortFor({ config = {}, kind = null } = {}) {
+    const name = String(kind ?? '').trim().toLowerCase();
+    if (!name) return null;
+    const profile = config?.reasoning?.kindEffort;
+    if (profile && typeof profile === 'object' && !Array.isArray(profile)) {
+        const own = profile[name];
+        if (typeof own === 'string' && own) return own;
+    }
+    const built = KIND_EFFORT[name];
+    return typeof built === 'string' && built ? built : null;
+}
+
+/**
  * The dial of the contract of the styles and the code.
  *
  * Черновик контракта — это основа, на которой стоит вся работа: токены, имена
@@ -48,14 +90,12 @@ export const CONTRACT_QUALITY_KEY = 'contractQuality';
 /**
  * Стадии, которые пишут контракт, и их диал.
  *
- * Черновики отвечают за то, на чём стоит вся работа, поэтому у них свой диал
- * качества — и он по умолчанию выше диала самой работы.
+ * Контракта больше нет: стадия письма одна, и она пишет всё сразу. Диал усилия
+ * следует за видом работы, а не за стадией.
  * @type {Readonly<Record<string, string>>}
  * @exports
  */
 export const STAGE_OF_CONTRACT = Object.freeze({
-    'pre-styling': CONTRACT_QUALITY_KEY,
-    'pre-coding': CONTRACT_QUALITY_KEY,
 });
 
 /** One full band of quality points moves the effort by one level. */
@@ -213,9 +253,12 @@ export function lowerEffort(first, second) {
  * @exports
  * @ai.hint pure
  */
-export function effortFor({ config = {}, role = null, effort = null, stage = null } = {}) {
+export function effortFor({ config = {}, role = null, effort = null, stage = null, kind = null } = {}) {
     const ceiling = config?.reasoning?.effort ?? null;
-    const asked = stageEffortFor({ config, role, stage });
+    // Вид файла говорит, сколько мысли работа требует. Таблица стилей — больше,
+    // скрипт — меньше. Это сильнее стадии: работа идёт по файлам, а не по фазам.
+    const byKind = kindEffortFor({ config, kind });
+    const asked = byKind ?? stageEffortFor({ config, role, stage });
     const base = effort ?? (asked ? lowerEffort(asked, ceiling) : ceiling);
     if (!base) return null;
     const pace = resolvePace({ config, role, stage });

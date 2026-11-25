@@ -40,14 +40,31 @@ import path from 'node:path';
  * полной работы: по ней считается бюджет роли и находится её отчёт.
  * @type {Readonly<Record<string, string>>}
  */
+/**
+ * Роли письма: разметка, стили, код, движение — и сама `builder`.
+ *
+ * Стадия письма (`write`) берёт шаги всех этих ролей: она одна, а работа у неё вся.
+ * Набор живёт здесь, чтобы стадия и прогон считали одни и те же шаги.
+ * @type {ReadonlySet<string>}
+ * @exports
+ */
+export const WRITE_ROLES = Object.freeze(new Set(['markup', 'coder', 'styler', 'animator', 'builder']));
+
+/**
+ * The roles of the stages of the plan.
+ * @type {Readonly<Record<string, string>>}
+ */
 export const LIVE_ROLES = Object.freeze({
-    markup: 'markup',
-    coder: 'coding',
-    styler: 'styling',
-    animator: 'animation',
+    markup: 'write',
+    coder: 'write',
+    styler: 'write',
+    animator: 'write',
     editor: 'vector',
     iconifier: 'iconify',
     illustrator: 'assets',
+    // Роль, которая пишет всё: разметку, стили, код и движение. Её шаг — любой шаг
+    // плана, кроме тех, что принадлежат другой роли.
+    builder: 'write',
 });
 
 /**
@@ -59,10 +76,11 @@ export const LIVE_ROLES = Object.freeze({
  * @exports
  */
 export const ROLE_STAGES = Object.freeze({
-    markup: Object.freeze(['markup']),
-    coder: Object.freeze(['pre-coding', 'coding']),
-    styler: Object.freeze(['pre-styling', 'styling']),
-    animator: Object.freeze(['animation']),
+    markup: Object.freeze(['write']),
+    coder: Object.freeze(['write']),
+    styler: Object.freeze(['write']),
+    animator: Object.freeze(['write']),
+    builder: Object.freeze(['write']),
     editor: Object.freeze(['vector']),
     iconifier: Object.freeze(['iconify']),
     illustrator: Object.freeze(['assets']),
@@ -77,10 +95,7 @@ export const ROLE_STAGES = Object.freeze({
  * @exports
  */
 export const ROLE_STAGE_ORDER = Object.freeze({
-    'pre-coding': 0,
-    'pre-styling': 1,
-    styling: 2,
-    coding: 3,
+    write: 0,
 });
 
 /** Имена живых ролей. */

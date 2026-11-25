@@ -44,7 +44,7 @@ import { sourcesBlock } from '../agent/sources.js';
 import { createToolset } from '../agent/tools.js';
 import { toolSpecs as buildToolSpecs } from '../agent/tool-specs.js';
 import { createSubagentSpawner, subagentGateNote } from '../agent/subagent.js';
-import { effortFor } from '../agent/pace.js';
+import { effortFor, kindEffortFor } from '../agent/pace.js';
 import { getModelProfile, maxOutputFor, snapEffort, writeBudgetFor } from '../model/profiles.js';
 import { familyOf, rankPath, resolveModelRef } from '../model/refs.js';
 import { houseModelRef } from '../model/trust.js';
@@ -52,7 +52,8 @@ import { stageForRole } from '../stages/roles.js';
 import { isWaiting } from '../stages/contract.js';
 import { pageFrameContractFor } from './page-frame.js';
 import { memoryNote } from './memory-note.js';
-import { PHASES, chunkText, chunksFor } from './chunks.js';
+import { PHASES, chunkText, chunksFor, kindsOf } from './chunks.js';
+import { guidesForPurpose, purposeBlock, purposeFor } from './purpose.js';
 
 import * as untrusted from './untrusted.js';
 import * as scanner from './scanner.js';
@@ -60,6 +61,7 @@ import * as planner from './planner.js';
 import * as architect from './architect.js';
 import * as director from './director.js';
 import * as coder from './coder.js';
+import * as builder from './builder.js';
 import * as markup from './markup.js';
 import * as styler from './styler.js';
 import * as animator from './animator.js';
@@ -81,6 +83,7 @@ export const ROLES = Object.freeze({
     architect,
     director,
     coder,
+    builder,
     markup,
     styler,
     animator,
@@ -315,13 +318,17 @@ export function readOnlyOperation({ schema = null, tools = [], outputMode = null
 const WRITE_READY_TOOL = Object.freeze({
     type: 'function',
     name: 'write_ready',
-    description: 'INTERNAL WRITE GATE — not delegation. Call this exact tool name after the inspection to unlock your own file-writing tools on the next turn. It writes no files and starts no other role. Then write the files named by your step with write_file — every file of the step may be written in that one turn, several write_file calls together. You may name `outputTokens`: how many output tokens the write of the step is expected to take. It sizes the budget of the write turn — the run clamps it, so an honest guess costs you nothing and a wild one buys you nothing.',
+    description: 'INTERNAL WRITE GATE — not delegation. Call this exact tool name after the inspection to unlock your own file-writing tools on the next turn. It writes no files and starts no other role. Then write the files named by your step with write_file — every file of the step may be written in that one turn, several write_file calls together. You may name `outputTokens`: how many output tokens the write of the step is expected to take. It sizes the budget of the write turn — the run clamps it, so an honest guess costs you nothing and a wild one buys you nothing. You may name `purpose`: what this write is for, in your own words — "a dialog that pairs a device", "a card grid of the home screen", "the transitions of the panel". The run brings the guides of that purpose with the write, so the standards of the platform of today arrive exactly when you write.',
     parameters: {
         type: 'object',
         properties: {
             outputTokens: {
                 type: 'integer',
                 description: 'Your estimate of the size of the write of this step, in output tokens. How many tokens the files of the step will take to write. Leave it out if you do not know: the write turn then gets the whole budget.',
+            },
+            purpose: {
+                type: 'string',
+                description: 'What this write is for, in a few words: the purpose of the files, not the names of the files. For example "the dialog that pairs a device" or "the card grid of the home screen". The run answers with the guides that answer this purpose, and they arrive with the write.',
             },
         },
         required: [],
@@ -391,7 +398,7 @@ export function roleSchema(role) {
  * @exports
  * @ai.hint pure
  */
-export function resolveRole(role, config = {}, { stage = null, phase = 'work' } = {}) {
+export function resolveRole(role, config = {}, { stage = null, phase = 'work', kind = null } = {}) {
     const key = String(role ?? '').trim().toLowerCase();
     const base = ROLES[key];
     if (!base) return null;
@@ -414,9 +421,12 @@ export function resolveRole(role, config = {}, { stage = null, phase = 'work' } 
     const roleEffort = pick('effort', null);
     // Стадия, а не роль: усилие и ранг модели берутся по стадии. Черновик контракта
     // работает глубже, чем полная работа, — и это решение стадии.
+    //
+    // Вид файла — сильнее стадии: работа идёт по файлам, и таблица стилей требует
+    // больше мысли, чем скрипт. Стадия — это искусственная граница, а файл — нет.
     const asked = roleEffort
-        ? effortFor({ config, role: key, effort: roleEffort, stage })
-        : effortFor({ config, role: key, stage });
+        ? effortFor({ config, role: key, effort: roleEffort, stage, kind })
+        : effortFor({ config, role: key, stage, kind });
 
     // The model of the role: the pin of the role wins, then the model of the house for the
     // role, then the pin of the default role, then the model of the run. A role that names
@@ -678,7 +688,13 @@ export async function runRole({
     inputChannel ??= runContext?.input ?? null;
     const key = String(role ?? '').trim().toLowerCase();
     const roleStage = stage ?? key;
-    const definition = resolveRole(key, config, { stage: roleStage, phase: initialPhase });
+    // Вид работы: файлы шага говорят, какое ремесло нужно. Усилие модели следует за
+    // ним, а не за стадией: стадия — искусственная граница, файл — нет.
+    const stepFiles = Array.isArray(context?.step?.files)
+        ? context.step.files.map((item) => String(item ?? '').trim()).filter(Boolean)
+        : [];
+    const workKind = kindsOf(stepFiles)[0] ?? null;
+    const definition = resolveRole(key, config, { stage: roleStage, phase: initialPhase, kind: workKind });
     if (!definition) throw new Error(`Неизвестная роль: ${role}`);
     // The model of the turn. The role works on the head of its ladder — the model of the
     // house for this kind of work — and polishes what is already on the disk with the tail
@@ -805,9 +821,6 @@ export async function runRole({
     // The instructions come in parts, and every part has its own moment. The rules of
     // reading belong to the beginning of the work; the craft of the files of the step
     // belongs to the write gate, and it comes with the rules of the files.
-    const stepFiles = Array.isArray(context?.step?.files)
-        ? context.step.files.map((item) => String(item ?? '').trim()).filter(Boolean)
-        : [];
     const toolNames = specs.map((spec) => String(spec?.name ?? ''));
     const readChunks = chunkText(chunksFor({ role: key, phase: PHASES.READ, files: stepFiles }));
     if (readChunks) instructions += `\n\n${readChunks}`;
@@ -888,6 +901,9 @@ export async function runRole({
     let writeEstimate = null;
     // The budget of the write turn that the estimate earned.
     let writeBudget = null;
+    // Назначение работы: то, что модель сказала у ворот записи. По нему приходят
+    // гайды — в ход самой записи.
+    let writePurpose = '';
     let writeCraftSent = false;
     let doneSent = false;
     let refusalRecovered = false;
@@ -1343,15 +1359,25 @@ export async function runRole({
                 const estimate = Number(call.arguments?.outputTokens);
                 writeEstimate = Number.isFinite(estimate) && estimate > 0 ? estimate : null;
                 writeBudget = writeBudgetFor(currentModel, config, definition.maxOutputTokens, writeEstimate);
+                // Назначение работы: модель говорит, зачем она пишет, и прогон
+                // приносит гайды под это назначение — в тот самый ход, в котором
+                // модель пишет. Знание приходит вовремя, а не лежит в промпте заранее.
+                const said = String(call.arguments?.purpose ?? '').trim();
+                writePurpose = said || purposeFor('', wantedFiles);
+                const guides = guidesForPurpose(writePurpose);
+                const block = purposeBlock({ purpose: writePurpose, guides });
+                if (block) items.push({ role: 'user', content: [textPart(block)] });
                 output = writeEstimate === null
                     ? 'Write-ready. The next turn has the full output budget and the remaining tools: write every file of the step there, several calls in one turn.'
                     : `Write-ready. The next turn has the output budget of ${writeBudget} tokens for the write, and the remaining tools: write every file of the step there, several calls in one turn.`;
+                if (writePurpose) output += ` The purpose of the write is «${writePurpose}».`;
                 notify({
                     type: 'role.write_ready',
                     role: key,
                     turn: turns,
                     outputTokens: writeEstimate,
                     maxOutputTokens: writeBudget,
+                    purpose: writePurpose || null,
                 });
             } else if (call.parseError) {
                 // Invalid arguments are reported as such even if the tool was not yet enabled.
