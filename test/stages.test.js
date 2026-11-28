@@ -276,7 +276,7 @@ test('the artist works on the senior model of the family', () => {
     const config = structuredClone(defaults);
     assert.equal(resolveRole('artist', config, { stage: 'graphics' }).model, 'openai/gpt-6.2-sol');
     // А движение — по-прежнему работа старшей.
-    assert.equal(resolveRole('animator', config, { stage: 'write' }).model, 'openai/gpt-6.2-sol');
+    assert.equal(resolveRole('animator', config, { stage: 'write' }).model, 'openai/gpt-6.1-terra');
 });
 
 test('a step of the environment leaves the plan, whoever the role is', () => {    const plan = normalizePlan({

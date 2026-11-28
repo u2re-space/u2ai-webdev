@@ -177,22 +177,22 @@ export const defaults = {
      */
     ranks: {
       roles: {
-        styler: [1, 0],
+        styler: [0],
         // Роль, что делает графику: старшая модель на работе и младшая на полировке.
         // Ремесло приходит по виду файла, а модель — по виду работы.
-        builder: [1, 0],
+        builder: [0],
         artist: [1],
         // The architect only answers: there is nothing for it to polish on the disk, so it
         // stays on the head of the ladder. Голова — это `gpt-6.2-sol`.
         architect: [0],
         // The animator writes the motion and then answers for it: the whole session of the
         // animator is the work of the model of the house.
-        animator: [1],
+        animator: [0],
         // The markup and the scripts write their files and then answer for them: the whole
         // session of the role is the work of the model of the house. Без лестницы эти
         // роли отвечали на модель прогона, а та — на младшую модель семейства.
-        markup: [1],
-        coder: [1],
+        markup: [0],
+        coder: [0],
         // The iconifier picks the icons and checks them: the place of an icon is a cheap
         // decision, and the tail of the ladder is enough for it.
         iconifier: [0],

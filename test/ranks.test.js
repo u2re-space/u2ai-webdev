@@ -68,9 +68,9 @@ test('the fix of the styles is the polish of the styler', () => {
     const config = configFor();
     // Стадий письма больше нет, и лестница роли не перекрывается ничем: работа идёт
     // на старшей модели, а полировка — на младшей.
-    assert.equal(resolveRole('builder', config, { stage: 'write' }).model, 'openai/gpt-6.2-sol');
+    assert.equal(resolveRole('builder', config, { stage: 'write' }).model, 'openai/gpt-6.1-terra');
     // Роль без своей стадии отвечает как раньше: по лестнице роли.
-    assert.equal(resolveRole('styler', config, { stage: 'styler' }).model, 'openai/gpt-6.2-sol');
+    assert.equal(resolveRole('styler', config, { stage: 'styler' }).model, 'openai/gpt-6.1-terra');
     // Полировка — всегда хвост лестницы.
     assert.equal(resolveRole('styler', config, { stage: 'sight', phase: 'polish' }).model, 'openai/gpt-6.1-terra');
     assert.equal(resolveRole('styler', config, { stage: 'repair', phase: 'polish' }).model, 'openai/gpt-6.1-terra');
@@ -78,7 +78,7 @@ test('the fix of the styles is the polish of the styler', () => {
 
 test('the phase of the work decides the rank of the family', () => {
     const config = configFor();
-    assert.equal(resolveRole('styler', config, { phase: 'work' }).model, 'openai/gpt-6.2-sol');
+    assert.equal(resolveRole('styler', config, { phase: 'work' }).model, 'openai/gpt-6.1-terra');
     assert.equal(resolveRole('styler', config, { phase: 'polish' }).model, 'openai/gpt-6.1-terra');
 });
 
@@ -96,7 +96,7 @@ test('the ladder of the stage wins over the ladder of the role', () => {
     const config = configFor();
     // Лестница роли — старшая на работе и младшая на полировке. Стадия без своей
     // лестницы наследует лестницу роли.
-    assert.deepEqual(resolveRole('styler', config, { stage: 'sight' }).path, [1, 0]);
+    assert.deepEqual(resolveRole('styler', config, { stage: 'sight' }).path, [0]);
 });
 
 test('a role that has to write again goes back to the head of the ladder', async () => {
@@ -132,7 +132,7 @@ test('a role that has to write again goes back to the head of the ladder', async
     });
 
     // The head of the ladder answers while the role writes...
-    assert.equal(requests[0].model, 'openai/gpt-6.2-sol');
+    assert.equal(requests[0].model, 'openai/gpt-6.1-terra');
     // ...and the tail answers the polish of what is on the disk.
     assert.equal(requests.at(-1).model, 'openai/gpt-6.1-terra');
 });
@@ -169,7 +169,7 @@ test('the panel of the operator follows the model that works', async () => {
     });
 
     const models = seen.map((item) => item.model).filter(Boolean);
-    assert.equal(models[0], 'openai/gpt-6.2-sol', `the panel says ${models.join(', ')}`);
+    assert.equal(models[0], 'openai/gpt-6.1-terra', `the panel says ${models.join(', ')}`);
     // The files are on the disk: the polish is the tail of the ladder, and the panel says so.
     assert.ok(models.includes('openai/gpt-6.1-terra'), `the panel says ${models.join(', ')}`);
 });
@@ -179,9 +179,9 @@ test('the model of the run is the head of its family, the roles keep their own l
     // The run answers with the head of the family of the run...
     assert.equal(resolveRole('reviewer', config).model, 'openai/gpt-6.1-terra');
     // ...and the roles that write answer with the head of their own ladder.
-    assert.equal(resolveRole('styler', config).model, 'openai/gpt-6.2-sol');
-    assert.equal(resolveRole('builder', config).model, 'openai/gpt-6.2-sol');
-    assert.equal(resolveRole('coder', config).model, 'openai/gpt-6.2-sol');
+    assert.equal(resolveRole('styler', config).model, 'openai/gpt-6.1-terra');
+    assert.equal(resolveRole('builder', config).model, 'openai/gpt-6.1-terra');
+    assert.equal(resolveRole('coder', config).model, 'openai/gpt-6.1-terra');
 });
 
 test('a sub-agent answers with the model of the role it inherits', async () => {
@@ -228,7 +228,7 @@ test('a sub-agent answers with the model of the role it inherits', async () => {
         // The sub-agent of the role `styler` answers with the model of the house for the
         // styles — not with the model of the run and not with the cheap tail of the ladder.
         assert.ok(api.requests.length >= 1, `subagent requests: ${api.requests.length}`);
-        assert.equal(api.requests[0].model, 'openai/gpt-6.2-sol');
+        assert.equal(api.requests[0].model, 'openai/gpt-6.1-terra');
     } finally {
         api.stop();
         await rm(root, { recursive: true, force: true });

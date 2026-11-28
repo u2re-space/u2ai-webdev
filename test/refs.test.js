@@ -80,7 +80,7 @@ test('a role may be pinned to a family of models', () => {
     const config = configFor({ model: 'google/gemini-4-hydrogen' });
     config.roles.styler.model = 'family:gpt';
     // The path of the styler decides the place of the family it answers on.
-    assert.equal(resolveRole('styler', config).model, 'openai/gpt-6.2-sol');
+    assert.equal(resolveRole('styler', config).model, 'openai/gpt-6.1-terra');
     // A role without a path takes the cheapest member of the family that fits.
     config.roles.reviewer.model = 'family:gpt';
     assert.equal(resolveRole('reviewer', config).model, 'openai/gpt-6.1-terra');
@@ -90,7 +90,7 @@ test('the house may name a family of models for a role', () => {
     const config = configFor({ model: 'google/gemini-4-hydrogen' });
     config.house.models.markup = 'family:gpt';
     // The rank of the markup is [1] — the head of the family.
-    assert.equal(resolveRole('markup', config).model, 'openai/gpt-6.2-sol');
+    assert.equal(resolveRole('markup', config).model, 'openai/gpt-6.1-terra');
 });
 
 test('a reference names a group only with the prefix', () => {

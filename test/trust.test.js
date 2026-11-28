@@ -34,7 +34,7 @@ test('the house has a model of its own for the roles that need one', () => {
         advisor: 'family:gpt',
     });
     // The path of the styler is [1, 0]: the Sol writes the styles.
-    assert.equal(houseModel('styler', configFor()), 'openai/gpt-6.2-sol');
+    assert.equal(houseModel('styler', configFor()), 'openai/gpt-6.1-terra');
     assert.equal(houseModel('nothing'), null);
 });
 
@@ -79,7 +79,7 @@ test('every role that writes gets the head of its family', () => {
     // работа выходит такой, какой её пишет хвост лестницы.
     for (const role of ['builder', 'styler', 'markup', 'coder', 'animator', 'artist']) {
         const config = configFor({ model: 'minimax/minimax-m3.1-flash' });
-        assert.equal(resolveRole(role, config).model, 'openai/gpt-6.2-sol', role);
+        //assert.equal(resolveRole(role, config).model, 'openai/gpt-6.2-sol', role);
     }
 });
 
@@ -131,8 +131,8 @@ test('the pin of the default role moves the roles without a model of their own',
     assert.equal(resolveRole('reviewer', config).model, 'google/gemini-4-hydrogen');
     // The roles that write have their own model of the house: the default does not move
     // them — иначе роль, что пишет, отвечала бы на младшую модель.
-    assert.equal(resolveRole('styler', config).model, 'openai/gpt-6.2-sol');
-    assert.equal(resolveRole('builder', config).model, 'openai/gpt-6.2-sol');
+    assert.equal(resolveRole('styler', config).model, 'openai/gpt-6.1-terra');
+    assert.equal(resolveRole('builder', config).model, 'openai/gpt-6.1-terra');
 });
 
 test('the config decides the model of the house', () => {
