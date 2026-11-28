@@ -155,7 +155,11 @@ export const STAGES = Object.freeze([
         // One stage for all the writing: the markup, the styles, the scripts and the
         // motion. The role is one, the craft of the file comes by its kind, and the
         // guides come by the purpose of the write.
-        dependsOn: ['assets'],
+        //
+        // The stage waits for the graphics: the markup links the pictures by the names
+        // the graphics give, and a picture that appears after the writing is a link to
+        // nothing.
+        dependsOn: ['graphics'],
         run: writeStage,
         args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
         verify: workOnDisk('builder'),
@@ -167,7 +171,7 @@ export const STAGES = Object.freeze([
         // The icons are put into the markup of the page, and the page is finished when the
         // styles and the code are written: the stage stands after both of them and before the
         // build, so the icons and the markup that uses them reach the bundle.
-        dependsOn: ['styling', 'coding'],
+        dependsOn: ['write'],
         run: iconifyStage,
         args: (ctx) => ({ apply: ctx.apply !== false, input: ctx.input ?? null }),
         apply: (ctx, result) => { ctx.reports.push(...(result?.steps ?? [])); },
@@ -175,8 +179,8 @@ export const STAGES = Object.freeze([
     {
         name: 'build',
         title: 'Connect the styles',
-        // The bundle carries the code and the styles: the build waits for both.
-        dependsOn: ['coding', 'styling'],
+        // The bundle carries the code and the styles: the build waits for the writing.
+        dependsOn: ['write'],
         run: buildStage,
         args: (ctx) => ({ apply: ctx.apply !== false }),
         apply: (ctx, result) => { ctx.build = result?.build ?? null; },
@@ -200,7 +204,9 @@ export const STAGES = Object.freeze([
     {
         name: 'review',
         title: 'Review the result',
-        dependsOn: ['coding', 'styling', 'build', 'sight', 'vector', 'iconify'],
+        // The review sees the whole result: the writing, the build, the look at the page
+        // and the icons. Every one of them is a part of what it judges.
+        dependsOn: ['write', 'iconify', 'build', 'sight'],
         run: reviewStage,
         // The reviewer sees the page: the screenshots of the stage of the sight are the
         // pictures of the result, and the reference is the picture of the target. The words of
@@ -259,6 +265,12 @@ export function stageTitles() {
  * Sort the stages so that every stage comes after the ones it needs.
  *
  * The declared order is the tie-breaker: a run reads the same way every time.
+ *
+ * A dependency on a stage that is not in the run is **not** a satisfied dependency: it is
+ * a mistake in the registry, and the run says so. Раньше такое имя считался выполненным,
+ * и стадия вставала раньше той, что её ждёт: сборка и взгляд на страницу проходили
+ * раньше письма, и прогон смотрел на пустую страницу.
+ *
  * @param {object[]} [stages]
  * @returns {{ stages: object[], warnings: string[] }}
  * @exports
@@ -271,10 +283,35 @@ export function stageOrder(stages = STAGES) {
     const out = [];
     const warnings = [];
 
+    // Стадия, что ждёт несуществующей стадии, ждёт её честно: она не готова, пока той
+    // стадии нет. Имя, которого нет в реестре, — это опечатка, а не «стадия выключена».
+    //
+    // Стадия, что **выключена** пользователем, — другое дело: она не в списке, и ждать
+    // её нечего. Отличать одно от другого можно только по полному реестру: имя, которого
+    // нет и в нём, никогда не существовало.
+    const known = new Set(STAGES.map((stage) => stage.name));
+    const missing = [];
+    for (const stage of list) {
+        for (const name of stage.dependsOn ?? []) {
+            if (byName.has(name)) continue;
+            if (known.has(name)) continue; // Стадия выключена: ждать её нечего.
+            missing.push(`${stage.name} ждёт «${name}» — такой стадии нет`);
+        }
+    }
+    if (missing.length) {
+        warnings.push(`Стадия зависит от несуществующей стадии: ${missing.join('; ')}. `
+            + 'Стадия ждёт её, и прогон не идёт дальше, пока та не появится.');
+    }
+    // Стадия, что ждёт несуществующей стадии, не может быть готова: она встаёт после
+    // всех, кто готов, и её имя уходит в конец — с предупреждением.
+    const blocked = new Set(missing.map((item) => item.split(' ')[0]));
+
     while (out.length < list.length) {
         const ready = list.find((stage) => !done.has(stage.name)
+            && !blocked.has(stage.name)
             && (stage.dependsOn ?? []).every((name) => done.has(name) || !byName.has(name)));
         if (!ready) {
+            // Ни одна стадия не готова: круг или стадия, что ждёт несуществующей.
             const names = list.filter((stage) => !done.has(stage.name)).map((stage) => stage.name);
             warnings.push(`Цикл зависимостей стадий: ${names.join(', ')}. Стадии оставлены в исходном порядке.`);
             out.push(...list.filter((stage) => !done.has(stage.name)));

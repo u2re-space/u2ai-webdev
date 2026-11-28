@@ -193,12 +193,12 @@ test('the registry of the stages knows the order and the dependencies', () => {
     assert.ok(STAGE_NAMES.includes('learn'));
     assert.equal(stageByName('plan').name, 'plan');
     assert.equal(stageByName('nowhere'), null);
-    assert.deepEqual(stageDependencies('write'), ['assets']);
+    assert.deepEqual(stageDependencies('write'), ['graphics']);
     assert.deepEqual(stageDependencies('nowhere'), []);
 
     const order = stageOrder([...STAGES]);
     assert.equal(order.warnings.length, 0);
-    // Стадия письма одна, и она стоит после ассетов и до сборки.
+    // Стадия письма одна, и она стоит после графики и до сборки.
     assert.ok(order.stages.findIndex((stage) => stage.name === 'write')
         < order.stages.findIndex((stage) => stage.name === 'build'));
 
@@ -216,6 +216,31 @@ test('the registry of the stages knows the order and the dependencies', () => {
         < order.stages.findIndex((stage) => stage.name === 'scan'));
     assert.ok(order.stages.findIndex((stage) => stage.name === 'scan')
         < order.stages.findIndex((stage) => stage.name === 'plan'));
+
+    // **Каждая стадия ждёт только живую стадию.** Имя, которого нет в реестре, — это
+    // опечатка, и раньше она считалась выполненной зависимостью: сборка и взгляд на
+    // страницу вставали раньше письма, и прогон смотрел на пустую страницу.
+    const names = new Set(STAGE_NAMES);
+    for (const stage of STAGES) {
+        for (const name of stage.dependsOn ?? []) {
+            assert.ok(names.has(name), `стадия ${stage.name} ждёт несуществующей «${name}»`);
+        }
+    }
+});
+
+test('a stage that waits for a stage that does not exist says so', () => {
+    // Опечатка в реестре не должна проходить молча: стадия, что ждёт несуществующей
+    // стадии, встаёт после всех живых и говорит об этом.
+    const broken = [
+        { name: 'first', dependsOn: [] },
+        { name: 'second', dependsOn: ['nowhere'] },
+    ];
+    const { stages, warnings } = stageOrder(broken);
+    assert.equal(stages.length, 2);
+    assert.ok(warnings.some((item) => /nowhere/.test(item)), warnings.join(' | '));
+    assert.ok(warnings.some((item) => /несуществующ/.test(item)), warnings.join(' | '));
+    // The stage that waits for the missing one does not go first.
+    assert.equal(stages[stages.length - 1].name, 'second');
 });
 
 test('a stage that is switched off is not in the list', () => {

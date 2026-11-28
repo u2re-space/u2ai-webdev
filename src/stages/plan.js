@@ -25,7 +25,7 @@ import { inputContext } from '../inputs/index.js';
 import { readReferences } from '../inputs/references.js';
 import { runId, runFile, writeJsonFile, readJsonFile } from './workspace.js';
 import { readScan, scanText } from './scan.js';
-import { planRole, foreignFiles, roleForFiles } from './roles.js';
+import { planRole, foreignFiles, roleForFiles, promisedFile } from './roles.js';
 
 /**
  * The name of the file of the plan inside the directory of the run. */
@@ -107,6 +107,39 @@ export function orderSteps(steps = []) {
 }
 
 /**
+ * The files that the criteria of a step name, but its file list does not.
+ *
+ * Планировщик пишет в критериях то, что шаг делает: «Создан `styles.scss` с токенами…».
+ * Список файлов шага он иногда оставляет пустым или полным чужих файлов — и тогда шаг
+ * не знает, что он пишет, а роль шага угадывается по файлам, которых у шага нет.
+ *
+ * Критерий — это обещание проверки, и обещание «создан `styles.scss`» называет файл
+ * совершенно прямо. Шаг, чей критерий обещает **создать** файл, получает этот файл:
+ * он его пишет.
+ *
+ * Файл, который критерий лишь упоминает — «импортирующий `./styles.scss`», — шаг не
+ * пишет: он на него ссылается. Такие файлы в список шага не идут: иначе шаг кода
+ * забирал бы таблицу стилей себе.
+ *
+ * @param {object} step the step of the plan
+ * @returns {string[]} пути файлов, которых у шага нет
+ * @exports
+ * @ai.hint pure
+ */
+export function filesFromCriteria(step = {}) {
+    const criteria = Array.isArray(step?.criteria) ? step.criteria : [];
+    const have = new Set((Array.isArray(step?.files) ? step.files : [])
+        .map((file) => String(file ?? '').trim().replace(/\\/g, '/'))
+        .filter(Boolean));
+    const found = new Set();
+    for (const text of criteria) {
+        const rel = promisedFile(String(text ?? ''));
+        if (rel && !have.has(rel)) found.add(rel);
+    }
+    return [...found];
+}
+
+/**
  * Normalize the plan of the model into the shape the stages read.
  *
  * Every field of a step has a default, the ids are unique, the dependencies that point to
@@ -138,13 +171,24 @@ export function normalizePlan(plan = {}) {
         // The role of the step decides who does it. A role that no stage takes is a promise
         // the run cannot keep: the step is either given to the role that owns its files or
         // it leaves the plan.
-        const resolved = planRole(item.role, item.files, item);
+        //
+        // The file list of the step is repaired **before** the role is decided: критерий
+        // шага называет файл, который шаг пишет, и список файлов иногда его упускает.
+        // Роль угадывается по файлам шага, и без этого починки шаг со стилями уходил
+        // к той роли, что владеет упомянутыми картинками, — а таблица стилей не
+        // досталась никому.
+        const listed = lines(item.files);
+        const promised = filesFromCriteria({ files: listed, criteria: lines(item.criteria) });
+        const named = promised.length ? [...listed, ...promised] : listed;
+        if (promised.length) {
+            warnings.push(`Шаг ${id}: файлы из критериев добавлены в список шага: ${promised.join(', ')}.`);
+        }
+        const resolved = planRole(item.role, named, item);
         if (resolved.warning) warnings.push(`Шаг ${id}: ${resolved.warning}`);
         if (resolved.dropped) continue;
         // Чужой файл — не работа этого шага: разметка принадлежит разметке, и шаг
         // иллюстратора, который просит ещё и разметку, отдаёт её тому, кому она
         // принадлежит. Шаг без своих файлов отдаётся роли, которой эти файлы и есть.
-        const named = lines(item.files);
         const foreign = foreignFiles(resolved.role, named);
         let role = resolved.role;
         let files = named;

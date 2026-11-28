@@ -91,21 +91,26 @@ and the exit codes remain `0`, `1`, `2` and `130`.
 A run is a sequence of stages. Every stage reads the result of the ones before it, writes its own
 report into the directory of the run and hands the result to the next one.
 
-| Stage | What it does |
-|---|---|
-| `collect` | Read the inputs of the project, the map of the project, the registry of the components, the skill packs and the memory. |
-| `scan` | Read the project itself: what it is, which files matter, its conventions and its risks. |
-| `plan` | Break the task into steps, each with its role, its files and its check. |
-| `architect` | Decide the structure of the project: the files, the modules and the order. |
-| `setup` | Prepare the environment: the scaffold, the dependencies and the entry points. |
-| `graphics` | Make the graphics: the crops of the reference, the vector drawings and their places. One role does it all — the artist cuts, draws and puts. |
-| `write` | Write the project: the markup, the styles, the scripts and the motion. One role writes them all — the craft of a file comes by its kind, and the guides by the purpose of the write. |
-| `iconify` | Choose the icons of the interface and check that every one of them is on the disk. |
-| `build` | Connect the styles: the entry point, the compilation, the links of the markup. |
-| `sight` | Open the page in a browser, shoot it, and let the styler compare the picture with the reference and fix the styles. |
-| `review` | Review the result: the markup, the code, the styles and the accessibility — and repair what it finds. |
-| `audit` | Audit the project: the dead code, the duplicates, the unused assets. |
-| `learn` | Write the lessons of the run into the permanent memory. |
+| Stage | What it does | Waits for |
+|---|---|---|
+| `collect` | Read the inputs of the project, the map of the project, the registry of the components, the skill packs and the memory. | — |
+| `scan` | Read the project itself: what it is, which files matter, its conventions and its risks. | `collect` |
+| `plan` | Break the task into steps, each with its role, its files and its check. | `collect` |
+| `architect` | Decide the structure of the project: the files, the modules and the order. | `plan` |
+| `setup` | Prepare the environment: the scaffold, the dependencies and the entry points. | `architect` |
+| `graphics` | Make the graphics: the crops of the reference, the vector drawings and their places. One role does it all — the artist cuts, draws and puts. | `setup` |
+| `write` | Write the project: the markup, the styles, the scripts and the motion. One role writes them all — the craft of a file comes by its kind, and the guides by the purpose of the write. | `graphics` |
+| `iconify` | Choose the icons of the interface and check that every one of them is on the disk. | `write` |
+| `build` | Connect the styles: the entry point, the compilation, the links of the markup. | `write` |
+| `sight` | Open the page in a browser, shoot it, and let the styler compare the picture with the reference and fix the styles. | `build` |
+| `review` | Review the result: the markup, the code, the styles and the accessibility — and repair what it finds. | `write`, `iconify`, `build`, `sight` |
+| `audit` | Audit the project: the dead code, the duplicates, the unused assets. | `review` |
+| `learn` | Write the lessons of the run into the permanent memory. | `audit` |
+
+**A stage waits only for a live stage.** A dependency on a stage that is not in the registry
+is a mistake in the registry, and the run says so instead of quietly going on: the stage that
+waits for it stands still, and the run does not pass it. A stage that the operator has
+**switched off** is a different thing: it is not in the run, and nothing waits for it.
 
 The skeleton of the project is written by the code, not by the model: a project without a
 manifest gets `package.json`, the config of the bundler and the rules of the stack, with the
@@ -114,18 +119,23 @@ stack of the architect. The versions of the tools of the stack are pinned there 
 missing — the dependencies, the scripts, the files — and the stage checks the readiness of the
 project and says what is not there.
 
-The role of a step is the role that does it. Five roles take the steps of the plan: `markup`
-writes the markup, `coder` writes the scripts and the modules, `styler` writes the styles,
-`editor` draws the vector graphics, `iconifier` chooses the icons. The other roles work once
-for the whole run — the plan, the architecture, the environment, the review, the audit and the
-lessons are stages, not steps. A plan that names another role is a promise the run cannot keep,
-so the harness does not keep it silently: the role is guessed by the files of the step
-(`index.html` → `markup`, `styles.scss` → `styler`, `assets/badge.svg` → `editor`), and a step
-whose role cannot be guessed leaves the plan with a warning that says what happened. The files
-of the environment (`package.json`, `vite.config.js`, `.gitignore`) are not guessed: the stage
-`setup` prepares them for the whole run, and a step that asks a role to write them is dropped.
-The planner is told the five roles in its prompt and in the schema of its answer, so the plan of
-a model that listens names them from the start.
+The role of a step is the role that does it. Three roles take the steps of the plan: `builder`
+writes the markup, the styles, the scripts and the motion; `artist` makes the graphics;
+`iconifier` chooses the icons. The other roles work once for the whole run — the plan, the
+architecture, the environment, the review, the audit and the lessons are stages, not steps. A
+plan that names another role is a promise the run cannot keep, so the harness does not keep it
+silently: the role is decided by the files of the step (`index.html` → `markup`, `styles.scss`
+→ `styler`, `assets/badge.svg` → `artist`), and a step whose role cannot be guessed leaves the
+plan with a warning that says what happened. The files of the environment (`package.json`,
+`vite.config.js`, `.gitignore`) are not guessed: the stage `setup` prepares them for the whole
+run, and a step that asks a role to write them is dropped.
+
+**The file a step writes decides its role — not the number of names in its list.** A step of
+the styles names the stylesheet it writes *and* the pictures it refers to, and by the number
+of names it would belong to the artist; the criterion settles it — «Создан `styles.scss`» is
+a promise of what the step creates. So the criterion is read first, and the file it promises
+joins the list of the step. The planner is told this in its prompt and in the schema of its
+answer, so the plan of a model that listens names the file it writes from the start.
 
 The plan decides the order of the stages that do its steps. The registry has an order of its own
 (markup, styling, coding), but the plan knows more: a step that depends on another step is done

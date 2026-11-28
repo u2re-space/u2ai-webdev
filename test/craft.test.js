@@ -20,6 +20,7 @@ import { resolveRole, roleSchemaForKind } from '../src/roles/index.js';
 import { chunksFor, PHASES } from '../src/roles/chunks.js';
 import { pageFrameContractFor } from '../src/roles/page-frame.js';
 import { planRole, roleForFiles, kindsOfFiles } from '../src/stages/roles.js';
+import { filesFromCriteria } from '../src/stages/plan.js';
 import { defaults } from '../src/config.js';
 
 test('the effort of the role follows the kind of the file', () => {
@@ -84,6 +85,52 @@ test('the named role wins a tie of the kinds of the files', () => {
     // Шаг, что называет поровну разметку и стили, остаётся у того, кто его назвал.
     const resolved = planRole('styler', ['index.html', 'styles.scss'], { id: 'work', title: 'The work' });
     assert.equal(resolved.role, 'styler');
+});
+
+test('a step keeps the file its criteria promise to create', () => {
+    // Критерий «Создан `styles.scss`» — обещание проверки, и файл, что шаг создаёт,
+    // должен быть в его списке. Без этого роль шага угадывается по файлам, которых
+    // у шага нет, и таблица стилей достаётся не той роли.
+    const promised = filesFromCriteria({
+        files: ['assets/chess-piece.png'],
+        criteria: ['Создан `styles.scss` с токенами цветов из `measurements/DESIGN.md`.'],
+    });
+    assert.deepEqual(promised, ['styles.scss']);
+});
+
+test('a file a criterion only mentions does not become the file of the step', () => {
+    // «Создан каркас `main.js`, импортирующий `./styles.scss`» — шаг пишет первый файл
+    // и ссылается на второй. Второй чужий: его пишет та роль, что одевает страницу.
+    const promised = filesFromCriteria({
+        files: ['main.js'],
+        criteria: ['Создан каркас `main.js`, импортирующий `./styles.scss` и объявляющий контракт.'],
+    });
+    assert.deepEqual(promised, []);
+});
+
+test('the step of the styles keeps the stylesheet, whatever the pictures it names', () => {
+    // Шаг стилей называет картинки, на которые он ссылается, и таблицу стилей, которую
+    // он пишет. Роль шага — по его собственному файлу, а не по числу имён.
+    const resolved = planRole('styler', [
+        'assets/chess-piece.png',
+        'assets/numbered-board.png',
+        'styles.scss',
+    ], {
+        id: 'style-layout',
+        title: 'The layout of the page',
+        criteria: ['Создан `styles.scss` с токенами цветов и сеткой.'],
+    });
+    assert.equal(resolved.role, 'styler');
+});
+
+test('a step without a promise keeps the role of its own file', () => {
+    // Критерия нет — решает список файлов, и роль, у которой файлов больше.
+    const resolved = planRole('artist', [
+        'assets/chess-piece.png',
+        'assets/numbered-board.png',
+        'assets/award-badge.svg',
+    ], { id: 'art', title: 'The graphics' });
+    assert.equal(resolved.role, 'artist');
 });
 
 test('the artist is told what has to become a vector', () => {

@@ -87,9 +87,18 @@ ${INPUTS_IN_CONTEXT}
 - The role of a step is one of: ${LIVE_ROLE_NAMES.map((name) => `\`${name}\``).join(', ')}. The
   stages of the run take the steps of these roles and of no others, so a step with any other
   role is never done. \`markup\` writes the markup, \`coder\` writes the scripts and the modules,
-  \`styler\` writes the styles, \`animator\` writes the motion of the styles, \`editor\` draws the
-  vector graphics, \`illustrator\` puts the pictures of the project on their places,
-  \`iconifier\` chooses the icons.
+  \`styler\` writes the styles, \`animator\` writes the motion of the styles, \`artist\` draws
+  the vector graphics and puts the pictures of the project on their places, \`iconifier\`
+  chooses the icons.
+- **A step names the files it writes, and the role follows the file.** A step with a
+  stylesheet in it is a step of the \`styler\`, a step with a script is a step of the
+  \`coder\`, a step with a picture or a vector is a step of the \`artist\`. A step whose
+  file list holds only the files it *links* — the pictures of the page, the markup it
+  refers to — names no file of its own, and such a step is not a step: it is a list of
+  links. Give the step the file it writes, even when that file does not exist yet.
+- The file the step writes is the file of the step. Everything else the step mentions is
+  context: the page it dresses, the picture it shows, the script it calls. Put those in
+  the criteria, not in the file list.
 - The environment, the structure of the project, preparation of any existing picture crops and
   the review are not steps: the stages of the run handle them by themselves. Name prepared
   pictures only when they exist and the step uses them. A step for \`package.json\`, for the

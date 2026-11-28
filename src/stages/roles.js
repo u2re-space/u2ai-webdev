@@ -228,6 +228,53 @@ export function roleForStepName(stepId = '') {
 }
 
 /**
+ * Роль, что обещана критерием шага: та, что создаёт файл, названный в «Создан …».
+ *
+ * Критерий — это обещание проверки, и оно говорит о работе шага точнее, чем список
+ * файлов: «Создан `styles.scss`» — это файл, который шаг пишет, а «Создан каркас
+ * `main.js`, импортирующий `./styles.scss`» — файл `main.js`, и ссылка на второй.
+ *
+ * @param {object} step the step of the plan
+ * @returns {string|null} имя роли или null
+ * @exports
+ * @ai.hint pure
+ */
+export function promisedKind(step = {}) {
+    const criteria = Array.isArray(step?.criteria) ? step.criteria : [];
+    for (const text of criteria) {
+        const rel = promisedFile(String(text ?? ''));
+        if (!rel) continue;
+        const kind = ROLE_BY_EXTENSION[path.extname(rel).toLowerCase()];
+        if (kind) return kind;
+    }
+    return null;
+}
+
+/**
+ * The file that a criterion promises to create.
+ *
+ * The word of creation and the file that follows it: «Создан `styles.scss`». The file
+ * that the criterion only mentions later belongs to somebody else.
+ *
+ * @param {string} text the criterion
+ * @returns {string} the path of the file, or an empty string
+ * @exports
+ * @ai.hint pure
+ */
+export function promisedFile(text = '') {
+    const body = String(text ?? '');
+    // Границы слова тут нет: `\b` в JavaScript не знает кириллицы (`\w` — это только
+    // латиница), и `/\bсоздан/` не срабатывает никогда.
+    const creates = /(?:^|[^\wа-яё])(?:создан|создана|создано|созданы|создать|written|created|generated)(?:[^\wа-яё]|$)/i;
+    const at = creates.exec(body);
+    if (!at) return '';
+    // Только файл, что назван сразу после «создан».
+    const tail = body.slice(at.index + at[0].length);
+    const near = tail.match(/^\s*(?:каркас|файл\w*|скелет|скрипт|страница|таблица|модуль|значок|иконка)?\s*:?[^\S\n]*`([^`\s]+\.(?:html?|css|scss|sass|less|js|mjs|cjs|jsx|ts|tsx|json|svg|png|jpe?g|webp|gif|avif|md|txt|ya?ml))`/i);
+    return near ? near[1].trim().replace(/\\/g, '/').replace(/^\.\//, '') : '';
+}
+
+/**
  * Роль шага, угаданная по его файлам.
  *
  * Угадывает та роль, которой принадлежит первый файл шага: разметка — разметке, стили —
@@ -309,6 +356,29 @@ export function planRole(role = '', files = [], step = {}) {
         };
     }
 
+    // **Обещание критерия решает всё.** «Создан `styles.scss`» — это файл, который шаг
+    // создаёт, и роль шага — та, что пишет такой файл.
+    //
+    // Критерий говорит о работе шага, а список файлов — о контексте: шаг стилей
+    // называет картинки, на которые он ссылается, и по числу имён он принадлежит
+    // художнику, а не стилисту. Таблица стилей не досталась никому, и страница осталась
+    // без стилей.
+    //
+    // Обещание сильнее и имени шага, и числа файлов: оно говорит прямо, что шаг
+    // создаёт, а остальное — прочие догадки.
+    const promised = promisedKind(step);
+    if (promised) {
+        if (promised === named) {
+            return { role: promised, dropped: false, warning: null };
+        }
+        return {
+            role: promised,
+            dropped: false,
+            warning: `Шаг ${step?.id ?? ''} обещает создать файл роли "${promised}" — взята `
+                + `она, а не "${named}".`,
+        };
+    }
+
     // Шаг, который говорит о движении, — работа роли `animator`, даже когда он назван
     // `styler` и лежит в той же таблице стилей: у движения своя стадия и свой бюджет.
     const title = `${step?.id ?? ''} ${step?.title ?? ''}`;
@@ -321,24 +391,32 @@ export function planRole(role = '', files = [], step = {}) {
         };
     }
 
-    // Шаг, который называет файлы нескольких видов, отдаётся тому, чей вид в шаге
-    // преобладает — а не тому, чей вид стоит первым.
+    // Шаг, который называет файлы нескольких видов, отдаётся тому, чьё **собственное**
+    // дело он делает.
     //
     // Шаг `assets` называет разметку и кропы: работа его — в кропах, а разметка в
     // списке файлов — потому что шаг в неё ссылается. Раньше первый файл решал всё, и
     // шаг уезжал к разметке: картинки не векторизовались, и стадия графики находила
-    // пустоту. Теперь вид, которого в шаге больше, и есть работа шага.
+    // пустоту.
+    //
+    // **Считать файлы нельзя.** Шаг `style-layout` называет `styles.scss` и ещё
+    // четыре картинки, на которые он ссылается, — и по числу файлов он принадлежит
+    // художнику, а не стилисту: таблица стилей не досталась никому, и страница осталась
+    // без стилей.
     const kinds = kindsOfFiles(list);
     if (kinds.size > 1) {
+        // Считать надо не все файлы шага, а те, что остаются за ним: файл, который
+        // шаг упоминает, но не пишет, принадлежит другой роли.
         const counts = new Map();
-        for (const file of list) {
-            const rel = String(file ?? '').trim().replace(/\\/g, '/');
-            if (!rel) continue;
+        for (const rel of list) {
             const name = path.posix.basename(rel);
             if (ENVIRONMENT_FILES.test(name)) continue;
-            const role = ROLE_BY_EXTENSION[path.extname(name).toLowerCase()];
-            if (!role) continue;
-            counts.set(role, (counts.get(role) ?? 0) + 1);
+            const kind = ROLE_BY_EXTENSION[path.extname(name).toLowerCase()];
+            if (!kind) continue;
+            // Файл, что принадлежит другой роли, чужий: шаг его не пишет.
+            const owner = ownerOfFile(rel, kind);
+            if (owner && owner !== kind) continue;
+            counts.set(kind, (counts.get(kind) ?? 0) + 1);
         }
         let winner = null;
         let best = 0;
@@ -347,9 +425,8 @@ export function planRole(role = '', files = [], step = {}) {
         }
         // При равенстве побеждает названная роль: планировщик знает про шаг больше,
         // чем расширение файла. Порядок плана — только если названия нет.
-        if (winner && best === counts.get(named) && named && counts.has(named)) {
+        if (winner && named && counts.get(named) === best) {
             winner = named;
-            best = counts.get(named);
         }
         if (winner) {
             return {
