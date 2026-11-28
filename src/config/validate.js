@@ -624,6 +624,23 @@ export function validateConfig(config) {
   }
   for (const id of ENUMS.stages) validateStage(id, c.stages[id], fail);
 
+  // The adviser: the stages whose steps are advised, and the steps of them.
+  if (!isRecord(c.advisor)) fail('advisor должен быть объектом');
+  for (const key of Object.keys(c.advisor)) {
+    if (!(key in defaults.advisor)) fail(`advisor.${key}: неизвестное поле (допустимо: ${Object.keys(defaults.advisor).join(', ')})`);
+  }
+  if (typeof c.advisor.enabled !== 'boolean') fail('advisor.enabled: true | false');
+  if (!Array.isArray(c.advisor.stages)) fail('advisor.stages: массив строк');
+  for (const name of c.advisor.stages) {
+    if (typeof name !== 'string' || !name.trim()) fail('advisor.stages: непустая строка');
+    if (!ENUMS.stages.includes(name)) fail(`advisor.stages: неизвестная стадия (${ENUMS.stages.join(' | ')})`);
+  }
+  if (!Array.isArray(c.advisor.steps)) fail('advisor.steps: массив строк');
+  for (const name of c.advisor.steps) {
+    if (typeof name !== 'string' || !name.trim()) fail('advisor.steps: непустая строка');
+  }
+  if (!(Number.isSafeInteger(c.advisor.maxTurns) && c.advisor.maxTurns > 0)) fail('advisor.maxTurns: целое > 0');
+
   if (!isRecord(c.output)) fail('output должен быть объектом');
   for (const key of ['dir', 'work']) {
     if (typeof c.output[key] !== 'string' || !c.output[key].trim()) fail(`output.${key}: непустая строка`);

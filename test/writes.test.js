@@ -49,6 +49,10 @@ function schemaAnswer(name, args) {
 
 /**
  * A client that answers the requests one by one.
+ *
+ * The adviser of a step is answered on its own: it asks with the schema `advice`, and the
+ * mock has an answer for it. The queue of the worker does not shift.
+ *
  * @param {object[]} answers the answers, one per request
  * @returns {{ client: object, requests: object[] }}
  */
@@ -67,6 +71,21 @@ function mockClient(answers) {
                             content: Array.isArray(item?.content) ? [...item.content] : item?.content,
                         })),
                     });
+                    // The adviser of a step: the mock answers for it, and the queue of the
+                    // worker does not move.
+                    //
+                    // The mock stands in for the client of the API, so it sees the
+                    // parameters of the call, not the built body: the schema is named by
+                    // `schemaName` there.
+                    if (body?.schemaName === 'advice') {
+                        return schemaAnswer('advice', {
+                            summary: 'The step is clear.',
+                            points: [],
+                            risks: [],
+                            order: [],
+                            notes: '',
+                        });
+                    }
                     const answer = answers[Math.min(index, answers.length - 1)];
                     index += 1;
                     return answer;

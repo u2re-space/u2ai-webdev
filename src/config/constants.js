@@ -64,9 +64,9 @@ export const ENUMS = Object.freeze({
 
 /** The roles that always exist; user roles are validated against the schema only. */
 export const BUILTIN_ROLE_NAMES = Object.freeze([
-  'scanner', 'planner', 'architect', 'director', 'coder', 'markup', 'styler',
-  'animator', 'illustrator', 'iconifier', 'installer', 'editor', 'reviewer',
-  'auditor', 'learner',
+  'scanner', 'planner', 'architect', 'advisor', 'director', 'coder', 'markup',
+  'styler', 'animator', 'illustrator', 'iconifier', 'installer', 'editor',
+  'reviewer', 'auditor', 'learner',
 ]);
 
 /** Alias spellings accepted in backend `supports` maps. */

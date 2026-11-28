@@ -228,6 +228,19 @@ export const SCHEMAS = Object.freeze({
         summary: str('The verdict in two or three sentences.'),
         recommendations: arr(str('What to do next.'), 'What has to happen next.'),
     }),
+
+    advice: strictObject({
+        summary: str('The advice in one or two sentences: what this step should do and how.'),
+        // The advice itself: what is worth doing, and in what order. An empty list is an
+        // honest answer — the step is clear and the senior had nothing to add.
+        points: arr(str('One piece of advice, and why it matters for this step.'), 'The advice.'),
+        // The traps of this step: what is easy to get wrong here, and what it costs.
+        risks: arr(str('A risk of this step and what to do about it.'), 'The risks of the step.'),
+        // The order of the work: what has to be written first, and what the rest must
+        // agree with.
+        order: arr(str('One step of the order of the work.'), 'The order the work is better done in.'),
+        notes: str('What the reader of the advice needs to know and the rest of it does not say.'),
+    }),
 });
 
 /** The names of the schemas. */

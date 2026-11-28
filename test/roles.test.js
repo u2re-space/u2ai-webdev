@@ -78,8 +78,8 @@ import { mockApi, toolAnswer, schemaAnswer, textAnswer, codeData } from './helpe
 
 test('every built-in role is in the registry', () => {
     for (const name of [
-        'scanner', 'planner', 'architect', 'director', 'coder', 'markup', 'styler',
-        'animator', 'artist', 'iconifier', 'installer', 'editor', 'reviewer',
+        'scanner', 'planner', 'architect', 'advisor', 'director', 'coder', 'markup',
+        'styler', 'animator', 'artist', 'iconifier', 'installer', 'editor', 'reviewer',
         'auditor', 'learner',
     ]) {
         assert.ok(ROLES[name], `the role ${name} is missing`);
@@ -87,7 +87,7 @@ test('every built-in role is in the registry', () => {
         assert.ok(Array.isArray(ROLES[name].tools));
         assert.ok(Number.isInteger(ROLES[name].maxTurns));
     }
-    assert.equal(ROLE_NAMES.length, 17);
+    assert.equal(ROLE_NAMES.length, 18);
 });
 
 test('the builder writes everything, and its craft comes by the kind of the file', () => {

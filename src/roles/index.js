@@ -61,6 +61,7 @@ import * as untrusted from './untrusted.js';
 import * as scanner from './scanner.js';
 import * as planner from './planner.js';
 import * as architect from './architect.js';
+import * as advisor from './advisor.js';
 import * as director from './director.js';
 import * as coder from './coder.js';
 import * as builder from './builder.js';
@@ -84,6 +85,7 @@ export const ROLES = Object.freeze({
     scanner,
     planner,
     architect,
+    advisor,
     director,
     coder,
     builder,

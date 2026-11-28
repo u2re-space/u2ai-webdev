@@ -31,10 +31,24 @@ test('the house has a model of its own for the roles that need one', () => {
         animator: 'family:gpt',
         markup: 'family:gpt',
         coder: 'family:gpt',
+        advisor: 'family:gpt',
     });
     // The path of the styler is [1, 0]: the Sol writes the styles.
     assert.equal(houseModel('styler', configFor()), 'openai/gpt-6.2-sol');
     assert.equal(houseModel('nothing'), null);
+});
+
+test('the adviser is asked on the senior model, not on the model of the run', () => {
+    // Роль без лестницы отвечает на модель прогона, а та — на **первую** модель
+    // семейства, то есть на младшую. Советник без лестницы сел бы на Terra, и совет
+    // был бы пустым: лестница тут обязательна.
+    for (const model of ['minimax/minimax-m3.1-flash', 'google/gemini-4-hydrogen', 'moonshotai/kimi-k3.1-pro']) {
+        const config = configFor({ model });
+        assert.equal(resolveRole('advisor', config).model, 'openai/gpt-6.2-sol');
+    }
+    // The pin of the role still wins over the model of the house.
+    const pinned = configFor({ roles: { advisor: { model: 'google/gemini-4-hydrogen' } } });
+    assert.equal(resolveRole('advisor', pinned).model, 'google/gemini-4-hydrogen');
 });
 
 test('the artist draws the vector graphics with the best model of the family', () => {

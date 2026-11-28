@@ -158,6 +158,10 @@ export const defaults = {
       markup: 'family:gpt',
       // The scripts are the behaviour of the page: the state, the navigation, the data.
       coder: 'family:gpt',
+      // The adviser of a step: the senior of the family, asked before the work. It only
+      // reads and advises — the files are written by the role of the step — but the
+      // advice is worth the head of the family: it is the thinking that saves the work.
+      advisor: 'family:gpt',
     },
     /**
      * The ladders of the ranks of the models of the house in their families.
@@ -192,6 +196,12 @@ export const defaults = {
         // The iconifier picks the icons and checks them: the place of an icon is a cheap
         // decision, and the tail of the ladder is enough for it.
         iconifier: [0],
+        // The adviser is the senior of the family: `[1]` — это `gpt-6.2-sol`.
+        //
+        // Лестница здесь обязательна: роль без лестницы отвечает на модель прогона, а та
+        // — на **первую** модель семейства, то есть на младшую. Советник без лестницы
+        // сел бы на `gpt-6.1-terra`, и совет был бы пустым.
+        advisor: [1],
       },
       /**
        * The ladders of the ranks of the stages.
@@ -504,6 +514,39 @@ export const defaults = {
     review: { enabled: true, maxTurns: 4, repair: true, repairRounds: 2, checkStyles: true, timeoutMs: 30 * 60_000 },
     audit: { enabled: true, maxTurns: 8, timeoutMs: null },
     learn: { enabled: true, maxTurns: 8, timeoutMs: null },
+  },
+
+  /**
+   * The adviser: the senior model, asked before the work of a step.
+   *
+   * The reviewer judges what is already on the disk. The adviser is asked **before** the
+   * work: how this step is better done. The difference is the point — advice that comes
+   * after the file is written is a review, and a review is already in the house.
+   *
+   * The adviser costs a turn of the senior model, and not every step is worth it. So the
+   * config says which stages are advised, and which steps of them:
+   *
+   * ```js
+   * advisor: {
+   *   enabled: true,
+   *   stages: ['write'],       // the stages whose steps are advised
+   *   steps: [],               // the steps of them; empty means every step
+   *   maxTurns: 2,             // how many turns the adviser may spend
+   * }
+   * ```
+   *
+   * A step is named by its id, its title or one of its files. An empty list of steps means
+   * every step of the named stages.
+   */
+  advisor: {
+    /** Is the adviser asked at all. */
+    enabled: true,
+    /** The stages whose steps are advised. */
+    stages: ['write'],
+    /** The steps of those stages that are advised. Empty means every step of the stage. */
+    steps: [],
+    /** How many turns the adviser may spend. It reads and answers: two is enough. */
+    maxTurns: 2,
   },
 
   // --- browser ----------------------------------------------------------------
@@ -827,6 +870,7 @@ export const defaults = {
     scanner: {},
     planner: {},
     architect: {},
+    advisor: {},
     director: {},
     coder: {},
     builder: {},

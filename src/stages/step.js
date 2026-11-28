@@ -51,6 +51,7 @@ import { defaultPass, passFor, passKey, passesOf, passReportName, isPassReportNa
 import { passTask, passNote, isDraftPass } from './pass-tasks.js';
 import { contractNote } from './contract.js';
 import { isWaiting } from './contract.js';
+import { advisorWanted, consultAdvisor } from './advisor.js';
 import { wordsOfAnswer } from '../roles/index.js';
 /** The directory inside the run that holds the reports of the steps. */
 export const STEPS_DIR = 'steps';
@@ -1286,6 +1287,45 @@ export async function runStepStage({
                 stepReports.push(ready);
                 continue;
             }
+            // Совет старшей модели: его спрашивают **до** работы, а не после неё.
+            //
+            // Ревьюер смотрит на то, что уже написано, и говорит, что не так. Советник
+            // смотрит на то, что **ещё не** написано, и говорит, как лучше. Разница в
+            // том, что совет приходит до файла, а не после.
+            //
+            // Совет — это совещание, а не приказ: роль шага сама решает, что из него взять.
+            // Поэтому совет идёт в запрос шага отдельным блоком, а не в инструкцию роли.
+            const advice = advisorWanted(config, { stage: stageName, role, step })
+                ? await consultAdvisor({
+                    client,
+                    config,
+                    root,
+                    task,
+                    step,
+                    plan,
+                    brief,
+                    inputs,
+                    runId: run,
+                    notify,
+                    env,
+                    signal,
+                    runContext,
+                    stage: stageName,
+                })
+                : { text: '', data: null, cached: false, warnings: [], turns: 0, usage: null, model: null };
+            if (advice.text) {
+                turns += advice.turns;
+                usage = usage ?? advice.usage;
+                notify({
+                    type: 'advisor.advice',
+                    stage: stageName,
+                    step: step.id,
+                    model: advice.model,
+                    cached: advice.cached,
+                });
+            }
+            warnings.push(...(advice.warnings ?? []));
+
             const result = await runStepPass({
                 client,
                 config,
@@ -1312,6 +1352,7 @@ export async function runStepStage({
                 order,
                 reference,
                 warnings,
+                advice: advice.text,
             });
             turns += result.turns;
             usage = usage ?? result.usage;
@@ -1380,6 +1421,7 @@ async function runStepPass({
     order = '',
     reference = { names: [], sizes: [] },
     warnings = [],
+    advice = '',
 } = {}) {
     const blocks = [];
     if (task) blocks.push(String(task).trim());
@@ -1390,6 +1432,21 @@ async function runStepPass({
         step.files?.length ? `- files: ${step.files.join(', ')}` : '- files: not named',
         step.criteria?.length ? `- criteria: ${step.criteria.join('; ')}` : '- criteria: not named',
     ].join('\n'));
+    // Совет старшей модели. Он стоит здесь, в запросе, а не в инструкции роли: совет
+    // относится к этому шагу, и инструкция роли — общая на все её шаги.
+    //
+    // Совет — это совещание, а не приказ: роль решает сама, что из него взять. Поэтому
+    // здесь сказано именно это, а не «сделай так».
+    if (advice) {
+        blocks.push([
+            '## The advice of the senior',
+            'The senior of the house was asked how this step is better done, before you started.',
+            'It is a counsel, not an order: take what is worth taking, leave what is not, and',
+            'say in your report what you took and what you did not.',
+            '',
+            advice,
+        ].join('\n'));
+    }
     // Задача прохода: она говорит роли, что именно она делает в этом заходе.
     const taskOfPass = passTask(role, pass, { step, hasStyles: extra?.hasStyles, hasCode: extra?.hasCode });
     if (taskOfPass) blocks.push(taskOfPass);
