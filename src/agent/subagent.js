@@ -294,6 +294,7 @@ export function createSubagentSpawner({
     baseURL = null,
     apiKey = null,
     specs = null,
+    memoryDir = null,
     signal = null,
 } = {}) {
     return async function spawn(args = {}) {
@@ -438,6 +439,10 @@ export function createSubagentSpawner({
                 },
                 // The buffer of the hand-over: the thread reads its texts from here.
                 shared: shared?.buffer ?? null,
+                // The memory of the work: the sub-agent keeps its files there, so a work
+                // that was cut before the answer reached the parent still owns them, and
+                // the parent finds them where it looks for its own.
+                memory: { dir: memoryDir ?? '', enabled: Boolean(memoryDir) },
             },
             transport: askedTransport,
             signal,

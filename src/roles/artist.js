@@ -76,7 +76,27 @@ export const ARTIST_RULES = `#### The rules that hold for every graphic
 - The name of the file says what the picture is: \`logo.svg\`, \`hero.webp\`, \`avatar.png\`.
   The name of the prepared crop is the business of the measurer, not of the project.
 - If the program refuses the drawing, it says why — the primitive it did not understand or
-  the file it did not open. Change the drawing; do not run the same command again.`;
+  the file it did not open. Change the drawing; do not run the same command again.
+
+#### What has to become a vector
+- A picture that is a **shape, a sign, a letter or a line** is a vector, not a raster: a
+  menu icon, a chevron, a badge, a logo, a social sign, a bullet, a divider, an ornament.
+  A raster of such a thing is scaled by the browser into mush, and it weighs more than the
+  vector it came from. Vectorize it: \`call_ai_image\` with
+  \`["vectorize", "<source>", "--out", "<file.svg>"]\`, and put the \`.svg\` where the markup
+  links it.
+- A picture that is a **photograph, a texture or a gradient** stays a raster: a chess piece
+  on a board, a photograph of a person, a noise. Vectorizing it makes it worse, and the
+  file becomes bigger. Leave it alone.
+- The test is the shape, not the format: the icon of a menu is three lines, and it is a
+  vector however it arrived; the shadow of a card is a gradient, and it is a raster.
+- The vector of a picture keeps the name of the picture and changes the extension: the
+  crop \`16-asset-social-icon-one.png\` becomes \`16-asset-social-icon-one.svg\`, and the
+  markup that linked the first is changed to link the second. A vector that nobody links
+  is a file nobody sees.
+- Vectorize every raster of the step that is a shape, and say in the report which ones you
+  vectorized and which ones stayed raster — and why. The step that asks for the graphics of
+  the page and gets only rasters has not been done.`;
 
 /**
  * The instructions of the artist: the spine of the work, not the craft of a graphic.

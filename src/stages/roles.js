@@ -127,6 +127,20 @@ const ROLE_BY_EXTENSION = Object.freeze({
     '.sass': 'styler',
     '.less': 'styler',
     '.svg': 'artist',
+    // Растровая картинка — работа художника: он её готовит, векторизует и кладёт на
+    // место. Без этого владения шаг с картинками не угадывался вовсе: роль шага
+    // определялась по расширению, а у растра расширения в таблице не было — и шаг с
+    // одними кропами уезжал из плана, а шаг, где кропы шли после разметки, уезжал к
+    // разметке. Шаг `assets` с картинками и разметкой становился шагом разметки, и
+    // векторизация не случалась никогда.
+    '.png': 'artist',
+    '.jpg': 'artist',
+    '.jpeg': 'artist',
+    '.webp': 'artist',
+    '.gif': 'artist',
+    '.avif': 'artist',
+    '.bmp': 'artist',
+    '.ico': 'artist',
 });
 
 /**
@@ -237,6 +251,30 @@ export function roleForFiles(files = []) {
 }
 
 /**
+ * Виды файлов шага: по расширению, без файлов окружения.
+ *
+ * Шаг может назвать файлы нескольких видов — и тогда вид одного файла не говорит о
+ * шаге ничего: шаг `assets` называет и разметку, и кропы, а работа его — в кропах.
+ *
+ * @param {string[]} files
+ * @returns {Set<string>} виды файлов шага
+ * @exports
+ * @ai.hint pure
+ */
+export function kindsOfFiles(files = []) {
+    const out = new Set();
+    for (const file of Array.isArray(files) ? files : []) {
+        const rel = String(file ?? '').trim().replace(/\\/g, '/');
+        if (!rel) continue;
+        const name = path.posix.basename(rel);
+        if (ENVIRONMENT_FILES.test(name)) continue;
+        const role = ROLE_BY_EXTENSION[path.extname(name).toLowerCase()];
+        if (role) out.add(role);
+    }
+    return out;
+}
+
+/**
  * Роль шага: та, что названа, или та, что угадывается по файлам.
  *
  * Шаг, который состоит только из файлов окружения, убирается из плана, кем бы он ни был
@@ -281,6 +319,46 @@ export function planRole(role = '', files = [], step = {}) {
             warning: `Шаг о движении (${step?.title ?? step?.id ?? ''}) отдан роли "animator" — `
                 + 'у движения своя стадия.',
         };
+    }
+
+    // Шаг, который называет файлы нескольких видов, отдаётся тому, чей вид в шаге
+    // преобладает — а не тому, чей вид стоит первым.
+    //
+    // Шаг `assets` называет разметку и кропы: работа его — в кропах, а разметка в
+    // списке файлов — потому что шаг в неё ссылается. Раньше первый файл решал всё, и
+    // шаг уезжал к разметке: картинки не векторизовались, и стадия графики находила
+    // пустоту. Теперь вид, которого в шаге больше, и есть работа шага.
+    const kinds = kindsOfFiles(list);
+    if (kinds.size > 1) {
+        const counts = new Map();
+        for (const file of list) {
+            const rel = String(file ?? '').trim().replace(/\\/g, '/');
+            if (!rel) continue;
+            const name = path.posix.basename(rel);
+            if (ENVIRONMENT_FILES.test(name)) continue;
+            const role = ROLE_BY_EXTENSION[path.extname(name).toLowerCase()];
+            if (!role) continue;
+            counts.set(role, (counts.get(role) ?? 0) + 1);
+        }
+        let winner = null;
+        let best = 0;
+        for (const [role, count] of counts) {
+            if (count > best) { best = count; winner = role; }
+        }
+        // При равенстве побеждает названная роль: планировщик знает про шаг больше,
+        // чем расширение файла. Порядок плана — только если названия нет.
+        if (winner && best === counts.get(named) && named && counts.has(named)) {
+            winner = named;
+            best = counts.get(named);
+        }
+        if (winner) {
+            return {
+                role: winner,
+                dropped: false,
+                warning: `Шаг ${step?.id ?? ''} называет файлы нескольких видов `
+                    + `(${[...kinds].join(', ')}) — взята роль "${winner}" (${best} из ${list.length} файлов).`,
+            };
+        }
     }
 
     // Имя шага говорит о роли не меньше, чем расширение файла: `markup-rooms` — это

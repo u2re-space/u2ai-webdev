@@ -879,32 +879,48 @@ turns.
 | `planner` | Break the task into steps. |
 | `architect` | Design the structure of the project. |
 | `director` | Lead the steps of the plan and keep the whole in one state. |
-| `coder` | Write the code. |
-| `styler` | Write the styles. |
-| `animator` | Write the motion of the result: the transitions, the entrances, the reduced motion. |
-| `illustrator` | Place the pictures of the project: the final path of every asset and its final format. |
+| `builder` | Write the files: the markup, the styles, the scripts and the motion. |
+| `artist` | The graphics: the vector drawings, the pictures cut out of the reference, and their places. |
 | `iconifier` | Pick the icons. |
 | `installer` | Set the environment up. |
-| `editor` | Edit the vector graphics and the decorations. |
-| `reviewer` | Review the result. || `auditor` | Audit the project. |
+| `reviewer` | Review the result. |
+| `auditor` | Audit the project. |
 | `learner` | Write the lessons. |
 
-Seven of them take the steps of the plan: `markup`, `coder`, `styler`, `animator`, `editor`,
-`illustrator` and `iconifier`. The other seven work once for the whole run, and a step of the
-plan may not name them.
+Three of them take the steps of the plan: `builder`, `artist` and `iconifier`. The rest work
+once for the whole run, and a step of the plan may not name them.
 
-The motion is a work of its own: the styles are written by the `styler`, and the `animator`
-changes the same stylesheet — the transitions of the states, the entrances and the exits, the
-reduced motion. The stage `animation` stands between the styles and the code: the code is
-written against the contract of the styles, and the states of the page are part of that
-contract.
+**The role `builder` is the one that writes.** The roles `markup`, `styler`, `coder` and
+`animator` were four names for one job, and the job was waiting for itself: the coder waited
+for the styles, the styler waited for the code, and the run stood still between them. Now one
+role writes everything, and **the craft follows the file, not the name of the role**:
 
-The pictures of the project are two stages. The stage `pictures` cuts the crops of the
-reference out of the screenshot and prepares them with the sibling CLI `ai-image`; it stands
-before the vector stage, because the editor does not draw a picture that is already prepared.
-The stage `assets` comes after the vector stage: when the vector is drawn, the whole set of
-the pictures is known, and the role `illustrator` gives every one of them its final path and
-its final format — and the markup links the files that are final.
+| What the step writes | The craft that arrives at the write gate | The effort | The schema of the answer |
+|---|---|---|---|
+| `styles.scss` | the rules of the stylesheet | `high` | `style` — with the tokens |
+| `index.html` | the rules of the markup | `medium` | `markup` |
+| `main.js` | the rules of the code | `medium` | `code` |
+| `logo.svg` | the rules of the vector | `medium` | `code` |
+
+The craft, the effort and the schema all follow the **kind of the file**. That is why they are
+read from the files of the step and not from the name of the role: a role that writes
+everything has no kind of its own.
+
+The motion is a work of its own, and it is told apart by its title: a step that speaks of a
+transition, an entrance or the reduced motion belongs to the `animator`, and it writes the same
+stylesheet as the styles.
+
+The graphics are one role and one stage. The `artist` cuts the crops of the reference out of
+the screenshot, draws the vector graphics and puts every picture on the place the markup links.
+A **raster that is a shape** — a menu icon, a chevron, a badge, a logo, a social sign — is
+vectorized by the artist: `ai-image vectorize` makes the SVG, the extension changes, and the
+markup that linked the raster is changed to link the vector. A **raster that is a photograph, a
+texture or a gradient** stays a raster: vectorizing it makes it worse and the file bigger.
+
+The role of a step is decided by the **kind of its files**, and a step that names files of
+several kinds goes to the kind that prevails in it. A step of the graphics names the crops and
+the markup it refers to — and it belongs to the artist, because fourteen crops and one markup
+is the work of the artist, not of the markup.
 
 The roles keep out of each other's work. The environment — the manifest, the lock file, the
 config of the bundler and the installed dependencies — belongs to the `installer` and to the

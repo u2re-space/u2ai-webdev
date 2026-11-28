@@ -157,7 +157,7 @@ export const PAGE_FRAME_CONTRACT = [
 
 /** The roles jointly responsible for keeping the page frame and CSS in agreement. */
 export function pageFrameContractFor(role) {
-    return ['markup', 'styler'].includes(String(role ?? '').trim().toLowerCase())
+    return ['markup', 'styler', 'builder'].includes(String(role ?? '').trim().toLowerCase())
         ? PAGE_FRAME_CONTRACT
         : '';
 }

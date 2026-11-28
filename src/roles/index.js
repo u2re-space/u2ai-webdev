@@ -296,7 +296,23 @@ const VECTOR_TOOLS = new Set([
     // ImageMagick is the tool of the pictures: the editor converts, resizes and reads them.
     'magick',
 ]);
-const PAGE_FRAME_ROLES = new Set(['markup', 'styler']);
+// The roles that carry the frame of the page.
+//
+// The frame is the contract between the markup and the styles: the canvas inside the
+// body, the width of the design and the scale that fits it into the window. The role
+// `builder` writes both sides of it, so it carries the contract too — раньше он был
+// только у `markup` и `styler`, и после того, как они слились в `builder`, контракт
+// исчез из прогона целиком: страница осталась без `--zoom` и без `container-type`.
+const PAGE_FRAME_ROLES = new Set(['markup', 'styler', 'builder']);
+
+/**
+ * The roles that write styles.
+ *
+ * The role `builder` writes the stylesheets too: it is the one role of the writing, and
+ * its step may name a stylesheet. The rules of the styles are therefore its rules — and
+ * the binding contract of the stylesheet belongs to it as well.
+ */
+const STYLE_ROLES = new Set(['styler', 'builder']);
 const READ_ONLY_TOOLS = new Set([
     'list_files', 'read_file', 'find_line', 'search_files', 'list_backups',
     'read_skill', 'web_guidance', 'fetch_url', 'search_icons', 'ask_user',
@@ -386,8 +402,33 @@ function isEmptyFile(file) {
  * @ai.hint pure
  */
 export function roleSchema(role) {
-    const definition = ROLES[String(role ?? '').toLowerCase()];
+    const definition = ROLES[String(role ?? '').trim().toLowerCase()];
     if (!definition) return null;
+    return definition.schema ? schemaFor(definition.schema) : null;
+}
+
+/**
+ * The schema of the answer of a role, по виду файла.
+ *
+ * Роль `builder` пишет всё, и вид файла шака решает, какая форма ответа нужна. Шаг со
+ * таблицей стилей отвечает схемой `style` — с перечнем токенов, — а шаг со скриптом
+ * отвечает схемой `code`. Раньше `builder` всегда отвечал схемой `code`, и токены
+ * стилей оставались в файле, но не в ответе: прогон не знал, какие токены роль
+ * объявила, и отчёт шага был пустым.
+ *
+ * @param {string} role
+ * @param {string|null} kind вид файла: `style`, `markup`, `code`, `svg`, `image`
+ * @returns {object|null}
+ * @exports
+ * @ai.hint pure
+ */
+export function roleSchemaForKind(role, kind = null) {
+    const key = String(role ?? '').trim().toLowerCase();
+    const definition = ROLES[key];
+    if (!definition) return null;
+    const name = String(kind ?? '').trim().toLowerCase();
+    // Только у роли, что пишет всё: у остальных вид файла не меняет форму ответа.
+    if (name && key === 'builder' && name === 'style') return schemaFor('style');
     return definition.schema ? schemaFor(definition.schema) : null;
 }
 
@@ -703,10 +744,15 @@ export async function runRole({
     const roleStage = stage ?? key;
     // Вид работы: файлы шага говорят, какое ремесло нужно. Усилие модели следует за
     // ним, а не за стадией: стадия — искусственная граница, файл — нет.
+    //
+    // `kindsOf` отдаёт множество, а множество не индексируется: `[0]` у него всегда
+    // `undefined`, и вид работы был всегда `null`. Усилие таблицы стилей (`high`)
+    // therefore не доходило до роли, и стили писались на усилии среднего уровня.
     const stepFiles = Array.isArray(context?.step?.files)
         ? context.step.files.map((item) => String(item ?? '').trim()).filter(Boolean)
         : [];
-    const workKind = kindsOf(stepFiles)[0] ?? null;
+    const workKinds = kindsOf(stepFiles);
+    const workKind = workKinds.size ? [...workKinds][0] : null;
     const definition = resolveRole(key, config, { stage: roleStage, phase: initialPhase, kind: workKind });
     if (!definition) throw new Error(`Неизвестная роль: ${role}`);
     // The model of the turn. The role works on the head of its ladder — the model of the
@@ -765,11 +811,11 @@ export async function runRole({
                 '- Preserve the page-frame contract: the page canvas, --real-page-width, --zoom, container sizing, and narrow-screen reflow must stay coordinated between markup and styles.',
                 '- Do not omit or replace the canvas/zoom contract because a partial step lists only one side of it.',
             ] : []),
-            ...(key === 'styler' ? [
+            ...(STYLE_ROLES.has(key) ? [
                 '- Every explicit task requirement outranks the generic styling recommendations in the role prompt.',
                 '- Preserve requested dimensions, breakpoints, content treatment and overflow behavior; do not replace specified geometry with a generic pattern.',
             ] : []),
-            ...(key === 'styler' ? [
+            ...(STYLE_ROLES.has(key) ? [
                 '- Write the named stylesheet files now. Do not run commands, Python, or shell: the next build stage compiles CSS/SCSS.',
                 '- Do not delegate this step. `write_ready` only unlocks your own write tools; it is not delegation.',
             ] : []),
@@ -824,7 +870,7 @@ export async function runRole({
         .filter((spec) => !context?.vectorOnly || !String(spec.name).startsWith('mcp_'))
         .filter((spec) => spec.name !== 'ask_user' || (inputChannel?.interactive && config?.tools?.ask_user !== false))
         .filter((spec) => depth === 0 || spec.name !== 'subagent');
-    const schema = roleSchema(key);
+    const schema = roleSchemaForKind(key, workKind);
     const readSpecs = specs.filter((spec) => READ_ONLY_TOOLS.has(String(spec?.name ?? '')));
     const hasActionTools = Boolean(requireFiles) && key !== 'reviewer' && readSpecs.length < specs.length;
     const preWriteSpecs = [...readSpecs, ...(hasActionTools ? [WRITE_READY_TOOL] : [])];
@@ -895,6 +941,9 @@ export async function runRole({
         // The specs of the tools of this role: among the tools of the inherited role only
         // the ones this process can really run stay.
         specs,
+        // The memory of the run: the sub-agent keeps its files there, and the run finds
+        // them where it looks for its own.
+        memoryDir: runContext?.memory?.dir ?? null,
         signal,
     });
 
@@ -1546,7 +1595,7 @@ export async function runRole({
             items.push({ role: 'user', content: [textPart(`## Operator steering for this turn\n${deferredSteering.map((line) => `- ${line}`).join('\n')}\n\n${pendingText}`)] });
             deferredSteering = [];
         }
-        if (key === 'styler' && work.length && wantedFiles.length) {
+        if (STYLE_ROLES.has(key) && work.length && wantedFiles.length) {
             const criteria = (Array.isArray(context?.step?.criteria) ? context.step.criteria : [])
                 .map((item) => String(item ?? '').trim()).filter(Boolean);
             items.push({ role: 'user', content: [textPart(

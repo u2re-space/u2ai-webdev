@@ -22,6 +22,8 @@
  * @changed 2026-11-25 Стадия графики вместо трёх: вырезки, вектор и раскладка.
  */
 
+import path from 'node:path';
+import { stat } from 'node:fs/promises';
 import { architectureText } from './architect.js';
 import { runStepStage } from './step.js';
 import { picturesStage } from './pictures.js';
@@ -167,8 +169,16 @@ export async function graphicsStage({
     for (const vector of vectors) {
         const name = baseName(vector);
         const cut = pictures.find((picture) => baseName(picture?.file ?? '') === name);
-        if (cut) {
-            result.warnings.push(`${vector} повторяет подготовленную картинку ${cut.file}: одно и то же показано дважды.`);
+        if (!cut) continue;
+        // Вектор и вырезка с тем же именем — это **не** дубль: это один и тот же объект,
+        // который художник перевёл в вектор. Страница показывает его один раз — по
+        // ссылке разметки. Дубль был бы, если б и вырезка, и вектор стояли на месте
+        // одновременно.
+        const vectorOnDisk = await stat(path.join(root, vector)).then((info) => info.isFile()).catch(() => false);
+        const cutOnDisk = await stat(path.join(root, cut.file ?? '')).then((info) => info.isFile()).catch(() => false);
+        if (vectorOnDisk && cutOnDisk) {
+            result.warnings.push(`${vector} и ${cut.file} — два файла одного объекта: `
+                + 'оставьте на месте только тот, на который ссылается разметка.');
         }
     }
 

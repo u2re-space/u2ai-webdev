@@ -148,9 +148,11 @@ test('a step of a role that no stage executes leaves the plan when the role cann
             { id: 'c', title: 'Nothing', role: 'unknown-role' },
         ],
     });
-    assert.deepEqual(plan.steps, []);
+    // Растр принадлежит художнику: шаг с картинкой уходит к нему, а не теряется.
+    assert.deepEqual(plan.steps.map((step) => step.id), ['b']);
+    assert.equal(plan.steps[0].role, 'artist');
     assert.ok(plan.warnings.some((item) => /Шаг a:/.test(item) && /стадия setup/.test(item)));
-    assert.ok(plan.warnings.some((item) => /Шаг b:/.test(item) && /chess-piece\.png/.test(item)));
+    assert.ok(plan.warnings.some((item) => /Шаг b:/.test(item) && /взята роль "artist"/.test(item)));
     assert.ok(plan.warnings.some((item) => /Шаг c:/.test(item) && /unknown-role/.test(item)));
 });
 
@@ -504,8 +506,9 @@ test('the stage of the plan says that a step of a dead role leaves the plan', as
         runId: 'run-1',
     });
 
-    // The step whose role cannot be guessed leaves the plan, and the report says why.
-    assert.deepEqual(result.plan.steps.map((step) => step.id), ['b']);
+    // Растр и вектор принадлежат художнику: оба шага уходят к нему, и прогон
+    // получает работу, а не пустоту.
+    assert.deepEqual(result.plan.steps.map((step) => step.id), ['a', 'b']);
     assert.match(result.warnings.join('\n'), /Шаг a:.*не исполняется ни одной стадией/s);
     // The step whose files belong to a role is given to that role.
     assert.equal(result.plan.steps[0].role, 'artist');
