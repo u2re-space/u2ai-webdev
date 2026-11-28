@@ -24,7 +24,7 @@ import { KIND_EFFORT } from '../agent/pace.js';
 export const STAGE_EFFORT = Object.freeze({
     scanner: 'medium',
     planner: 'high',
-    architect: 'high',
+    architect: 'xhigh',
     director: 'high',
     coder: 'high',
     builder: 'high',
@@ -165,7 +165,7 @@ export const defaults = {
         artist: [1],
         // The architect only answers: there is nothing for it to polish on the disk, so it
         // stays on the head of the ladder.
-        architect: [1],
+        architect: [0],
         // The editor writes the SVG and then answers for it: the whole session of the
         // editor is the work of the model of the house.
         editor: [1],
@@ -175,7 +175,7 @@ export const defaults = {
         // The illustrator puts the pictures on their places: хвост лестницы, младшая модель
         // семейства. Раскладка картинок и её проверка — это дешёвая работа, и старшая
         // модель на ней сгорает: рисует, смотрит, рисует снова.
-        illustrator: [0],
+        illustrator: [1],
       },
       /**
        * The ladders of the ranks of the stages.

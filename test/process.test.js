@@ -29,7 +29,7 @@ import {
     readProgress,
 } from '../src/agent/work-plan.js';
 import { STAGES, STAGE_NAMES, stageByName, stageOrder, enabledStages, stageDependencies, resumeStageName } from '../src/stages/index.js';
-import { runPipeline, resumePipeline, pipelineFiles } from '../src/pipeline.js';
+import { runPipeline, resumePipeline, pipelineFiles, NON_FATAL_STAGE_NAMES } from '../src/pipeline.js';
 import { createJobManager, jobId } from '../src/jobs/manager.js';
 
 const CONFIG = { output: { work: './.tmp' }, stages: {} };
@@ -241,6 +241,22 @@ test('a stage that waits for a stage that does not exist says so', () => {
     assert.ok(warnings.some((item) => /несуществующ/.test(item)), warnings.join(' | '));
     // The stage that waits for the missing one does not go first.
     assert.equal(stages[stages.length - 1].name, 'second');
+});
+
+test('the names of the non-fatal stages are the names of the live stages', () => {
+    // `NON_FATAL_STAGES` перечисляет стадии, что не останавливают прогон. Раньше там
+    // стояли мёртвые имена (`pictures`, `vector`, `assets`), а живой стадии `graphics` не
+    // было вовсе: провал графики ронял весь прогон.
+    const names = new Set(STAGE_NAMES);
+    for (const name of NON_FATAL_STAGE_NAMES) {
+        assert.ok(names.has(name), `стадия «${name}» не существует, а прогон считает её несмертельной`);
+    }
+    // The graphics are not the page: their failure does not stop the run.
+    assert.ok(NON_FATAL_STAGE_NAMES.has('graphics'), 'the graphics must not stop the run');
+    // The page itself does stop it.
+    for (const name of ['write', 'build', 'plan']) {
+        assert.equal(NON_FATAL_STAGE_NAMES.has(name), false, `${name} останавливает прогон`);
+    }
 });
 
 test('a stage that is switched off is not in the list', () => {
@@ -490,26 +506,26 @@ test('the pipeline records an operator stage skip without marking it completed',
     assert.equal(result.status, 'partial');
 });
 
-test('a failed vector stage does not claim completion and does not stop the run', async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-optional-vector-'));
+test('a failed graphics stage does not claim completion and does not stop the run', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-optional-graphics-'));
     const order = [];
     const stages = [
-        { name: 'coding', title: 'Code', dependsOn: [], run: async () => { order.push('coding'); return { ok: true }; } },
-        { name: 'vector', title: 'Vector', dependsOn: ['coding'], run: async () => { order.push('vector'); throw new Error('local SVG validation failed'); } },
-        { name: 'iconify', title: 'Icons', dependsOn: ['vector'], run: async () => { order.push('iconify'); return { ok: true }; } },
+        { name: 'write', title: 'Write', dependsOn: [], run: async () => { order.push('write'); return { ok: true }; } },
+        { name: 'graphics', title: 'Graphics', dependsOn: ['write'], run: async () => { order.push('graphics'); throw new Error('local SVG validation failed'); } },
+        { name: 'iconify', title: 'Icons', dependsOn: ['graphics'], run: async () => { order.push('iconify'); return { ok: true }; } },
     ];
     const result = await runPipeline({
         client: { responses: { async create() { return { output: [] }; } } },
         config: CONFIG,
         root,
         task: 'Make a landing.',
-        runId: 'run-optional-vector',
+        runId: 'run-optional-graphics',
         stages,
     });
     // Графика — не страница: провал стадии не отменяет страницу, прогон идёт дальше, а
     // ревью говорит, чего не хватает. Стадия не притворяется сделанной.
     assert.equal(result.status, 'partial');
-    assert.deepEqual(order, ['coding', 'vector', 'iconify']);
+    assert.deepEqual(order, ['write', 'graphics', 'iconify']);
     assert.equal(result.progress.stages[1].status, 'failed');
 });
 
@@ -777,10 +793,10 @@ test('the budget of a stage stops the work of the stage', async () => {
 test('a decorative stage that fails does not stop the run', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-decorative-'));
     const stages = [
-        // The vector graphics are not the page: the run goes on, and the files that landed
+        // The graphics are not the page: the run goes on, and the files that landed
         // on the disk stay.
-        { name: 'vector', title: 'Vector', dependsOn: [], run: () => new Promise(() => {}) },
-        { name: 'markup', title: 'Markup', dependsOn: ['vector'], run: async () => ({ ok: true }) },
+        { name: 'graphics', title: 'Graphics', dependsOn: [], run: () => new Promise(() => {}) },
+        { name: 'write', title: 'Write', dependsOn: ['graphics'], run: async () => ({ ok: true }) },
     ];
 
     const result = await runPipeline({
@@ -805,8 +821,8 @@ test('a decorative stage that answers with a failure does not stop the run eithe
     // Стадия вернулась сама (без исключения) и сказала, что не справилась: прогон
     // идёт дальше, файлы, что легли на диск, остаются.
     const stages = [
-        { name: 'assets', title: 'Assets', dependsOn: [], run: async () => ({ ok: false, warnings: ['картинка не поставлена'] }) },
-        { name: 'markup', title: 'Markup', dependsOn: ['assets'], run: async () => ({ ok: true }) },
+        { name: 'graphics', title: 'Graphics', dependsOn: [], run: async () => ({ ok: false, warnings: ['картинка не поставлена'] }) },
+        { name: 'write', title: 'Write', dependsOn: ['graphics'], run: async () => ({ ok: true }) },
     ];
 
     const result = await runPipeline({

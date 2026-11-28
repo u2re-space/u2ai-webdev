@@ -106,7 +106,7 @@ test('the effort of a role comes from the profile of the stages', () => {
     assert.equal(resolveRole('styler', config).effort, 'high');
     assert.equal(resolveRole('coder', config).effort, 'high');
     assert.equal(resolveRole('planner', config).effort, 'high');
-    assert.equal(resolveRole('architect', config).effort, 'high');
+    assert.equal(resolveRole('architect', config).effort, 'xhigh');
     assert.equal(resolveRole('installer', config).effort, 'high');
 
     // The markup is a Kimi job, and the Kimi has no levels above `medium`: the markup works on

@@ -112,6 +112,20 @@ is a mistake in the registry, and the run says so instead of quietly going on: t
 waits for it stands still, and the run does not pass it. A stage that the operator has
 **switched off** is a different thing: it is not in the run, and nothing waits for it.
 
+**A name of a stage is a reference to the registry.** When the stages are renamed, every
+list that names them goes with them — the dependencies, and the list of the stages that do
+not stop the run (`graphics`, `iconify`, `sight` and the tail of the run). A name that is
+not in the registry is not "a stage that is switched off": it is a typo, and it used to be
+read as a satisfied dependency, which put the build and the look at the page before the
+writing. The names of the non-fatal stages are checked against the registry by a test.
+
+**A stage that takes the steps of the plan adds its own steps.** The graphics take the
+steps of the artist from the plan and add the step of the **placement**: the cut-outs of
+the reference lie in the import directory and wait for the places the markup links. The
+plan does not know about that — it is the business of the stage — so the stage adds the
+step itself, and the artist puts every picture on its place. A stage that only takes the
+steps of the plan leaves the pictures where they were cut.
+
 The skeleton of the project is written by the code, not by the model: a project without a
 manifest gets `package.json`, the config of the bundler and the rules of the stack, with the
 stack of the architect. The versions of the tools of the stack are pinned there (`vite ^7.0.0`,

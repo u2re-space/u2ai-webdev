@@ -120,6 +120,25 @@ export function filesAllowed(config = {}) {
 }
 
 /**
+ * The stages that are not the page: their failure does not stop the run.
+ *
+ * Графика, иконки, взгляд на страницу и хвост прогона — не страница. Их провал не
+ * отменяет разметку, стили и код: файлы, что успели лечь на диск, остаются, а ревью
+ * говорит, чего не хватает.
+ *
+ * Имена здесь — **живые стадии реестра**. Раньше тут стояли `pictures`, `vector` и
+ * `assets`: их уже нет, а стадии `graphics` не было вовсе — и провал графики ронял
+ * весь прогон.
+ *
+ * @type {ReadonlySet<string>}
+ * @exports
+ */
+export const NON_FATAL_STAGE_NAMES = Object.freeze(new Set([
+    'graphics', 'iconify', 'sight',
+    'review', 'audit', 'learn',
+]));
+
+/**
  * The files of the stages are collected.
  *
  * The result of a stage names its files in three ways: the list of the written paths, the
@@ -435,10 +454,12 @@ export async function runPipeline({
     // the rest of the chain would work against a page that does not exist. The tail of the
     // run (the review, the audit, the lessons) is non-fatal as well: the project is written,
     // and a run without a verdict is partial, not lost.
-    const NON_FATAL_STAGES = new Set([
-        'pictures', 'vector', 'assets', 'iconify', 'sight',
-        'review', 'audit', 'learn',
-    ]);
+    //
+    // Имена здесь — **живые стадии реестра**. Раньше тут стояли `pictures`, `vector` и
+    // `assets`: их уже нет, а стадия `graphics` не стояла вовсе. Прогон, у которого
+    // графика не сложилась, падал целиком — а графика к странице не относится, и
+    // прогон должен идти дальше.
+    const NON_FATAL_STAGES = NON_FATAL_STAGE_NAMES;
 
     /**
      * Сколько шагов плана делает одна стадия.

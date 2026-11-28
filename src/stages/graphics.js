@@ -99,7 +99,16 @@ export async function graphicsStage({
     // Вторая половина: рисунки и раскладка. Роль `artist` делает и то, и другое.
     const vectors = await assetFiles(root, plan);
     const prepared = preparedVectorPlan(plan, pictures);
-    const work = { ...(prepared.plan ?? {}), steps: splitVectorSteps(prepared.plan)?.steps ?? [] };
+    // **Раскладка — тоже шаг художника.** Вырезки лежат в `assets/import/` и ждут, пока
+    // их положат на места, что ссылается разметка. Раньше шага раскладки не было вовсе:
+    // стадия брала у плана только шаги роли `artist`, а отдельная функция раскладки
+    // осталась мёртвым кодом. Картинки лежали в `import/` и никто их не клал — а стадия
+    // говорила «ассеты не перемещены».
+    const placement = placementStep(pictures, vectors, assetsDir);
+    const work = {
+        ...(prepared.plan ?? {}),
+        steps: [...(splitVectorSteps(prepared.plan)?.steps ?? []), ...(placement ? [placement] : [])],
+    };
 
     const result = await runStepStage({
         client,
@@ -205,6 +214,44 @@ function baseName(file) {
     const base = rel.slice(rel.lastIndexOf('/') + 1);
     const dot = base.lastIndexOf('.');
     return (dot > 0 ? base.slice(0, dot) : base).toLowerCase();
+}
+
+/**
+ * The step that puts the prepared pictures on their places.
+ *
+ * The cut-outs of the reference lie in the import directory and wait for their places —
+ * the paths the markup links. The artist is the one who knows both: it drew the vector and
+ * it cut the picture out. So the placement is its step, and the stage adds it when the
+ * plan does not name it.
+ *
+ * The step is empty when there is nothing to place: no prepared picture and no vector.
+ *
+ * @param {object[]} pictures the prepared pictures
+ * @param {string[]} vectors the vector files that are on the disk
+ * @param {string} assetsDir the directory of the assets of the project
+ * @returns {object|null} the step of the placement, or null
+ * @exports
+ * @ai.hint pure
+ */
+export function placementStep(pictures = [], vectors = [], assetsDir = 'assets') {
+    const list = Array.isArray(pictures) ? pictures : [];
+    const drawn = Array.isArray(vectors) ? vectors : [];
+    if (!list.length && !drawn.length) return null;
+    const dir = String(assetsDir ?? 'assets').replace(/\/+$/, '');
+    const files = list
+        .map((picture) => String(picture?.file ?? '').trim())
+        .filter(Boolean);
+    return {
+        id: 'assets',
+        title: 'Put the pictures of the project on their places',
+        role: 'artist',
+        files,
+        criteria: [
+            `Every prepared picture is on its place under the ${dir}/ directory, under the name the markup links.`,
+            'No picture is on the disk twice: the cut-out and the drawn vector are one object.',
+            'A picture that is a shape is a vector: vectorize it and change the markup to link the vector.',
+        ],
+    };
 }
 
 export { readAssets, vectorStage };
