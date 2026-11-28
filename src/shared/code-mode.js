@@ -54,6 +54,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createFrame, isFrame } from './protocol.js';
 import { createRamdiskFileSystem, createSharedByteCache, allocateMemory, RAMDISK_LIMITS } from '../access/ramdisk.js';
+import { createLibraryBridge } from './code-libraries.js';
 
 /**
  * The version of the contract of Code Mode.
@@ -67,6 +68,14 @@ export const CODE_MODE_VERSION = 1;
  * never runs the sandbox of another.
  */
 const CODE_MODE_ENTRY_NAME = 'ai-webdev-code-mode-worker.js';
+
+/**
+ * The way from the module of the sandbox to the root of the package.
+ *
+ * The module of the package that owns the code lives in `src/shared/`, so the root is two
+ * levels up. A package that keeps the module deeper says so here.
+ */
+const CODE_MODE_ENTRY_DEPTH = ['..', '..'];
 
 /**
  * The header of the shared block of the house.
@@ -128,8 +137,7 @@ export class CodeModeError extends Error {
 export function codeModeEntry(name = CODE_MODE_ENTRY_NAME) {
     return path.resolve(
         path.dirname(fileURLToPath(import.meta.url)),
-        '..',
-        '..',
+        ...CODE_MODE_ENTRY_DEPTH,
         'bin',
         name,
     );
@@ -185,6 +193,16 @@ export function createCodeModeSpec(raw = {}) {
         allowAllocate: source.allowAllocate !== false,
         // The stdin of the sandbox: the program reads it with `stdin.read()`.
         stdin: typeof source.stdin === 'string' ? source.stdin : '',
+        // The libraries the program may use: canvas, the wasm of ImageMagick, openvector.
+        // Null means all of them — the ones this package really has.
+        libraries: Array.isArray(source.libraries)
+            ? source.libraries.map((item) => String(item ?? '').trim()).filter(Boolean)
+            : null,
+        // The facilities of the host: the calls the house offers and the libraries do not.
+        // They travel as names, and the host holds the functions behind them.
+        facilities: Array.isArray(source.facilities)
+            ? source.facilities.map((item) => String(item ?? '').trim()).filter(Boolean)
+            : [],
     };
 }
 
@@ -320,6 +338,44 @@ const REALM_SCRIPT = `(function (host) {
         describe: (name) => byName.get(String(name ?? '')) ?? null,
     });
 
+    // The libraries of the house: canvas, the wasm of ImageMagick, openvector.
+    //
+    // The realm cannot load a module at all, so the program names a call and the host
+    // runs it. A native handle never leaves the host: it stays in a table there, and the
+    // program holds an opaque id for it. Nothing of the host crosses the border — only
+    // plain data, both ways.
+    const library = {
+        // The catalogue: the libraries that are here and the calls they offer.
+        catalog: async () => JSON.parse(await host.libraryCatalog()),
+        // One call: the library and its member, or the member of a handle.
+        //
+        // The answer of a call is the plain data of it. A native object — a canvas, a
+        // document — comes back as an id, and that id is the beginning of the path of the
+        // next call: the handle stays on the host side.
+        call: async (path, args) => {
+            const answer = JSON.parse(await host.libraryCall(
+                String(path ?? ''),
+                JSON.stringify(args ?? []),
+            ));
+            if (!answer || answer.ok !== true) {
+                const error = new Error(answer?.error ?? 'the call failed');
+                error.failed = true;
+                throw error;
+            }
+            // The answer of a library is the value of the call. The answer of a facility
+            // is data, and the worker has already read it back from the JSON.
+            return answer.value ?? null;
+        },
+        // The bytes of an answer: the answer carries them as base64.
+        bytes: (b64) => fromBase64(String(b64 ?? '')),
+        base64: (bytes) => toBase64(Uint8Array.from(bytes ?? [])),
+        text: (b64) => String.fromCharCode.apply(null, Array.from(fromBase64(String(b64 ?? '')))),
+        // The bytes of an argument: a native module wants a Buffer, and the realm has
+        // none — so the bytes travel as base64 and the host makes the Buffer.
+        buffer: (bytes) => ({ bytes: toBase64(Uint8Array.from(bytes ?? [])) }),
+    };
+    globalThis.library = Object.freeze(library);
+
     // A block of memory: the pages are taken when the bytes are written, not before.
     // The block is made inside the realm, so it is a realm object and not a door back to
     // the host.
@@ -436,6 +492,9 @@ export async function runCodeMode({
     timeoutMs = CODE_MODE_LIMITS.timeoutMs,
     outputBytes = CODE_MODE_LIMITS.outputBytes,
     stdin = '',
+    libraryNames = null,
+    onFacility = null,
+    facilityNames = null,
     onCall = null,
     onLog = null,
     onError = null,
@@ -459,6 +518,18 @@ export async function runCodeMode({
     const cache = createSharedByteCache({
         capacityBytes: cacheBytes,
         shared: shared instanceof SharedArrayBuffer ? shared : null,
+    });
+    // The bridge to the libraries of the house. It lives on this side of the border, and
+    // it keeps the native handles there: the program holds opaque ids, not objects.
+    const bridge = createLibraryBridge({
+        libraries: libraryNames,
+        facilities: facilityNames,
+        onFacility: async (path, args) => {
+            if (typeof onFacility !== 'function') {
+                throw new Error(`There is no facility named ${path}.`);
+            }
+            return await onFacility(path, args);
+        },
     });
 
     /** @type {Array<{ name: string, arguments: object }>} */
@@ -588,6 +659,10 @@ export async function runCodeMode({
         },
         sharedRelease: async () => { cache.release(); },
         sharedAvailable: async (count) => String(cache.available(count)),
+        // The libraries of the house: the catalogue and the calls. The bridge keeps the
+        // native handles on this side of the border.
+        libraryCatalog: async () => JSON.stringify(await bridge.catalog()),
+        libraryCall: async (path, argsJson) => bridge.call(path, argsJson),
     };
 
     // The realm of the sandbox: it has no `process`, no `require`, no `Buffer` and no
@@ -719,6 +794,40 @@ export async function codeModeMain({ data = null, port = null } = {}) {
         channel.postMessage(createFrame('log', { line, stream: 'stderr' }));
     };
 
+    /**
+     * The call of a facility of the host: it travels to the parent, the same way a tool
+     * call does, and the parent runs it.
+     *
+     * The facility cannot be run here: the worker is a thread of its own, and the function
+     * behind the facility lives in the parent — the client of the pictures is there.
+     *
+     * @param {string} path the path of the call
+     * @param {object} args the arguments of the call
+     * @returns {Promise<unknown>}
+     */
+    const askFacility = async (path, args) => {
+        counter += 1;
+        const id = `c-${counter}`;
+        const answer = new Promise((resolve) => pending.set(id, resolve));
+        channel.postMessage(createFrame('call', {
+            id,
+            name: path,
+            arguments: args ?? {},
+            facility: true,
+        }));
+        const envelope = await answer;
+        if (envelope?.error) throw new Error(String(envelope.error));
+        // The answer of the parent travels as JSON: it is read back here, so the bridge
+        // gets the data of the answer and not the text of it.
+        const raw = envelope?.value ?? null;
+        if (typeof raw !== 'string') return raw;
+        try {
+            return JSON.parse(raw);
+        } catch {
+            return raw;
+        }
+    };
+
     let report;
     try {
         report = await runCodeMode({
@@ -731,6 +840,11 @@ export async function codeModeMain({ data = null, port = null } = {}) {
             timeoutMs: spec.timeoutMs,
             outputBytes: spec.outputBytes,
             stdin: spec.stdin,
+            libraryNames: spec.libraries,
+            facilityNames: spec.facilities,
+            // The facility of the host: the function behind it lives in the parent, so the
+            // call travels back there over the frame protocol.
+            onFacility: askFacility,
             onCall,
             onLog,
             onError,
@@ -799,8 +913,9 @@ export function startCodeModeWorker({ spec = null, env = null, cwd = null, entry
  * A program that does not finish in its time is stopped: the worker is terminated, and the
  * run ends with the reason `timeout`.
  *
- * @param {{ spec?: object, onCall?: Function|null, onEvent?: Function|null,
- *   signal?: AbortSignal|null, entry?: string, env?: object, cwd?: string }} request
+ * @param {{ spec?: object, onCall?: Function|null, onFacility?: Function|null,
+ *   onEvent?: Function|null, signal?: AbortSignal|null, entry?: string, env?: object,
+ *   cwd?: string }} request
  * @returns {Promise<{ ok: boolean, value: unknown, output: string, error: string|null,
  *   reason: string, calls: Array<{ name: string, arguments: object }> }>}
  * @exports
@@ -809,6 +924,7 @@ export function startCodeModeWorker({ spec = null, env = null, cwd = null, entry
 export async function runCodeModeWorker({
     spec: rawSpec = null,
     onCall = null,
+    onFacility = null,
     onEvent = null,
     signal = null,
     entry = null,
@@ -870,14 +986,21 @@ export async function runCodeModeWorker({
         worker.on('message', async (frame) => {
             if (!isFrame(frame)) return;
             if (frame.type === 'call') {
-                // The call of a tool of the program: the parent runs it.
+                // The call of a tool of the program, or of a facility of the host: the
+                // parent runs it either way.
                 let output = '';
                 let failure = null;
                 try {
-                    output = String(await onCall?.({
-                        name: String(frame.name ?? ''),
-                        arguments: frame.arguments ?? {},
-                    }) ?? '');
+                    const name = String(frame.name ?? '');
+                    const args = frame.arguments ?? {};
+                    const answer = frame.facility === true
+                        ? await onFacility?.(name, args)
+                        : await onCall?.({ name, arguments: args });
+                    // The answer of a tool is the text of the tool: the realm reads it as
+                    // it is. The answer of a facility is data, and it travels as JSON.
+                    output = frame.facility === true
+                        ? JSON.stringify(answer ?? null)
+                        : String(answer ?? '');
                 } catch (error) {
                     // A tool that failed is a failure of the call: the program catches it.
                     failure = error?.message ?? String(error);

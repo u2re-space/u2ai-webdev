@@ -61,10 +61,14 @@ export function codeModeToolSpec() {
             + 'await, and it may return the answer of the step. Inside it: `await tools.<name>(args)` '
             + 'calls a tool; `catalogue.names` lists the tools you may call; `fs` is a file system '
             + 'in the memory; `shared` is the shared block of the run; `allocate(bytes)` gives a '
-            + 'block of memory; `console.log` writes to the output of the run. The program runs '
-            + 'sandboxed: a loop that never ends is stopped, and a mistake is an error, not a crash '
-            + 'of the run. This tool writes: it is behind the write gate, and it earns the budget of '
-            + 'the write.',
+            + 'block of memory; `console.log` writes to the output of the run. The libraries of the '
+            + 'house are there too: `await library.catalog()` names them, and '
+            + '`await library.call("canvas.createCanvas", [800, 600])` calls them — the sandbox '
+            + 'has no import, so a library is reached by its name and its member. A native object '
+            + 'comes back as an id, and the id is the beginning of the path of the next call. The '
+            + 'program runs sandboxed: a loop that never ends is stopped, and a mistake is an '
+            + 'error, not a crash of the run. This tool writes: it is behind the write gate, and '
+            + 'it earns the budget of the write.',
         parameters: {
             type: 'object',
             properties: {
@@ -122,6 +126,26 @@ export function codeModeInstruction(names = []) {
         '- `shared` — the shared block of the run: `shared.view` is a byte view of it.',
         '- `allocate(bytes)` — a block of memory; the pages are taken when the bytes are written.',
         '- `console.log` — the output of the program, which comes back to you with the answer.',
+        '',
+        'The libraries of the house are there as well. The sandbox has no `import`, so a library is',
+        'reached by its name and its member:',
+        '',
+        '```js',
+        'const catalog = await library.catalog();   // what is installed here',
+        'const surface = await library.call("canvas.createCanvas", [800, 600]);',
+        'const ctx = await library.call(surface + ".getContext", ["2d"]);',
+        'await library.call(ctx + ".fillRect", [0, 0, 800, 600]);',
+        'const png = await library.call(surface + ".toDataURL", ["image/png"]);',
+        '```',
+        '',
+        '- `library.catalog()` — the libraries that are installed, and the calls each of them offers.',
+        '- `library.call(path, args)` — one call. The path is the library and its member, or the id of',
+        '  a handle and its member.',
+        '- `library.buffer(bytes)` — the bytes of an argument, when a library wants a binary one.',
+        '- `library.base64(bytes)` / `library.bytes(text)` / `library.text(bytes)` — the bytes.',
+        '',
+        'A native object — a canvas, a document — comes back as an id, and the id is the beginning of',
+        'the path of the next call. A call that fails throws, and the program may catch it.',
         '',
         'The program is sandboxed: it has no `process`, no `require` and no network, a loop that never',
         'ends is stopped, and a mistake is an error you can read. It writes through your tools, so it',
@@ -181,6 +205,7 @@ export function createCodeModeRunner({
     onEvent = null,
     signal = null,
     shared = null,
+    facilities = null,
 } = {}) {
     /**
      * The catalogue of the tools the program may call.
@@ -216,18 +241,33 @@ export function createCodeModeRunner({
         if (!code.trim()) {
             return 'The program is empty: write the code of the program, or call the tools directly.';
         }
+        // The facilities of the host: the calls the house offers and the libraries do not —
+        // the API of the pictures, for one. The functions behind them live in the parent,
+        // so the call travels back there over the frame protocol.
+        const facilityMap = facilities && typeof facilities === 'object' ? facilities : null;
+        const facilityNames = facilityMap
+            ? Object.keys(facilityMap).map((item) => String(item).trim()).filter(Boolean)
+            : [];
         const report = await runCodeModeWorker({
             spec: createCodeModeSpec({
                 code,
                 tools: catalogue(),
                 timeoutMs: wanted,
                 shared: shared ?? null,
+                facilities: facilityNames,
             }),
             onCall: async (call) => {
                 if (typeof execute !== 'function') {
                     throw new Error('This run has no executor for the tools.');
                 }
                 return await execute(call.name, call.arguments ?? {});
+            },
+            onFacility: async (path, args) => {
+                const facility = facilityMap?.[path];
+                if (typeof facility !== 'function') {
+                    throw new Error(`There is no facility named ${path}.`);
+                }
+                return await facility(args ?? {});
             },
             onEvent,
             signal,

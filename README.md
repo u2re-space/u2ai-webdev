@@ -2353,6 +2353,40 @@ The sandbox is a **guardrail, not a security boundary**. It keeps a careless pro
 the machine, and it keeps a runaway program from taking the parent with it. It is not a jail
 against a program that means harm.
 
+### The libraries inside the sandbox
+
+The realm of `node:vm` cannot load a module at all — `import()` there throws «A dynamic import
+callback was not specified». So the libraries live in the worker thread (the host of the sandbox)
+and the program reaches them through **named calls**:
+
+```js
+const catalog = await library.catalog();   // what is installed here
+const surface = await library.call('canvas.createCanvas', [800, 600]);
+const ctx = await library.call(surface + '.getContext', ['2d']);
+await library.call(ctx + '.fillRect', [0, 0, 800, 600]);
+const png = await library.call(surface + '.toDataURL', ['image/png']);
+```
+
+The whole API of every library is reachable. The house knows three of them, and a package
+loads only the ones it really has:
+
+| Library | What it is for |
+|---|---|
+| `canvas` | Drawing surfaces: shapes, text, paths, and the PNG or the SVG out of them. |
+| `magick` | The wasm of ImageMagick: convert, resize, crop, trim, compare — where no program is installed. |
+| `openvector` | The tracer: a raster becomes an editable vector. |
+
+**The border carries data both ways and nothing else.** A native object — a canvas, a document,
+a session — never leaves the host: it stays in a table there, and the program holds an opaque id
+for it, and that id is the beginning of the path of the next call. The bytes travel as base64.
+
+That rule is the whole security story. A host object inside the realm is an escape hatch —
+`hostObj.constructor.constructor('return process')()` walks straight out — while a realm
+function handed to the host is harmless. The border therefore carries data both ways, and the
+sandbox stays a sandbox.
+
+A call that fails throws into the program, and the program may catch it and go on.
+
 ## The access layer
 
 `src/access` is the door between the model and the machine: the files and the commands under one

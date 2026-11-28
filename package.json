@@ -10,6 +10,7 @@
     "./protocol": "./src/shared/protocol.js",
     "./worker": "./src/shared/worker.js",
     "./code-mode": "./src/shared/code-mode.js",
+    "./code-libraries": "./src/shared/code-libraries.js",
     "./ramdisk": "./src/access/ramdisk.js"
   },
   "bin": {
@@ -35,7 +36,8 @@
   "scripts": {
     "start": "node bin/ai-webdev.js",
     "test": "node --test --test-timeout=60000 --import ./test/offline-guard.js \"test/*.test.js\"",
-    "check": "node scripts/check-syntax.mjs"
+    "check": "node scripts/check-syntax.mjs",
+    "sync:code-mode": "node scripts/sync-code-mode.mjs"
   },
   "files": [
     "bin",
