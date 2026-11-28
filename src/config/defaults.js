@@ -124,9 +124,23 @@ export const defaults = {
    */
   house: {
     models: {
+      // **Роли, что пишут, отвечают старшей моделью семейства.**
+      //
+      // Здесь стояли мёртвые роли `editor` и `illustrator` (стадии графики слились в роль
+      // `artist` 25 ноября), а живые роли письма — `builder`, `markup`, `coder` — не
+      // стояли вовсе. Роль, которой нет в этой карте, отвечает на модель прогона, а та —
+      // на **первую** модель семейства, то есть на младшую (`gpt-6.1-terra`).
+      //
+      // Старшая модель (`gpt-6.2-sol`) приходила только в те роли, у которых была
+      // лестница рангов, — и то не всегда. Теперь роль, что пишет, получает голову
+      // семейства явно: `family:gpt` + ранг `[1]` — это Sol.
+      //
       // The styles are the work of the best model of the family: the Sol writes them, the
       // Terra polishes them afterwards.
       styler: 'family:gpt',
+      // The role that writes everything: the markup, the styles, the scripts and the
+      // motion. It is the one role of the writing, and it is the head of the family.
+      builder: 'family:gpt',
       // The architecture decides the files, the modules and the order of the whole project.
       // The structure is the most expensive thing to change later, so the architect answers
       // with the head of the family too — the Sol, and not the model of the run.
@@ -134,15 +148,16 @@ export const defaults = {
       // The vector graphics are drawn as text: the geometry of an isometric drawing and the
       // letters of a wordmark are the work of the best model of the family. A cheaper model
       // draws a floppy disk well and a wordmark with letters that do not spell anything.
-      editor: 'family:gpt',
+      artist: 'family:gpt',
       // The motion is the work of the head of the family too: a wrong easing or a wrong
       // property costs more than the seconds of the thinking that prevented it.
       animator: 'family:gpt',
-      // The assets are the work of the tail of the family: the place of a picture and its
-      // format — это решения, которые легко переиграть, и они обходятся дорого. Младшая
-      // модель (Terra) кладёт картинку на место и проверяет её один раз; старшая тратит
-      // минуты на то, что дешевле сделать дешевле.
-      illustrator: 'family:gpt',
+      // The markup is the structure of the page: the semantics, the landmarks and the
+      // accessibility. It is the work of the head of the family too — разметка, которую
+      // переделать дорого.
+      markup: 'family:gpt',
+      // The scripts are the behaviour of the page: the state, the navigation, the data.
+      coder: 'family:gpt',
     },
     /**
      * The ladders of the ranks of the models of the house in their families.
@@ -164,18 +179,19 @@ export const defaults = {
         builder: [1, 0],
         artist: [1],
         // The architect only answers: there is nothing for it to polish on the disk, so it
-        // stays on the head of the ladder.
-        architect: [0],
-        // The editor writes the SVG and then answers for it: the whole session of the
-        // editor is the work of the model of the house.
-        editor: [1],
+        // stays on the head of the ladder. Голова — это `gpt-6.2-sol`.
+        architect: [1],
         // The animator writes the motion and then answers for it: the whole session of the
         // animator is the work of the model of the house.
         animator: [1],
-        // The illustrator puts the pictures on their places: хвост лестницы, младшая модель
-        // семейства. Раскладка картинок и её проверка — это дешёвая работа, и старшая
-        // модель на ней сгорает: рисует, смотрит, рисует снова.
-        illustrator: [1],
+        // The markup and the scripts write their files and then answer for them: the whole
+        // session of the role is the work of the model of the house. Без лестницы эти
+        // роли отвечали на модель прогона, а та — на младшую модель семейства.
+        markup: [1],
+        coder: [1],
+        // The iconifier picks the icons and checks them: the place of an icon is a cheap
+        // decision, and the tail of the ladder is enough for it.
+        iconifier: [0],
       },
       /**
        * The ladders of the ranks of the stages.

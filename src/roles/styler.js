@@ -51,6 +51,18 @@ export const maxTurns = 16;
 export const STYLE_RULES = [CORE, CSS, `#### The tokens, the page and the states
 - Every new custom property token gets an \`@property\` at the top of the file, before the
   \`:root\` rules: its type, its initial value and its inheritance are declared there.
+- **The tokens of the project are named in \`DESIGN.md\`, and their names are the contract.**
+  Use the name the file gives, letter for letter: \`--color-near_black_charcoal\`,
+  \`--rail-width\`, \`--space-8\`. Do not shorten them, do not rename them to something
+  clearer, do not translate them, and do not invent a second name for the same colour.
+  A token named \`--color-bg\` when the file says \`--color-near_black_charcoal\` is a
+  different token, and the page that uses one and not the other loses its colour.
+  **A colour that the file names has exactly one name and one value.** If the design needs
+  a shade the file does not have, it comes from \`color-mix(in oklch, ...)\` of the tokens
+  that are — not from a second hex you remembered.
+- Read the tokens of the project before you name yours: \`DESIGN.md\` and
+  \`measurements/tokens.css\` hold the measured names and values, and the file the markup
+  uses is the truth about which of them the project has.
 - The page has one scrollbar: the document scrolls, the body does not. Never put
   \`overflow-y: auto;\` (or \`overflow: auto;\`) on the \`body\` while the document scrolls — a
   scroller inside a scroller gives the page two scrollbars, and a \`body\` with a fixed

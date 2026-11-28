@@ -1180,7 +1180,18 @@ export async function runStepStage({
         ? Math.round(stageBudget / Math.max(steps.length, 1))
         : 0;
     // Ход — часть бюджета шага. Минимум — минута: меньше ход не стоит.
-    const turnTimeoutMs = turnLimit ?? (stepBudget > 0 ? Math.max(60_000, Math.round(stepBudget / 8)) : null);
+    //
+    // **Минимум — не минута, а десять минут.** Таймаут хода — это тишина сокета: модель
+    // думает и молчит, и молчание считается зависанием. Старшая модель семейства
+    // (`gpt-6.2-sol`) думает над таблицей стилей минутами, не выдав ни байта, — и ход
+    // умирал на середине: файл не был дописан, шаг падал, и прогон терял работу.
+    //
+    // Тишина — это не зависание: зависание — это молчание при работающем прогоне. Хост,
+    // который думает, отвечает потоком, и поток идёт: пока идут байты, таймаут молчит.
+    const MIN_TURN_TIMEOUT_MS = 600_000;
+    const turnTimeoutMs = turnLimit ?? (stepBudget > 0
+        ? Math.max(MIN_TURN_TIMEOUT_MS, Math.round(stepBudget / 8))
+        : null);
 
     if (!steps.length) {
         // The plan is the work: a stage whose role has no step has nothing to do. It is

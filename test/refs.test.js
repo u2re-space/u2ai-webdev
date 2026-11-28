@@ -89,7 +89,8 @@ test('a role may be pinned to a family of models', () => {
 test('the house may name a family of models for a role', () => {
     const config = configFor({ model: 'google/gemini-4-hydrogen' });
     config.house.models.markup = 'family:gpt';
-    assert.equal(resolveRole('markup', config).model, 'openai/gpt-6.1-terra');
+    // The rank of the markup is [1] — the head of the family.
+    assert.equal(resolveRole('markup', config).model, 'openai/gpt-6.2-sol');
 });
 
 test('a reference names a group only with the prefix', () => {

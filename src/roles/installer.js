@@ -69,6 +69,15 @@ ${FAMILY_CLI_NOTE}
   bundler decide what the project already has.
 - Add the dependency that the plan needs and nothing else. A library that the plan does not
   name is not added.
+- **Say where every package goes.** A package that only the project needs to build or
+  test — the bundler, the compiler of the styles, the test runner, the linter, the types —
+  is a **development** dependency (\`dev: true\`), and it goes into \`devDependencies\`.
+  A package that the code of the project imports at runtime — a library, a framework, a
+  runtime helper — is a **runtime** dependency (\`dev: false\`), and it goes into
+  \`dependencies\`. The bundler and the compiler of the styles are the two that are always
+  development: \`vite\`, \`sass\`, \`typescript\`, \`vitest\`, \`eslint\` — никогда не
+  \`dependencies\`. Пакет, что помечен как development, но стоит в \`dependencies\`, — это
+  ошибка: прогон ставит его и туда, и туда.
 - The versions are pinned the way the project pins them: exact for a runtime dependency, a
   caret for a development one — follow the file, not your habit.
 - The scripts are named the way the project names them (\`dev\`, \`build\`, \`preview\`,

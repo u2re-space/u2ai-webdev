@@ -177,9 +177,11 @@ test('the panel of the operator follows the model that works', async () => {
 test('the model of the run is the head of its family, the roles keep their own ladder', () => {
     const config = configFor();
     // The run answers with the head of the family of the run...
-    assert.equal(resolveRole('coder', config).model, 'openai/gpt-6.1-terra');
-    // ...and the styler answers with the head of its own ladder.
+    assert.equal(resolveRole('reviewer', config).model, 'openai/gpt-6.1-terra');
+    // ...and the roles that write answer with the head of their own ladder.
     assert.equal(resolveRole('styler', config).model, 'openai/gpt-6.2-sol');
+    assert.equal(resolveRole('builder', config).model, 'openai/gpt-6.2-sol');
+    assert.equal(resolveRole('coder', config).model, 'openai/gpt-6.2-sol');
 });
 
 test('a sub-agent answers with the model of the role it inherits', async () => {

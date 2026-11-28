@@ -20,39 +20,53 @@ const configFor = (overrides = {}) => ({
 });
 
 test('the house has a model of its own for the roles that need one', () => {
+    // Роли, что пишут, отвечают старшей моделью семейства. Раньше здесь стояли мёртвые
+    // роли `editor` и `illustrator`, а живых `builder`, `markup`, `coder` не было — и эти
+    // роли отвечали на модель прогона, то есть на младшую (`gpt-6.1-terra`).
     assert.deepEqual(HOUSE_MODELS, {
         styler: 'family:gpt',
+        builder: 'family:gpt',
         architect: 'family:gpt',
-        editor: 'family:gpt',
+        artist: 'family:gpt',
         animator: 'family:gpt',
-        illustrator: 'family:gpt',
+        markup: 'family:gpt',
+        coder: 'family:gpt',
     });
     // The path of the styler is [1, 0]: the Sol writes the styles.
     assert.equal(houseModel('styler', configFor()), 'openai/gpt-6.2-sol');
     assert.equal(houseModel('nothing'), null);
 });
 
-test('the editor draws the vector graphics with the best model of the family', () => {
+test('the artist draws the vector graphics with the best model of the family', () => {
     // The graphics are geometry and letters: a cheap model draws a wordmark with letters
     // that do not spell anything.
     for (const model of ['minimax/minimax-m3.1-flash', 'google/gemini-4-hydrogen', 'moonshotai/kimi-k3.1-pro']) {
         const config = configFor({ model });
-        assert.equal(resolveRole('editor', config).model, 'openai/gpt-6.2-sol');
+        assert.equal(resolveRole('artist', config).model, 'openai/gpt-6.2-sol');
     }
     // The pin of the role still wins over the model of the house.
-    const pinned = configFor({ roles: { editor: { model: 'google/gemini-4-hydrogen' } } });
-    assert.equal(resolveRole('editor', pinned).model, 'google/gemini-4-hydrogen');
+    const pinned = configFor({ roles: { artist: { model: 'google/gemini-4-hydrogen' } } });
+    assert.equal(resolveRole('artist', pinned).model, 'google/gemini-4-hydrogen');
 });
 
 test('the architect answers with the best model of the family, not with the model of the run', () => {
     // The structure of the project is the most expensive thing to change later.
     for (const model of ['minimax/minimax-m3.1-flash', 'google/gemini-4-hydrogen', 'moonshotai/kimi-k3.1-pro']) {
         const config = configFor({ model });
-        assert.equal(resolveRole('architect', config).model, 'openai/gpt-6.1-terra');
+        assert.equal(resolveRole('architect', config).model, 'openai/gpt-6.2-sol');
     }
     // The pin of the role still wins over the model of the house.
     const pinned = configFor({ roles: { architect: { model: 'google/gemini-4-hydrogen' } } });
     assert.equal(resolveRole('architect', pinned).model, 'google/gemini-4-hydrogen');
+});
+
+test('every role that writes gets the head of its family', () => {
+    // Роль, что пишет файлы, получает старшую модель: иначе она пишет на младшей, и
+    // работа выходит такой, какой её пишет хвост лестницы.
+    for (const role of ['builder', 'styler', 'markup', 'coder', 'animator', 'artist']) {
+        const config = configFor({ model: 'minimax/minimax-m3.1-flash' });
+        assert.equal(resolveRole(role, config).model, 'openai/gpt-6.2-sol', role);
+    }
 });
 
 test('the roles of the run follow the model of the run', () => {

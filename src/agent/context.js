@@ -141,6 +141,19 @@ function emptyState(id) {
  *
  * Пути картинок — главное здесь: модель, которой сказали, где картинка, не идёт искать её
  * в рабочем каталоге прогона.
+ *
+ * **Сводка не должна быть мусором.** Раньше она съедалась двумя вещами:
+ *
+ * - сводками стадий целиком: сводка `collect` — это весь текст задачи, а он и так есть в
+ *   промпте роли; сводка `scan` — это пересказ проекта. Две сводки занимали половину
+ *   бюджета, и до токенов цвета дело не доходило;
+ * - фактами прочитанного: `read:index.html` и прочие — это сырой JSON учёта чтений, а
+ *   роль о нём знать нечего.
+ *
+ * Теперь сводка каждой стадии — короткая строка, факты о прочитанном не идут вовсе, а
+ * обрезка идёт по границе слова: сводка, что кончилась посреди предложения, хуже, чем
+ * сводки нет.
+ *
  * @param {object} state
  * @param {{ maxChars?: number }} [options]
  * @returns {string}
@@ -162,13 +175,17 @@ export function buildBrief(state, { maxChars = MAX_BRIEF } = {}) {
         lines.push('', 'The stages of this run:');
         for (const stage of stages) {
             const status = stage?.status === 'failed' ? 'failed' : 'done';
-            const summary = stage?.summary ? ` — ${stage.summary}` : '';
+            // Сводка стадии — одна строка: что сделано, а не пересказ её ответа.
+            const summary = stage?.summary ? ` — ${firstLines(stage.summary, 2)}` : '';
             lines.push(`- ${stage?.id ?? 'stage'}: ${status}${summary}`);
         }
     }
     const facts = state?.facts ?? {};
     for (const [key, value] of Object.entries(facts)) {
         if (key === 'notes') continue;
+        // Факты прочитанное — это учёт чтений, а не знание о проекте: роль о них не
+        // спрашивает, а места в сводке они занимают много.
+        if (key.startsWith('read:')) continue;
         const text = typeof value === 'string' ? value : JSON.stringify(value);
         if (!text) continue;
         lines.push('', `## ${key}`, text);
@@ -180,7 +197,29 @@ export function buildBrief(state, { maxChars = MAX_BRIEF } = {}) {
     }
     const text = lines.join('\n');
     if (text.length <= maxChars) return text;
-    return `${text.slice(0, maxChars)}\n… (the context is longer: ${text.length} chars)`;
+    // Обрезка по границе слова: сводка, что кончилась посреди предложения, читается как
+    // поломка, а не как обрезка.
+    const cut = text.slice(0, maxChars);
+    const at = cut.lastIndexOf('\n');
+    const whole = at > maxChars * 0.6 ? cut.slice(0, at) : cut;
+    return `${whole}\n… (the context is longer: ${text.length} chars)`;
+}
+
+/**
+ * The first lines of a text.
+ *
+ * @param {string} text the text
+ * @param {number} count how many lines
+ * @returns {string}
+ * @exports
+ * @ai.hint pure
+ */
+export function firstLines(text, count = 2) {
+    const body = String(text ?? '').trim();
+    if (!body) return '';
+    const lines = body.split('\n').filter((line) => line.trim());
+    if (lines.length <= count) return lines.join(' ');
+    return `${lines.slice(0, count).join(' ')}…`;
 }
 
 /**
