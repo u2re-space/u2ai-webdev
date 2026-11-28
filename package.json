@@ -37,7 +37,8 @@
     "start": "node bin/ai-webdev.js",
     "test": "node --test --test-timeout=60000 --import ./test/offline-guard.js \"test/*.test.js\"",
     "check": "node scripts/check-syntax.mjs",
-    "sync:code-mode": "node scripts/sync-code-mode.mjs"
+    "sync:code-mode": "node scripts/sync-code-mode.mjs",
+    "sync:access": "node scripts/sync-access.mjs"
   },
   "files": [
     "bin",

@@ -23,6 +23,57 @@ import { toolSpecs } from '../src/agent/tool-specs.js';
 import { createToolset } from '../src/agent/tools.js';
 import { createClient } from '../src/openai/client.js';
 import { defaults } from '../src/config.js';
+import { getModelProfile, maxOutputFor, writeBudgetFor } from '../src/model/profiles.js';
+import { codeModeBudgetFor, codeModeInstruction } from '../src/agent/code-mode.js';
+import { accessFacilityDescriptions } from '../src/access/facility.js';
+
+/**
+ * The quarter of the cap of the model that answers the role.
+ *
+ * The inspection turn takes a quarter of the cap of the model. The number is not a
+ * constant: the role answers with the head of its family, и потолок модели меняется.
+ *
+ * @param {object} config the configuration of the run
+ * @param {string} role the role that answers
+ * @returns {number}
+ */
+function quarterCap(config, role) {
+    const model = resolveRole(role, config).model;
+    const cap = maxOutputFor(model, config);
+    return Math.max(4, Math.floor(cap / 8));
+}
+
+/**
+ * The full cap of the model that answers the role.
+ *
+ * @param {object} config the configuration of the run
+ * @param {string} role the role that answers
+ * @returns {number}
+ */
+function fullCap(config, role) {
+    const model = resolveRole(role, config).model;
+    return maxOutputFor(model, config);
+}
+
+/**
+ * The budget of a turn that carries a program of Code Mode.
+ *
+ * The budget of the estimate times the factor of the config, and the ceiling of the
+ * config holds it back.
+ *
+ * @param {object} config the configuration of the run
+ * @param {string} role the role that answers
+ * @param {number|null} [estimate] the estimate the model gave at the gate
+ * @returns {number}
+ */
+function codeModeCap(config, role, estimate = null) {
+    const model = resolveRole(role, config).model;
+    const budget = writeBudgetFor(model, config, null, estimate);
+    return codeModeBudgetFor(budget, true, {
+        factor: config?.limits?.codeModeBudgetFactor ?? 2,
+        ceiling: config?.limits?.codeModeMaxOutputTokens ?? 65_536,
+    });
+}
 import { mockApi, toolAnswer, schemaAnswer, textAnswer, codeData } from './helpers/role-api.js';
 
 test('every built-in role is in the registry', () => {
@@ -359,7 +410,7 @@ test('a project with a bundler gets the styles by the import, and nobody links t
     assert.match(reviewer, /Do not ask for a link to the stylesheet/);
 });
 
-test('a bundler project of plain html links the source stylesheet in the head', () => {
+test('a bundler project of plain html takes the styles from the import of the script', () => {
     const styles = {
         source: 'src/styles.scss',
         link: 'src/styles.css',
@@ -374,17 +425,45 @@ test('a bundler project of plain html links the source stylesheet in the head', 
     const coder = ROLES.coder.instructions({ styles });
     const reviewer = ROLES.reviewer.instructions({ styles });
 
-    // The markup links the source itself: the bundler compiles it from the link, and the
-    // styles load even without JavaScript.
-    assert.match(markup, /<link rel="stylesheet" href="src\/styles\.scss">/);
-    assert.match(markup, /the styles load even without JavaScript/);
-    assert.doesNotMatch(markup, /does not link a stylesheet/);
-    // The code does not import the stylesheet: the link already brings the styles.
-    assert.match(coder, /does not import the stylesheet/);
-    assert.match(coder, /load them twice/);
-    // The reviewer does not demand the import: the link is the way of this project.
-    assert.match(reviewer, /links the stylesheet `src\/styles\.scss`/);
-    assert.match(reviewer, /Do not ask for the import of the stylesheet/);
+    // **The markup does not link the stylesheet.** The bundler compiles a stylesheet only
+    // where something imports it: a link to the source is dropped from the build without a
+    // word, the build passes, and the page has no styles at all.
+    assert.match(markup, /The head of the page has no/);
+    assert.match(markup, /the browser cannot read/);
+    assert.doesNotMatch(markup, /the styles load even without JavaScript/);
+    // The code imports the stylesheet: that import is the one way to the styles.
+    assert.match(coder, /imports it/);
+    assert.match(coder, /import '\.\/styles\.scss';/);
+    assert.match(coder, /the only way to the styles/);
+    // The reviewer does not demand the link that would break the page.
+    assert.match(reviewer, /does not link a stylesheet/);
+    assert.match(reviewer, /Do not ask for a link to the stylesheet/);
+});
+
+test('the builder carries the contract of the styles too', () => {
+    // Роль `builder` пишет и разметку, и скрипт — и контракт подключения должен быть
+    // у неё: без него разметка линкует исходник sass, а скрипт его не импортирует,
+    // и страница остаётся без стилей при успешной сборке.
+    const styles = {
+        source: 'src/styles.scss',
+        link: 'src/styles.css',
+        language: 'scss',
+        from: 'plan',
+        script: 'src/main.js',
+        import: './styles.scss',
+        wiring: 'bundled',
+        markup: 'html',
+    };
+    const script = ROLES.builder.instructions({ styles, step: { files: ['src/main.js'] } });
+    assert.match(script, /imports it/);
+    assert.match(script, /import '\.\/styles\.scss';/);
+
+    const markup = ROLES.builder.instructions({ styles, step: { files: ['index.html'] } });
+    assert.match(markup, /The head of the page has no/);
+
+    // The step of the styles alone needs no wiring contract.
+    const only = ROLES.builder.instructions({ styles, step: { files: ['src/styles.scss'] } });
+    assert.doesNotMatch(only, /<link rel="stylesheet">/);
 });
 
 test('the planner names the roles that the stages of the run execute', () => {
@@ -976,7 +1055,10 @@ test('write_ready is private to the role loop and is not executed as a project t
 
         assert.equal(executed.length, 0, 'write is rejected before ready');
         assert.ok(!answer.toolCalls.some((call) => call.name === 'write_ready'));
-        assert.equal(api.requests[0].max_output_tokens, 8192);
+        // The inspection turn takes a quarter of the cap of the model — the cap of the
+        // model that answers, not a number of one model: the role now answers with the
+        // head of the family, и её потолок больше.
+        assert.equal(api.requests[0].max_output_tokens, quarterCap(config, 'coder'));
         assert.equal(api.requests[0].tools.some((tool) => tool.name === 'write_file'), false);
         assert.equal(api.requests[0].tools.some((tool) => tool.name === 'write_ready'), true);
     } finally {
@@ -1031,17 +1113,33 @@ test('the estimate of the gate sizes the budget of the write turn', async () => 
 
         assert.equal(answer.stopped, 'completed');
         // The inspection turn keeps the reduced budget.
-        assert.equal(api.requests[0].max_output_tokens, 8192);
+        assert.equal(api.requests[0].max_output_tokens, quarterCap(config, 'coder'));
         // The write turn takes the budget of the estimate. The role has Code Mode, and a
         // turn that carries a program gets more room: the program is text, and the model
-        // writes it before the program writes the files.
-        assert.equal(api.requests[1].max_output_tokens, 65_536);
+        // writes it before the program writes the files. The room is the budget of the
+        // estimate times the factor of the config, and the ceiling of the config holds it
+        // back.
+        assert.equal(api.requests[1].max_output_tokens, codeModeCap(config, 'coder', 40_000));
         // The gate says what the budget of the next turn is.
         const ready = events.find((event) => event.type === 'role.write_ready');
         assert.equal(ready.outputTokens, 40_000);
     } finally {
         api.close();
     }
+});
+
+test('the note of Code Mode names the access of the run, when there is one', () => {
+    // Without the access the note says nothing about it: a package without the access
+    // must not promise a facility it does not have.
+    const plain = codeModeInstruction(['read_file']);
+    assert.doesNotMatch(plain, /access\.readFile/);
+    // With the access the model is told the names, so it looks for them in the catalogue.
+    const withAccess = codeModeInstruction(['read_file'], {
+        facilities: accessFacilityDescriptions(),
+    });
+    assert.match(withAccess, /access\.readFile/);
+    assert.match(withAccess, /access\.writeFile/);
+    assert.match(withAccess, /library\.catalog/);
 });
 
 test('a turn without Code Mode keeps the budget of the estimate', async () => {
@@ -1075,8 +1173,10 @@ test('a turn without Code Mode keeps the budget of the estimate', async () => {
             requireFiles: true,
         });
 
-        assert.equal(api.requests[0].max_output_tokens, 8192);
-        assert.equal(api.requests[1].max_output_tokens, 51_200);
+        assert.equal(api.requests[0].max_output_tokens, quarterCap(config, 'coder'));
+        // The write turn takes the budget of the estimate — the budget the estimate earns,
+        // clamped into the band of the cap.
+        assert.equal(api.requests[1].max_output_tokens, writeBudgetFor(resolveRole('coder', config).model, config, null, 40_000));
     } finally {
         api.close();
         await rm(root, { recursive: true, force: true });
@@ -1204,7 +1304,7 @@ test('a gate without an estimate keeps the whole budget of the write turn', asyn
         });
 
         // No estimate, no guess: the whole cap of the write turn.
-        assert.equal(api.requests[1].max_output_tokens, 65_536);
+        assert.equal(api.requests[1].max_output_tokens, fullCap(config, 'coder'));
     } finally {
         api.close();
     }
@@ -1343,9 +1443,9 @@ test('the loop of a role runs the tools and returns the answer', async () => {
         const call = events.find((event) => event.type === 'role.tool' && event.name === 'write_file');
         assert.equal(call.arguments.path, 'index.html');
         assert.ok(call.arguments.content.length <= 200);
-        assert.equal(api.requests[0].max_output_tokens, 8192, 'the inspection/ready turn uses a quarter cap');
+        assert.equal(api.requests[0].max_output_tokens, quarterCap(config, 'builder'), 'the inspection/ready turn uses a quarter cap');
         assert.equal(api.requests[0].text?.verbosity, 'low');
-        assert.equal(api.requests[1].max_output_tokens, 65536, 'the write turn restores the full cap');
+        assert.equal(api.requests[1].max_output_tokens, fullCap(config, 'builder'), 'the write turn restores the full cap');
         assert.equal(api.requests[1].text?.verbosity, undefined);
         assert.ok(events.some((event) => event.type === 'role.write_ready'));
 
@@ -1539,7 +1639,7 @@ test('a role that answers with a text instead of the schema is asked once more',
         assert.equal(answer.stopped, 'completed');
         assert.equal(answer.turns, 2);
         assert.equal(answer.data.summary, 'The page is written.');
-        assert.equal(api.requests[1].max_output_tokens, 65536);
+        assert.equal(api.requests[1].max_output_tokens, fullCap(config, 'builder'));
         const second = api.requests[1].input.map((item) => JSON.stringify(item)).join('\n');
         assert.match(second, /carried no data of the schema/);
     } finally {
@@ -1623,7 +1723,7 @@ test('a role whose turns ran out still gives the schema of the answer', async ()
         const last = api.requests[2];
         assert.equal(last.tools.length, 1);
         assert.equal(last.tools[0].name, 'code');
-        assert.equal(last.max_output_tokens, 65536);
+        assert.equal(last.max_output_tokens, fullCap(config, 'builder'));
         const conversation = last.input.map((item) => JSON.stringify(item)).join('\n');
         assert.match(conversation, /The turns of the role are over/);
     } finally {

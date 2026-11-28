@@ -95,8 +95,43 @@ test('a broken SVG is named', () => {
     assert.equal(validateSvg(SVG).ok, true);
 });
 
-test('a comment does not feed the stack of the tags', () => {
-    // The prose of a comment may name an element: the <use> in the sentence is not an
+test('a vector of a transparent picture must not have a background', () => {
+    // Модель обводит пустоту: прозрачные места растра становятся прямоугольником, и
+    // знак превращается в чёрный квадрат. Такой вектор — поломка, а не рисунок.
+    const withBackdrop = '<svg xmlns="http://www.w3.org/2000/svg" width="1296" height="960" '
+        + 'viewBox="0 0 1296 960">'
+        + '<rect width="1296" height="960" fill="#030303" />'
+        + '<path d="M145 486C219 441 752 138 895 49L900 60L150 497Z" fill="#f1f0fc" />'
+        + '</svg>';
+    const check = validateSvg(withBackdrop);
+    assert.equal(check.ok, false);
+    assert.ok(check.errors.some((item) => /background/i.test(item)), check.errors.join(' | '));
+
+    // Тот же рисунок без фона — в порядке.
+    const clean = '<svg xmlns="http://www.w3.org/2000/svg" width="1296" height="960" '
+        + 'viewBox="0 0 1296 960">'
+        + '<path d="M145 486C219 441 752 138 895 49L900 60L150 497Z" fill="#f1f0fc" />'
+        + '</svg>';
+    assert.equal(validateSvg(clean).ok, true);
+
+    // Прямоугольник, что не покрывает холст, — это часть рисунка, а не фон.
+    const part = '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">'
+        + '<rect x="10" y="10" width="20" height="20" fill="#030303" />'
+        + '</svg>';
+    assert.equal(validateSvg(part).ok, true);
+});
+
+test('a sprite of symbols has no canvas of its own', () => {
+    // Спрайт иконок состоит из одних `<symbol>`: у него нет `viewBox` и его размеров,
+    // и это не поломка.
+    const sprite = '<svg xmlns="http://www.w3.org/2000/svg">'
+        + '<symbol id="menu" viewBox="0 0 24 24"><path d="M4 6h16M8 12h12M4 18h16" /></symbol>'
+        + '</svg>';
+    const check = validateSvg(sprite);
+    assert.equal(check.ok, true, check.errors.join(' | '));
+});
+
+test('a comment does not feed the stack of the tags', () => {    // The prose of a comment may name an element: the <use> in the sentence is not an
     // element of the drawing, and the stack of the tags must not wait for its close.
     const commented = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">\n'
         + '  <!-- Standalone view of the same symbols available to external <use> references. -->\n'

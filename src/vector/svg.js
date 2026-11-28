@@ -161,8 +161,14 @@ export function validateSvg(text) {
 
     if (!parsed.attributes.xmlns) errors.push('The namespace xmlns is missing.');
     if (!parsed.viewBox) {
-        if (!parsed.width || !parsed.height) errors.push('Neither the viewBox nor the width and the height are given.');
-        else warnings.push('The viewBox is missing: the picture does not scale.');
+        // Спрайт символов не имеет своего холста: у него нет `viewBox` и его размеров,
+        // и это не поломка. Он состоит из одних `<symbol>`.
+        const sprite = /<symbol\b/i.test(source);
+        if (!sprite && (!parsed.width || !parsed.height)) {
+            errors.push('Neither the viewBox nor the width and the height are given.');
+        } else if (!sprite) {
+            warnings.push('The viewBox is missing: the picture does not scale.');
+        }
     }
     if (/<script\b/i.test(source)) errors.push('The SVG has a script: a picture on the web does not need one.');
     if (/xlink:href\s*=\s*["']\s*(?:https?:)?\/\//i.test(source) || /\shref\s*=\s*["']\s*(?:https?:)?\/\//i.test(source)) {
@@ -176,7 +182,80 @@ export function validateSvg(text) {
     const drawings = parsed.elements.filter((element) => SVG_TAGS.includes(element.name.toLowerCase())).length;
     if (!drawings) errors.push('The SVG has nothing to draw.');
 
+    // Фон, который съел прозрачность. Растр с прозрачным фоном — это фигура на
+    // пустоте, и вектор должен остаться фигурой на пустоте. Модель обводит пустоту
+    // прямоугольником, и знак становится чёрным квадратом: страница показывает квадрат
+    // там, где должен быть знак.
+    const backdrop = backdropRect(source, parsed);
+    if (backdrop) {
+        errors.push(`The SVG has a background that covers the whole canvas (${backdrop}) — `
+            + 'the vector of a picture with a transparent background must stay transparent.');
+    }
+
     return { ok: errors.length === 0, errors, warnings };
+}
+
+/**
+ * The canvas of an SVG: its width and its height in its own units.
+ *
+ * @param {object} parsed the parsed SVG
+ * @returns {{ width: number|null, height: number|null }}
+ * @exports
+ * @ai.hint pure
+ */
+export function svgCanvas(parsed = null) {
+    const box = parsed?.viewBox ?? null;
+    if (box) {
+        const parts = String(box).trim().split(/[\s,]+/).map(Number);
+        if (parts.length === 4 && parts.every((n) => Number.isFinite(n))) {
+            return { width: parts[2], height: parts[3] };
+        }
+    }
+    const width = Number.parseFloat(parsed?.width ?? '');
+    const height = Number.parseFloat(parsed?.height ?? '');
+    return {
+        width: Number.isFinite(width) ? width : null,
+        height: Number.isFinite(height) ? height : null,
+    };
+}
+
+/**
+ * The rectangle that covers the whole canvas of an SVG, if there is one.
+ *
+ * A rectangle of the size of the canvas and without a hole in it is the background of
+ * the picture. It is legitimate in a picture that has a background, and it is a defect in
+ * the vector of a picture that had none.
+ *
+ * @param {string} source the text of the SVG
+ * @param {object} parsed the parsed SVG
+ * @returns {string|null} the description of the rectangle, or null
+ * @exports
+ * @ai.hint pure
+ */
+export function backdropRect(source, parsed = null) {
+    const text = String(source ?? '');
+    const canvas = svgCanvas(parsed);
+    const canvasW = canvas.width;
+    const canvasH = canvas.height;
+    if (!Number.isFinite(canvasW) || !Number.isFinite(canvasH) || canvasW <= 0 || canvasH <= 0) return null;
+    const re = /<rect\b([^>]*)>/gi;
+    let match = re.exec(text);
+    while (match) {
+        const attrs = match[1];
+        const w = Number.parseFloat(attrs.match(/\bwidth\s*=\s*["']?([\d.]+)/i)?.[1] ?? '');
+        const h = Number.parseFloat(attrs.match(/\bheight\s*=\s*["']?([\d.]+)/i)?.[1] ?? '');
+        const x = Number.parseFloat(attrs.match(/\bx\s*=\s*["']?([\d.-]+)/i)?.[1] ?? '0');
+        const y = Number.parseFloat(attrs.match(/\by\s*=\s*["']?([\d.-]+)/i)?.[1] ?? '0');
+        const fill = attrs.match(/\bfill\s*=\s*["']([^"']*)["']/i)?.[1] ?? '';
+        // Полное покрытие холста: прямоугольник от угла и размером с холст.
+        const covers = Math.abs(x) < canvasW * 0.02 && Math.abs(y) < canvasH * 0.02
+            && w >= canvasW * 0.98 && h >= canvasH * 0.98;
+        if (covers && fill && fill.toLowerCase() !== 'none') {
+            return `rect ${w}×${h} fill="${fill}"`;
+        }
+        match = re.exec(text);
+    }
+    return null;
 }
 
 /**

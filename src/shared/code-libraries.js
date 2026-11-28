@@ -248,6 +248,35 @@ function facilityNames(facilities) {
 }
 
 /**
+ * The description of the facilities of the host.
+ *
+ * A name alone does not tell the program what a call does: the model reads the catalogue
+ * and decides by the description. So the map of the facilities may carry the description of
+ * every call — `{ name: { summary, arguments } }` — and the catalogue hands it over.
+ *
+ * @param {string[]|object|null} facilities the names, or a map of them
+ * @returns {Record<string, { summary: string, arguments: object }>}
+ * @ai.hint pure
+ */
+function describedFacilities(facilities) {
+    const out = {};
+    if (!facilities || typeof facilities !== 'object' || Array.isArray(facilities)) return out;
+    for (const [name, value] of Object.entries(facilities)) {
+        const key = String(name ?? '').trim();
+        if (!key) continue;
+        // The value is a function: the call itself. There is nothing to say about it
+        // beyond its name, and the parent may add a description in a separate map.
+        if (typeof value === 'function') continue;
+        if (!value || typeof value !== 'object') continue;
+        out[key] = {
+            summary: String(value.summary ?? value.description ?? ''),
+            arguments: value.arguments && typeof value.arguments === 'object' ? value.arguments : {},
+        };
+    }
+    return out;
+}
+
+/**
  * The bridge between the program and the libraries.
  *
  * The bridge is the host side of the facade. It holds the table of the handles, runs the
@@ -258,18 +287,32 @@ function facilityNames(facilities) {
  * libraries do not — the API of the pictures, for one. A facility is called by name, the
  * same way a library is, and it answers with plain data.
  *
- * @param {{ libraries?: string[], maxHandles?: number, facilities?: object }} [options]
+ * @param {{ libraries?: string[], maxHandles?: number, facilities?: object,
+ *   facilityDescriptions?: object }} [options]
  *   `libraries` names the libraries the program may use; by default, all of them.
  *   `facilities` is a map of the calls the host offers: `{ name: async (args) => data }`.
+ *   `facilityDescriptions` says what every call takes: `{ name: { summary, arguments } }`.
  * @returns {{ call: Function, catalog: Function, release: Function, handles: number }}
  * @exports
  * @ai.hint io
  */
-export function createLibraryBridge({ libraries = null, maxHandles = 256, facilities = null, onFacility = null } = {}) {    /** @type {Map<string, object>} */
+export function createLibraryBridge({
+    libraries = null,
+    maxHandles = 256,
+    facilities = null,
+    facilityDescriptions = null,
+    onFacility = null,
+} = {}) {
     const handles = new Map();
     const wanted = Array.isArray(libraries) && libraries.length
         ? libraries.map((item) => String(item ?? '').trim()).filter(Boolean)
         : [...LIBRARY_NAMES];
+    const described = {
+        ...describedFacilities(facilities),
+        ...(facilityDescriptions && typeof facilityDescriptions === 'object' && !Array.isArray(facilityDescriptions)
+            ? facilityDescriptions
+            : {}),
+    };
     let counter = 0;
 
     /**
@@ -379,9 +422,19 @@ export function createLibraryBridge({ libraries = null, maxHandles = 256, facili
                 });
             }
             // The facilities of the host: the things the house has and the libraries do
-            // not — the API of the pictures, for one.
+            // not — the API of the pictures, for one. The description travels with the
+            // name: the model reads the catalogue and decides by it.
             for (const name of facilityNames(facilities).sort()) {
-                out.push({ name, available: true, operations: [], facility: true });
+                const text = described[name] ?? {};
+                out.push({
+                    name,
+                    available: true,
+                    operations: [],
+                    facility: true,
+                    description: String(text.summary ?? ''),
+                    summary: String(text.summary ?? ''),
+                    arguments: text.arguments && typeof text.arguments === 'object' ? text.arguments : {},
+                });
             }
             return out;
         },
@@ -408,16 +461,16 @@ export function createLibraryBridge({ libraries = null, maxHandles = 256, facili
             } catch {
                 args = [];
             }
-            // The bytes of the picture travel as base64: a native module wants a `Buffer`,
-            // and a `Buffer` is not plain data.
-            args = args.map((item) => (item && typeof item === 'object' && typeof item.bytes === 'string'
-                ? Buffer.from(item.bytes, 'base64')
-                : item));
             const { target, name, handle } = targetOf(text);
             try {
                 // A call on a facility of the host: the API of the pictures, for one. The
                 // facility is named like a library, and it travels to the parent — the
                 // function behind it lives there, not in this thread.
+                //
+                // The arguments of a facility stay **plain**: the facility is the host, and
+                // the host takes data. The bytes of a facility travel as base64, and the
+                // facility decodes them itself — the conversion into a `Buffer` belongs to
+                // the libraries, which want a native one.
                 if (facilityNames(facilities).includes(text)) {
                     if (typeof onFacility !== 'function') {
                         return JSON.stringify({ ok: false, error: `There is no facility named ${text}.` });
@@ -425,6 +478,11 @@ export function createLibraryBridge({ libraries = null, maxHandles = 256, facili
                     const value = await onFacility(text, args[0] ?? {});
                     return JSON.stringify({ ok: true, value: plain(value) });
                 }
+                // The bytes of the picture travel as base64: a native module wants a `Buffer`,
+                // and a `Buffer` is not plain data.
+                args = args.map((item) => (item && typeof item === 'object' && typeof item.bytes === 'string'
+                    ? Buffer.from(item.bytes, 'base64')
+                    : item));
                 // A call on a handle: the member of the object the program made.
                 if (target) {
                     const member = target[name];

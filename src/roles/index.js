@@ -45,6 +45,7 @@ import { createToolset } from '../agent/tools.js';
 import { toolSpecs as buildToolSpecs } from '../agent/tool-specs.js';
 import { createSubagentSpawner, subagentGateNote } from '../agent/subagent.js';
 import { codeModeInstruction, codeModeBudgetFor } from '../agent/code-mode.js';
+import { accessFacilityDescriptions } from '../access/facility.js';
 import { effortFor, kindEffortFor } from '../agent/pace.js';
 import { getModelProfile, maxOutputFor, snapEffort, writeBudgetFor } from '../model/profiles.js';
 import { familyOf, rankPath, resolveModelRef } from '../model/refs.js';
@@ -879,7 +880,13 @@ export async function runRole({
     // that carries it earns the budget of the write.
     const hasCodeMode = specs.some((spec) => spec.name === CODE_MODE_TOOL);
     if (hasCodeMode) {
-        instructions += `\n\n${codeModeInstruction(specs.map((spec) => String(spec?.name ?? '')).filter((name) => name !== CODE_MODE_TOOL))}`;
+        // The program gets the access of the run besides the tools: the files and the
+        // commands of the project, with the rules of the access. The model is told the
+        // names, so it looks for them in the catalogue of the program.
+        instructions += `\n\n${codeModeInstruction(
+            specs.map((spec) => String(spec?.name ?? '')).filter((name) => name !== CODE_MODE_TOOL),
+            { facilities: accessFacilityDescriptions() },
+        )}`;
     }
     if (hasActionTools) {
         instructions += '\n\nBefore writing files or using any action-capable tool, call `write_ready` first. Until then, only the read tools are available. After `write_ready`, the next turn has the writing tools and the output budget: write every file of the step there — several `write_file` calls in one turn are allowed and are the cheapest way. In `write_ready` you may name `outputTokens`: your estimate of how many output tokens the write of the step will take. It sizes the budget of the write turn — the run clamps it between the half of the budget and the whole budget, so an honest guess costs you nothing. If you do not know the size, leave the field out: the write turn then gets the whole budget.';

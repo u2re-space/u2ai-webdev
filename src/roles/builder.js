@@ -27,6 +27,7 @@ import { UNTRUSTED } from './untrusted.js';
 import { INPUTS_IN_CONTEXT } from './inputs.js';
 import { referenceNote } from './reference.js';
 import { CORE } from './web-development.js';
+import { markupStyleNote, coderStyleNote } from './style-note.js';
 import { SUBAGENT_NAMES, subagentNote } from '../agent/subagent.js';
 import { economyTools } from './economy.js';
 import { devToolsMarker, devToolsNote } from './devtools.js';
@@ -90,6 +91,30 @@ export const BUILDER_RULES = [CORE, `#### The rules that hold for every file
   back.`].join('\n\n');
 
 /**
+ * The note about the styles, for the files that the step names.
+ *
+ * Роль пишет всё, и контракт подключения стилей зависит от того, что она пишет в этом
+ * шаге: разметка (как стиль попадает в страницу), скрипт (как он импортирует стиль)
+ * или оба (и тогда контракт нужен целиком).
+ *
+ * @param {object} styles the contract of the styles
+ * @param {string[]} files the files of the step
+ * @returns {string}
+ * @exports
+ * @ai.hint pure
+ */
+export function styleNoteFor(styles = {}, files = []) {
+    const list = (Array.isArray(files) ? files : [])
+        .map((file) => String(file ?? '').trim().toLowerCase());
+    const markup = list.some((file) => /\.html?$/.test(file));
+    const script = list.some((file) => /\.(?:m|c)?jsx?$|\.tsx?$/.test(file));
+    const blocks = [];
+    if (markup || script) blocks.push(markupStyleNote(styles));
+    if (script) blocks.push(coderStyleNote(styles));
+    return blocks.filter(Boolean).join('\n\n');
+}
+
+/**
  * The instructions of the builder: the spine of the work, not the craft of a file.
  *
  * The craft of a kind of file comes at the write gate, and the guides of the purpose come
@@ -113,6 +138,13 @@ export function instructions(context = {}) {
         ? 'The design direction, palette and any existing measurements are in the task context. Measurements are optional; use DESIGN.md and the attached reference image directly.'
         : '';
     const reference = referenceNote(context);
+    // **Как стили доходят до страницы.** Роль `builder` пишет и разметку, и скрипт, и
+    // стили — и контракт подключения должен быть у неё, а не у ролей, которых больше
+    // нет. Без этого контракта разметка линковала исходник sass, а скрипт его не
+    // импортировал: сборка проходила успешно, а страница оставалась без стилей.
+    const styles = context.styles?.source
+        ? styleNoteFor(context.styles, context.step?.files ?? [])
+        : '';
 
     return `You are the builder of a web project. You write the files of one step: the
 markup, the styles, the scripts and the motion, as the step asks for them.
@@ -122,6 +154,7 @@ ${step}
 ${stack}
 ${design}
 ${reference}
+${styles}
 
 Rules:
 ${INPUTS_IN_CONTEXT}

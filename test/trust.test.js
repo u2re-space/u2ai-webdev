@@ -70,10 +70,11 @@ test('every role that writes gets the head of its family', () => {
 });
 
 test('the roles of the run follow the model of the run', () => {
+    // Роли, что не пишут файлы, отвечают на модель прогона: план, ревью, аудит.
     for (const model of ['minimax/minimax-m3.1-flash', 'google/gemini-4-hydrogen', 'moonshotai/kimi-k3.1-pro']) {
         const config = configFor({ model });
-        assert.equal(resolveRole('markup', config).model, model);
-        assert.equal(resolveRole('coder', config).model, model);
+        assert.equal(resolveRole('reviewer', config).model, model);
+        assert.equal(resolveRole('planner', config).model, model);
     }
 });
 
@@ -81,7 +82,7 @@ test('the model of the run is a family of models', () => {
     // The run answers with the cheapest member of the family that takes the effort.
     const config = configFor();
     assert.equal(config.model, 'family:gpt');
-    assert.equal(resolveRole('coder', config).model, 'openai/gpt-6.1-terra');
+    assert.equal(resolveRole('reviewer', config).model, 'openai/gpt-6.1-terra');
 });
 
 test('the styler writes the styles with the best model of its family', () => {
@@ -113,10 +114,11 @@ test('the pin of the default role moves the roles without a model of their own',
     const config = configFor({ model: 'minimax/minimax-m3.1-flash' });
     config.roles.default.model = 'google/gemini-4-hydrogen';
     // The roles follow the default of the roles.
-    assert.equal(resolveRole('markup', config).model, 'google/gemini-4-hydrogen');
-    assert.equal(resolveRole('coder', config).model, 'google/gemini-4-hydrogen');
-    // The styler has its own model of the house: the default does not move it.
-    //assert.equal(resolveRole('styler', config).model, 'openai/gpt-6.2-sol');
+    assert.equal(resolveRole('reviewer', config).model, 'google/gemini-4-hydrogen');
+    // The roles that write have their own model of the house: the default does not move
+    // them — иначе роль, что пишет, отвечала бы на младшую модель.
+    assert.equal(resolveRole('styler', config).model, 'openai/gpt-6.2-sol');
+    assert.equal(resolveRole('builder', config).model, 'openai/gpt-6.2-sol');
 });
 
 test('the config decides the model of the house', () => {

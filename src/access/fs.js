@@ -177,6 +177,64 @@ export function createFileSystem({ root, backend, limits = {}, messages = {} } =
      * @param {string} relative
      * @returns {Promise<{ path: string, exists: boolean, type: string|null, size: number }>}
      */
+    /**
+     * Read a file as bytes.
+     *
+     * The text of a file is the text of the bytes, decoded as UTF-8. But a picture, a font
+     * or an archive are not text: decoded, they are noise, and written back, they are
+     * broken. So the access reads the bytes of a file whole, and the program may take them
+     * as they are.
+     *
+     * @param {string} relative
+     * @param {{ maxBytes?: number }} [options]
+     * @returns {Promise<{ path: string, bytes: Uint8Array, size: number, truncated: boolean }>}
+     */
+    const readBytes = async (relative, { maxBytes = rules.readBytes } = {}) => {
+        const { abs, rel } = await resolve(relative, { allowRoot: false });
+        const raw = await backend.readFile(abs);
+        const bytes = raw instanceof Uint8Array ? raw : new Uint8Array(raw);
+        const slice = bytes.byteLength > maxBytes ? bytes.subarray(0, maxBytes) : bytes;
+        return {
+            path: rel,
+            bytes: slice,
+            size: bytes.byteLength,
+            truncated: bytes.byteLength > maxBytes,
+        };
+    };
+
+    /**
+     * Write the bytes of a file whole.
+     *
+     * The write is atomic, like the write of text: the bytes go to a file next to the
+     * target, and the target is replaced by a rename.
+     *
+     * @param {string} relative
+     * @param {Uint8Array|ArrayBuffer|Buffer} data the bytes of the file
+     * @param {{ createParents?: boolean }} [options]
+     * @returns {Promise<{ path: string, bytes: number, created: boolean }>}
+     */
+    const writeBytes = async (relative, data, { createParents = true } = {}) => {
+        const { abs, rel } = await resolve(relative, { forWrite: true, allowRoot: false });
+        const bytes = data instanceof Uint8Array
+            ? data
+            : (data instanceof ArrayBuffer ? new Uint8Array(data) : new Uint8Array(Array.from(data ?? [])));
+        if (bytes.byteLength > rules.writeBytes) {
+            throw new Error(`The file is too big: ${bytes.byteLength} bytes.`);
+        }
+        const before = typeof backend.stat === 'function' ? await backend.stat(abs) : null;
+        if (createParents && typeof backend.mkdir === 'function') {
+            await backend.mkdir(path.dirname(abs), { recursive: true });
+        }
+        await writeAtomic(abs, bytes);
+        return { path: rel, bytes: bytes.byteLength, created: !before };
+    };
+
+    /**
+     * The state of a path.
+     *
+     * @param {string} relative
+     * @returns {Promise<{ path: string, exists: boolean, type: string|null, size: number }>}
+     */
     const stat = async (relative) => {
         const { abs, rel } = await resolve(relative);
         const info = typeof backend.stat === 'function' ? await backend.stat(abs) : null;
@@ -476,6 +534,8 @@ export function createFileSystem({ root, backend, limits = {}, messages = {} } =
         makeDir,
         replace,
         search,
+        readBytes,
+        writeBytes,
         toPosix,
     };
 }

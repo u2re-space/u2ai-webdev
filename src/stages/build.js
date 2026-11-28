@@ -934,40 +934,34 @@ export async function buildStage({
     let dropped = null;
 
     if (vite && scriptRel && entry) {
-        // The bundler compiles the SCSS from the link of the markup: the page keeps its
-        // link to the source, and the import in the script goes away — the two together
-        // would load the styles twice. A markup that is not plain html cannot link a
-        // stylesheet: there the bundler gets the styles from the import alone.
-        const htmlWired = htmlRel && /\.html?$/i.test(htmlRel);
-        if (htmlWired) {
-            // The import of the artifact of the build goes away first: that file is not
-            // a file of the project, and the bundler compiles the source itself.
-            if (primary?.output && primary.output !== entry) {
-                const artifact = await removeStyleImport(root, scriptRel, primary.output, { apply });
-                if (artifact?.removed) {
-                    warnings.push(`Импорт артефакта сборки удалён из ${scriptRel}: ${primary.output}. Стили приходят из ссылки разметки.`);
-                }
-            }
-            dropped = await removeStyleImport(root, scriptRel, entry, { apply });
-            if (dropped?.removed) {
-                warnings.push(`Импорт стилей удалён из ${scriptRel}: разметка линкует ${entry} сама, и оба пути грузили бы стили дважды.`);
-            }
-            // The link to the artifact goes away: it is the css of an old build without
-            // the bundler. The link to the source stays — the bundler compiles it.
-            if (htmlRel && primary?.output && primary.output !== entry) {
-                unlinked = await removeStyleLink(root, htmlRel, [primary.output], { apply });
-            }
-        } else {
-            imported = await ensureStyleImport(root, scriptRel, entry, {
-                apply,
-                // The import of the artifact of the build goes away as well: the bundler
-                // compiles the source itself, and the artifact is a file that goes stale.
-                drop: primary?.output && primary.output !== entry ? [primary.output] : [],
-            });
-            if (htmlRel) {
-                // The link to the source stylesheet goes away as well: the import is the one way
-                // to the styles now, and the two together load the styles twice.
-                unlinked = await removeStyleLink(root, htmlRel, [primary?.output, entry], { apply });
+        // **Сборщик компилирует стили только там, где до него доходит импорт.**
+        //
+        // `<link rel="stylesheet" href="styles.scss">` в разметке **не работает**: Vite
+        // не компилирует scss по ссылке, а молча выбрасывает её из сборки. Сборка
+        // проходит **успешно**, в `dist` нет ни одного css, и страница остаётся без
+        // стилей — без единой ошибки, которая сказала бы почему.
+        //
+        // Проверено на Vite 7: `<link href="styles.scss">` + скрипт без импорта → в
+        // `dist` нет css; скрипт с `import './styles.scss'` → `dist/assets/index-*.css`
+        // есть, и страница одета.
+        //
+        // Значит единственный путь к стилям в проекте со сборщиком — **импорт из
+        // скрипта**, и разметка не линкует стиль вовсе.
+        imported = await ensureStyleImport(root, scriptRel, entry, {
+            apply,
+            // The import of the artifact of the build goes away as well: the bundler
+            // compiles the source itself, and the artifact is a file that goes stale.
+            drop: primary?.output && primary.output !== entry ? [primary.output] : [],
+        });
+        if (imported?.inserted) {
+            warnings.push(`Импорт стилей добавлен в ${scriptRel}: ${entry}. Сборщик компилирует стили только там, где до него доходит импорт.`);
+        }
+        // The link to the stylesheet goes away: the import is the one way to the styles
+        // now, and a link to the source is dropped by the bundler without a word.
+        if (htmlRel) {
+            unlinked = await removeStyleLink(root, htmlRel, [primary?.output, entry], { apply });
+            if (unlinked?.removed?.length) {
+                warnings.push(`Ссылка на стиль убрана из ${htmlRel}: сборщик не компилирует стиль по ссылке — ссылка исчезла бы из сборки молча, и страница осталась бы без стилей.`);
             }
         }
         // The bundler compiles the styles itself, but the stage still checks them: a
@@ -976,16 +970,16 @@ export async function buildStage({
         compiled = {
             compiled: [],
             errors: checked.errors,
-            note: htmlWired
-                ? `Стили подключены ссылкой в ${htmlRel}: сборщик Vite компилирует ${entry} из ссылки.`
-                : `Стили подключены импортом в ${scriptRel}: сборщик Vite компилирует SCSS сам.`,
+            note: imported?.inserted
+                ? 'Стили приходят из импорта скрипта: сборщик компилирует их сам.'
+                : null,
         };
     } else {
         if (vite) {
             warnings.push(
                 scriptRel
                     ? 'Точка входа стилей не найдена: стили собраны напрямую.'
-                    : 'Скрипт проекта не найден: стили собраны напрямую.',
+                    : 'Скрипт проекта не найден: стили собраны напрямую. Сборщик берёт стиль только из импорта — ссылка в разметке не поможет.',
             );
         }
         // The project without a bundler: the page loads the compiled css, and a link to the
@@ -1030,12 +1024,16 @@ export async function buildStage({
         warnings.push(`Партиал подключён: ${item.partial} → ${item.file}.`);
     }
 
-    // The markup points at the styles and at the script. In a Vite project with plain
-    // html the page keeps its link to the source stylesheet — the bundler compiles it
-    // from the link, and the styles load without JavaScript. Everywhere else the page
-    // links the css that the stage compiled.
-    const linkSource = vite && htmlRel && /\.html?$/i.test(htmlRel) && entry
-        ? [entry]
+    // The markup points at the styles and at the script.
+    //
+    // **В проекте со сборщиком разметка не линкует стиль.** Сборщик компилирует
+    // таблицу стилей только там, где до него доходит импорт из скрипта; ссылка
+    // `<link href="styles.scss">` из сборки исчезает молча, и страница остаётся без
+    // стилей при успешной сборке. Проверено на Vite 7.
+    //
+    // Везде, где сборщика нет, страница линкует css, который собрала стадия.
+    const linkSource = vite
+        ? []
         : (primary && compiled.compiled.includes(primary.output) ? [primary.output] : []);
     const wiring = await ensureHtmlWiring(root, htmlRel, {
         styles: linkSource,

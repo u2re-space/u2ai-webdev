@@ -48,10 +48,22 @@ function names(styles = {}) {
 /**
  * Что говорить разметке о стилях.
  *
- * Проект на html со сборщиком — особый случай: сборщик умеет компилировать стили из
- * ссылки, поэтому разметка линкует сам исходник (`src/styles.scss`), и стили грузятся
- * без JavaScript. Разметка, которая не язык приложения (`jsx`, `vue`), ссылки не умеет:
- * там стили приносит импорт в скрипте.
+ * **Ссылка `<link>` на исходник препроцессора не работает.** Сборщик (Vite, webpack)
+ * компилирует `.scss`/`.sass`/`.less` только там, где до него доходит импорт из
+ * JavaScript или из другого css. `<link rel="stylesheet" href="styles.scss">` браузер
+ * отдаёт как есть, и он не понимает sass: страница остаётся без стилей, а сборка
+ * проходит **успешно** — молча, без единой ошибки. Стилей нет, и никто не сказал
+ * почему.
+ *
+ * Поэтому:
+ *
+ * - проект на html со сборщиком: **разметка не линкует стили вовсе**, а скрипт
+ *   импортирует исходник — сборщик компилирует его и кладёт css в бандл;
+ * - проект на html без сборщика: разметка линкует **скомпилированный** css
+ *   (`${link}`), и сборка пишет его рядом с исходником;
+ * - разметка на языке приложения (`jsx`, `vue`, `svelte`): только импорт — и это
+ *   говорит кодеру.
+ *
  * @param {object} styles контракт стилей
  * @returns {string}
  * @exports
@@ -65,7 +77,13 @@ export function markupStyleNote(styles = {}) {
         : '';
     const frameworkMarkup = ['jsx', 'tsx', 'vue', 'svelte'].includes(String(styles?.markup ?? '').trim().toLowerCase());
     if (styles?.wiring === WIRINGS.BUNDLED && !frameworkMarkup) {
-        return `The styles of the project: the stylesheet is \`${source}\` (${language}), and the head of the page links it directly — \`<link rel="stylesheet" href="${source}">\`. The bundler of the project compiles that stylesheet into the page's own css, so the styles load even without JavaScript. Link the source at that exact path; do not link \`${link}\` — that name is the artifact of a build without the bundler, not a file of the project. The script of the project does not import the stylesheet: the link and the import together would load the styles twice.${scriptPart}`;
+        return `The styles of the project: the stylesheet is \`${source}\` (${language}), and the **script of the project imports it** — the bundler of the project compiles that import and puts the css of the page into the bundle. `
+            + '**The head of the page has no `<link rel="stylesheet">`.** A link to the stylesheet '
+            + `(\`<link rel="stylesheet" href="${source}">\`) does not work here: the browser cannot read `
+            + `${language}, and a bundler compiles a stylesheet only when something imports it — the build `
+            + 'would pass and the page would have no styles at all, with no error to explain it. '
+            + `Do not link \`${link}\` either: that name is the artifact of a build without the bundler.`
+            + scriptPart;
     }
     if (styles?.wiring === WIRINGS.BUNDLED) {
         return `The styles of the project: the stylesheet is \`${source}\` (${language}), and the bundler of the project brings it — the script of the project imports \`${source}\` and the bundler compiles it. The page does not link a stylesheet: there is no \`<link rel="stylesheet">\` in the head, and a link to \`${link}\` breaks the build — that file is an artifact of the bundler, not a file of the project.${scriptPart}`;
@@ -86,7 +104,15 @@ export function coderStyleNote(styles = {}) {
     // Разметка на языке приложения не линкует стили: там импорт — единственный путь.
     const frameworkMarkup = ['jsx', 'tsx', 'vue', 'svelte'].includes(String(styles?.markup ?? '').trim().toLowerCase());
     if (styles?.wiring === WIRINGS.BUNDLED && !frameworkMarkup) {
-        return `The styles of the project: the stylesheet is \`${source}\` (${language}), and the head of the page links it — the bundler compiles it from the link. The script of the project does not import the stylesheet: the link already brings the styles, and the import would load them twice.`;
+        const how = specifier && script
+            ? ` — \`import '${specifier}';\` from \`${script}\`, the path is relative to the script`
+            : '';
+        return `The styles of the project: the stylesheet is \`${source}\` (${language}), and the **script of the project imports it**${how}. `
+            + 'That import is the only way to the styles: the bundler of the project compiles the '
+            + 'stylesheet where something imports it, and a `<link rel="stylesheet">` in the head '
+            + 'would not be compiled at all — the build would pass, and the page would have no '
+            + 'styles. The markup of the project has no stylesheet link, and it must not have one. '
+            + `Do not import \`${link}\`: that name is the artifact of a build without the bundler.`;
     }
     if (styles?.wiring === WIRINGS.BUNDLED) {
         const how = specifier && script
@@ -128,7 +154,7 @@ export function reviewStyleNote(styles = {}) {
     if (!source) return '';
     const frameworkMarkup = ['jsx', 'tsx', 'vue', 'svelte'].includes(String(styles?.markup ?? '').trim().toLowerCase());
     if (styles?.wiring === WIRINGS.BUNDLED && !frameworkMarkup) {
-        return `How the styles reach the page in this project: the head of the page links the stylesheet \`${source}\` (${language}) directly, and the bundler compiles it from that link — the styles load even without JavaScript. The script of the project does not import the stylesheet, and that is correct here: the link and the import together would load the styles twice. Do not ask for the import of the stylesheet in the script, and do not ask for a link to \`${link}\` — that name is an artifact, not a file of the project.`;
+        return `How the styles reach the page in this project: the script of the project imports \`${source}\` (${language}), and the bundler compiles that import — the styles come into the bundle with the script. The markup of the page does not link a stylesheet, and it must not: a bundler compiles a stylesheet only where something imports it, so a \`<link rel="stylesheet" href="${source}">\` would be dropped from the build without a word, and the page would have no styles at all. Do not ask for a link to the stylesheet here, and do not ask the script to import the compiled css \`${link}\` instead of the source — that name is an artifact, not a file of the project.`;
     }
     if (styles?.wiring === WIRINGS.BUNDLED) {
         return `How the styles reach the page in this project: the bundler brings them — the script of the project imports \`${source}\` and the bundler compiles it. The markup of the page does not link a stylesheet, and it must not: a link to \`${link}\` breaks the build, because that file is an artifact of the bundler. Do not ask for a link to the stylesheet here, and do not ask the script to import the compiled css instead of the source.`;

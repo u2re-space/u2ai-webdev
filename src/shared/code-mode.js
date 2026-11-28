@@ -203,6 +203,18 @@ export function createCodeModeSpec(raw = {}) {
         facilities: Array.isArray(source.facilities)
             ? source.facilities.map((item) => String(item ?? '').trim()).filter(Boolean)
             : [],
+        // What every facility takes: the names travel alone, and the description travels
+        // beside them, so the catalogue of the program may tell the model what a call does.
+        facilityDescriptions: source.facilityDescriptions && typeof source.facilityDescriptions === 'object'
+            && !Array.isArray(source.facilityDescriptions)
+            ? Object.fromEntries(Object.entries(source.facilityDescriptions).map(([key, value]) => [
+                String(key ?? '').trim(),
+                {
+                    summary: String(value?.summary ?? value?.description ?? ''),
+                    arguments: value?.arguments && typeof value.arguments === 'object' ? value.arguments : {},
+                },
+            ]).filter(([key]) => key))
+            : {},
     };
 }
 
@@ -495,6 +507,7 @@ export async function runCodeMode({
     libraryNames = null,
     onFacility = null,
     facilityNames = null,
+    facilityDescriptions = null,
     onCall = null,
     onLog = null,
     onError = null,
@@ -524,6 +537,7 @@ export async function runCodeMode({
     const bridge = createLibraryBridge({
         libraries: libraryNames,
         facilities: facilityNames,
+        facilityDescriptions,
         onFacility: async (path, args) => {
             if (typeof onFacility !== 'function') {
                 throw new Error(`There is no facility named ${path}.`);
@@ -842,6 +856,7 @@ export async function codeModeMain({ data = null, port = null } = {}) {
             stdin: spec.stdin,
             libraryNames: spec.libraries,
             facilityNames: spec.facilities,
+            facilityDescriptions: spec.facilityDescriptions,
             // The facility of the host: the function behind it lives in the parent, so the
             // call travels back there over the frame protocol.
             onFacility: askFacility,

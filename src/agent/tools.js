@@ -44,6 +44,8 @@ import { memoryArgs, memoryConnection, callMemoryProgram } from './memory-progra
 import { compareWithReference } from './image-compare.js';
 import { firstPageId } from './devtools.js';
 import { isInside, resolveInside } from './paths.js';
+import { accessFacilities, accessFacilityDescriptions } from '../access/facility.js';
+import { createAccess } from '../access/index.js';
 import { findChromium, findEgo, resolveEngine, screenshotPage, startStaticServer } from './browser.js';
 import { ensurePage } from '../stages/dev-server.js';
 import { shootPage } from '../stages/vision.js';
@@ -493,6 +495,15 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
     // The files the role has already read: the content of a file stays in the conversation,
     // and the second read of it costs the context of the run for nothing.
     const reads = new Map();
+
+    // The access of the run: the files and the commands under one root. The tools of the
+    // run go through the rules of the paths, and the program of Code Mode gets the very
+    // same access as a facility — one instance, one set of rules.
+    let access = null;
+    const accessOf = () => {
+        if (!access) access = createAccess({ root, config, env });
+        return access;
+    };
 
     /**
      * The names of the tools the toolset may run.
@@ -1220,12 +1231,48 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                 // The program of the model runs in the sandbox, and every tool it calls
                 // travels back here: the executor of the parent runs it with the rules of
                 // the parent.
+                //
+                // The program also gets the **access** of the run as a facility: the files
+                // and the commands of the project, with the rules of the access. It is
+                // here, and not in the tool, because a program that writes a file must go
+                // through the same gate as the role: the directories the stage opened, the
+                // files of the step, the map of the run and the memory of the run.
+                const facilities = accessFacilities({
+                    root,
+                    config,
+                    env,
+                    timeoutMs: 120_000,
+                    access: accessOf(),
+                    write: async (rel, content) => {
+                        const target = await writePath(rel);
+                        const result = await writeTextFile({ root, file: target.rel, content });
+                        rememberWrite(target.rel);
+                        await rememberInMap(target.rel);
+                        await forgetReadFact(target.rel);
+                        await context?.file?.(target.rel, content);
+                        return { path: result.rel, bytes: result.bytes };
+                    },
+                    writeBytes: async (rel, bytes) => {
+                        const target = await writePath(rel);
+                        const result = await accessOf().fs.writeBytes(target.rel, bytes);
+                        rememberWrite(target.rel);
+                        await rememberInMap(target.rel);
+                        await forgetReadFact(target.rel);
+                        return { path: result.path, bytes: result.bytes };
+                    },
+                    onWrite: async (rel) => {
+                        await rememberInMap(rel);
+                        await forgetReadFact(rel);
+                    },
+                });
                 const runner = createCodeModeRunner({
                     execute: async (name, toolArgs) => await runTool(name, toolArgs),
                     specs,
                     tools: allowedNames(),
                     notify,
                     signal,
+                    facilities,
+                    facilityDescriptions: accessFacilityDescriptions(),
                 });
                 return await runner(args ?? {});
             }

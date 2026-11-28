@@ -101,12 +101,18 @@ export function codeModeToolSpec() {
  * spends a turn on it.
  *
  * @param {string[]} names the tools the program may call
+ * @param {{ facilities?: object }} [options]
+ *   `facilities` says what the host offers the program besides the tools: the access of the
+ *   run, for one. The model is told the names, so it looks for them in the catalogue.
  * @returns {string}
  * @exports
  * @ai.hint pure
  */
-export function codeModeInstruction(names = []) {
+export function codeModeInstruction(names = [], { facilities = null } = {}) {
     const list = Array.isArray(names) ? names.map((item) => String(item ?? '').trim()).filter(Boolean) : [];
+    const facilityList = facilities && typeof facilities === 'object' && !Array.isArray(facilities)
+        ? Object.keys(facilities).map((item) => String(item).trim()).filter(Boolean).sort()
+        : [];
     return [
         '## Code Mode',
         'You may write a program instead of calling the tools one by one. Call `code_mode` with the',
@@ -146,6 +152,26 @@ export function codeModeInstruction(names = []) {
         '',
         'A native object — a canvas, a document — comes back as an id, and the id is the beginning of',
         'the path of the next call. A call that fails throws, and the program may catch it.',
+        '',
+        facilityList.length
+            ? [
+                'The host offers the program more than the tools: **facilities** — the things the house',
+                'has and the libraries do not. A facility is called the same way a library is, by its',
+                'name, and it answers with plain data. `library.catalog()` lists them, and every one of',
+                'them carries what it takes:',
+                '',
+                ...facilityList.map((name) => `- \`${name}\``),
+                '',
+                '```js',
+                'const catalog = await library.catalog();',
+                'const entry = catalog.find((item) => item.name === "access.readFile");',
+                'const text = await library.call("access.readFile", [{ path: "src/main.js" }]);',
+                '```',
+                '',
+                'The facilities of the host run in this process, with your rights and your rules: a',
+                'facility that writes writes through the same gate as your own write.',
+            ].join('\n')
+            : '',
         '',
         'The program is sandboxed: it has no `process`, no `require` and no network, a loop that never',
         'ends is stopped, and a mistake is an error you can read. It writes through your tools, so it',
@@ -191,8 +217,11 @@ export function codeModeBudgetFor(cap = null, writing = false, { factor = 2, cei
  *
  * @param {{ execute?: Function|null, specs?: object[], tools?: string[],
  *   timeoutMs?: number, onEvent?: Function|null, signal?: AbortSignal|null,
- *   shared?: SharedArrayBuffer|null }} options
+ *   shared?: SharedArrayBuffer|null, facilities?: object|null,
+ *   facilityDescriptions?: object|null }} options
  *   `execute` runs a tool of the parent: `async (name, args) => text`.
+ *   `facilities` is the map of the calls the host offers; `facilityDescriptions` says what
+ *   every one of them takes.
  * @returns {(args: object) => Promise<string>}
  * @exports
  * @ai.hint io
@@ -206,6 +235,7 @@ export function createCodeModeRunner({
     signal = null,
     shared = null,
     facilities = null,
+    facilityDescriptions = null,
 } = {}) {
     /**
      * The catalogue of the tools the program may call.
@@ -255,6 +285,7 @@ export function createCodeModeRunner({
                 timeoutMs: wanted,
                 shared: shared ?? null,
                 facilities: facilityNames,
+                facilityDescriptions: facilityDescriptions ?? null,
             }),
             onCall: async (call) => {
                 if (typeof execute !== 'function') {

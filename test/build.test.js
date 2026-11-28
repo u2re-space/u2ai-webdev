@@ -365,14 +365,15 @@ test('the stage gives the styles of a Vite project to the bundler', async () => 
     assert.equal(result.build.vite, true);
     // The bundler compiles the SCSS itself: no CSS file is built by the stage.
     assert.deepEqual(result.build.compiled, []);
-    // The markup of plain html links the source stylesheet: the bundler compiles it
-    // from the link, and the styles load without JavaScript.
-    const html = await readFile(path.join(root, 'index.html'), 'utf8');
-    assert.match(html, /<link rel="stylesheet" href="\.\/styles\/main\.scss" \/>/);
-    assert.doesNotMatch(html, /main\.css/);
-    // The script does not import the stylesheet: the link already brings the styles.
+    // **The script imports the stylesheet.** The bundler compiles a stylesheet only where
+    // something imports it: a `<link>` to the source is dropped by the bundler without a
+    // word, the build passes, and the page has no styles at all.
     const script = await readFile(path.join(root, 'src', 'main.js'), 'utf8');
-    assert.doesNotMatch(script, /import/);
+    assert.match(script, /import ['"]\.\.\/styles\/main\.scss['"]/);
+    // And the markup has no stylesheet link: the import is the one way to the styles.
+    const html = await readFile(path.join(root, 'index.html'), 'utf8');
+    assert.doesNotMatch(html, /<link rel="stylesheet"/);
+    assert.doesNotMatch(html, /main\.css/);
 });
 
 test('a project with a bundler gets the styles by the source, and the artifact import goes away', async () => {
@@ -396,9 +397,11 @@ test('a project with a bundler gets the styles by the source, and the artifact i
 
     const script = await readFile(path.join(root, 'src', 'main.js'), 'utf8');
     assert.doesNotMatch(script, /styles\.css/);
-    // The page keeps its link to the source itself: the bundler compiles it from the link.
+    // The import of the source is there instead: it is the one way to the styles.
+    assert.match(script, /import ['"]\.\/styles\.scss['"]/);
+    // The link to the source goes away from the markup: the bundler drops it silently.
     const html = await readFile(path.join(root, 'index.html'), 'utf8');
-    assert.match(html, /<link rel="stylesheet" href="\.\/src\/styles\.scss">/);
+    assert.doesNotMatch(html, /<link rel="stylesheet"/);
     assert.match(result.warnings.join(' '), /Импорт артефакта сборки удалён/);
 });
 
