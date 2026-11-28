@@ -9,12 +9,14 @@
     "./shared": "./src/shared/shared.js",
     "./protocol": "./src/shared/protocol.js",
     "./worker": "./src/shared/worker.js",
+    "./code-mode": "./src/shared/code-mode.js",
     "./ramdisk": "./src/access/ramdisk.js"
   },
   "bin": {
     "ai-webdev": "./bin/ai-webdev.js",
     "ai-webdev-worker": "./bin/ai-webdev-worker.js",
-    "ai-webdev-agent-worker": "./bin/ai-webdev-agent-worker.js"
+    "ai-webdev-agent-worker": "./bin/ai-webdev-agent-worker.js",
+    "ai-webdev-code-mode-worker": "./bin/ai-webdev-code-mode-worker.js"
   },
   "repository": {
     "type": "git",
@@ -58,6 +60,7 @@
     "@toon-format/toon": "^4.4.0",
     "@u2ai/subagent": "file:../u2ai-subagent",
     "json5": "^2.2.3",
+    "openvector": "^0.1.6",
     "terminal-kit": "^3.1.4"
   },
   "optionalDependencies": {

@@ -1593,7 +1593,7 @@ The sections of the file:
 | Section | What it holds |
 |---|---|
 | `model`, `baseURL`, `apiKey`, `backends`, `modelsBackends`, `fallback` | The API: the model, the hosts, the pool of the fallbacks. |
-| `reasoning`, `limits`, `models` | The effort, the profile of the stages, the summaries, the budgets of the run and the ceilings of the models. |
+| `reasoning`, `limits`, `models` | The effort, the profile of the stages, the summaries, the budgets of the run and the ceilings of the models. The limits of Code Mode are here too: `codeModeBudgetFactor`, `codeModeMaxOutputTokens` and `codeModeTimeoutMs`. |
 | `tools` | The tools the roles may call. |
 | `browser` | The eye of the run: the engine (`auto`, `ego`, `chrome`), the path of the browser, the timeout, the frame of the picture, and the eye of the styles (`stylingVision`, `stylingVisionRounds`). |
 | `stack` | The stack the generator writes for: the framework (vanilla, react, vue, svelte, next, astro, vite, lure, ssre), the markup, the styles, the script, the icons. |
@@ -2305,6 +2305,53 @@ const exitCode = await main(['run', 'make a landing page', '--route', 'plan']);
 `loadConfig` returns the merged configuration, `STAGES` is the registry of the stages, and
 `runPipeline` (from `src/pipeline.js`) runs the pipeline without the CLI. The graphical entry is
 `mainTui` from `src/tui/cli.js`.
+
+## Code Mode
+
+The ordinary cycle asks the model for one tool call at a time, and every call costs a round trip to
+the API. Code Mode gives the model the whole step at once: it writes a **program**, and the program
+calls the tools by itself.
+
+The program does not run where the model writes it. It runs in a sandbox — a realm of `node:vm`
+inside a worker thread of its own:
+
+- The realm is fresh. The program has no `process`, no `require`, no `Buffer` and no `fetch`.
+- The worker is a crash domain of its own. A program that hangs in an endless loop is stopped, and
+  the run lives. (`node:vm` alone cannot stop a loop that never yields: only the worker can.)
+- The tools stay the tools of the parent. The sandbox holds *proxies*, and every call travels back
+  to the parent, which runs it with its own rights and its own rules. The sandbox never touches a
+  file by itself.
+
+```js
+const a = await tools.read_file({ path: 'a.txt' });
+const b = await tools.read_file({ path: 'b.txt' });
+await tools.write_file({ path: 'merged.txt', content: a + b });
+return { merged: true };
+```
+
+Inside the program:
+
+| What | What it is |
+|---|---|
+| `await tools.<name>(args)` | Calls a tool of the step. The answer is the text the tool returned. |
+| `catalogue.names` | The tools the program may call. `catalogue.describe(name)` — what one of them does. |
+| `fs` | A file system in the memory: `readFile`, `writeFile`, `readdir`, `stat`, `mkdir`, `unlink`. |
+| `shared` | The shared block of the run: `shared.view` is a byte view of it, one memory with the parent. |
+| `allocate(bytes)` | A block of memory — 1 GB, 2 GB, 4 GB, 8 GB. The pages are taken when the bytes are written. |
+| `console.log` | The output of the program, which comes back to the model with the answer. |
+
+The memory of the house is reachable from the program, and the bytes of the shared block travel
+without a copy: the parent writes into the block, and the program sees the same bytes.
+
+Code Mode is a **write**: the program calls the tools of the parent, and the parent writes the
+files. It is therefore behind the write gate like any other write, and the turn that carries it
+earns more room — a program is text too, and the model writes it before the program writes the
+files. The factor is `limits.codeModeBudgetFactor`, the ceiling is `limits.codeModeMaxOutputTokens`,
+and the cap of the model wins over both.
+
+The sandbox is a **guardrail, not a security boundary**. It keeps a careless program from touching
+the machine, and it keeps a runaway program from taking the parent with it. It is not a jail
+against a program that means harm.
 
 ## The access layer
 

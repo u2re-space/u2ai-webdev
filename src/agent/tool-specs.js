@@ -482,6 +482,35 @@ export const TOOL_SPECS = Object.freeze({
         required: ['role', 'task', 'files'],
         roles: [],
     },
+    code_mode: {
+        configKey: 'code_mode',
+        description: 'Write a JavaScript program and run it in a sandbox, instead of calling the tools '
+            + 'one by one. The program runs in its own worker with its own realm: it has no process, '
+            + 'no require and no network, and it cannot touch the disk by itself — but it may call '
+            + 'your tools, and every call travels back to this process, which runs it with your '
+            + 'rights and your rules. Use it when the work is a sequence of many calls: reading five '
+            + 'files and merging them is one program, not six round trips. The program may await, and '
+            + 'it may return the answer of the step. Inside it: `await tools.<name>(args)` calls a '
+            + 'tool; `catalogue.names` lists the tools you may call; `fs` is a file system in the '
+            + 'memory; `shared` is the shared block of the run; `allocate(bytes)` gives a block of '
+            + 'memory; `console.log` writes to the output of the run. The program is sandboxed: a loop '
+            + 'that never ends is stopped, and a mistake is an error, not a crash of the run. This '
+            + 'tool writes: it is behind the write gate, and it earns the budget of the write.',
+        parameters: {
+            type: 'object',
+            properties: {
+                code: str('The program. The body of an async function: it may await, and it may return '
+                    + 'the answer of the step. The tools are called as `await tools.name({ ... })`.'),
+                purpose: str('One sentence: what the program has to do. It is written into the report '
+                    + 'of the run.'),
+                timeoutMs: int('How long the program may run, in milliseconds. The default is 60000.'),
+            },
+            required: ['code'],
+            additionalProperties: false,
+        },
+        required: ['code'],
+        roles: [],
+    },
     generate_svg: {
         configKey: 'svg',
         description: 'Write an SVG file. The prompt may be SVG markup; a plain text becomes a labelled frame. '

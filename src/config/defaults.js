@@ -317,6 +317,24 @@ export const defaults = {
     maxFileReadBytes: 256 * 1024,
     /** Cap of one tool answer that goes back into the context. */
     maxToolOutputBytes: 128 * 1024,
+    /**
+     * How much the output budget of a turn grows for the program of Code Mode.
+     *
+     * A program is a write, and a write is text: the model writes the program and the
+     * program writes the files. The turn that carries the program needs room for both,
+     * and the budget of the ordinary write is often not enough for the program itself.
+     * The factor is a multiplier of the budget of the write: 2 means twice the budget.
+     */
+    codeModeBudgetFactor: 2,
+    /**
+     * The ceiling of the output budget of the turn that carries a program of Code Mode.
+     *
+     * The factor may not push the turn past what the model can take: the cap of the model
+     * wins over the factor, always.
+     */
+    codeModeMaxOutputTokens: 65_536,
+    /** How long one program of Code Mode may run, in milliseconds. */
+    codeModeTimeoutMs: 60_000,
   },
 
   // --- tools ----------------------------------------------------------------
@@ -351,6 +369,8 @@ export const defaults = {
     ask_user: true,
     /** Hand the work to a sub-agent, in a separate thread of this process. */
     delegate: true,
+    /** Write a program and run it in a sandbox, instead of calling the tools one by one. */
+    code_mode: true,
     /** Call the external `ai-decompose` CLI. */
     external_decompose: true,
     /** Call the external `ai-measure` CLI. */

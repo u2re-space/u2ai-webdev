@@ -9,10 +9,9 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 
 import { ROLES, ROLE_NAMES, resolveRole, readOnlyOperation, roleSchema, buildInstructions, runRole, roleReason, pictureParts } from '../src/roles/index.js';
 import { createInputState } from '../src/cli/input-state.js';
@@ -24,123 +23,7 @@ import { toolSpecs } from '../src/agent/tool-specs.js';
 import { createToolset } from '../src/agent/tools.js';
 import { createClient } from '../src/openai/client.js';
 import { defaults } from '../src/config.js';
-
-/**
- * A mock of the Responses API: it answers the first request with a tool call, the second one
- * with the final text.
- *
- * A request that asks for a stream is answered with the stream of the events: the roles
- * always ask for one, so the mock has to speak the same language as the API.
- * @param {object[]} answers the answers, one per request
- * @returns {Promise<{ url: string, requests: object[], close: Function }>}
- */
-async function mockApi(answers) {
-    const requests = [];
-    let index = 0;
-    const server = http.createServer((req, res) => {
-        let body = '';
-        req.on('data', (chunk) => { body += chunk; });
-        req.on('end', () => {
-            const parsed = JSON.parse(body || '{}');
-            requests.push(parsed);
-            const answer = answers[Math.min(index, answers.length - 1)];
-            index += 1;
-            // Отказ хоста: ответ не приходит вовсе — так ведёт себя хост, у которого
-            // закрыт доступ.
-            if (answer?.status && answer.status >= 400) {
-                res.writeHead(answer.status, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify(answer.body ?? { error: { message: 'refused' } }));
-                return;
-            }
-            if (parsed.stream === true) {
-                res.writeHead(200, { 'Content-Type': 'text/event-stream' });
-                res.write(`data: ${JSON.stringify({ type: 'response.created', response: { id: answer.id ?? 'resp_1', status: 'in_progress' } })}\n\n`);
-                res.write(`data: ${JSON.stringify({ type: 'response.completed', response: answer })}\n\n`);
-                res.end();
-                return;
-            }
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify(answer));
-        });
-    });
-    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-    const port = server.address().port;
-    return {
-        url: `http://127.0.0.1:${port}/v1/`,
-        requests,
-        close: () => server.close(),
-    };
-}
-
-/**
- * A response with one tool call.
- * @param {string} name
- * @param {object} args
- * @returns {object}
- */
-function toolAnswer(name, args) {
-    return {
-        id: 'resp_1',
-        status: 'completed',
-        model: 'test-model',
-        output: [{
-            type: 'function_call',
-            call_id: `call_${name}`,
-            name,
-            arguments: JSON.stringify(args),
-        }],
-        usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
-    };
-}
-
-/**
- * A response with a text answer.
- * @param {string} text
- * @returns {object}
- */
-function textAnswer(text) {
-    return {
-        id: 'resp_2',
-        status: 'completed',
-        model: 'test-model',
-        output: [{ type: 'message', content: [{ type: 'output_text', text }] }],
-        usage: { input_tokens: 12, output_tokens: 6, total_tokens: 18 },
-    };
-}
-
-/**
- * A response with the call of the schema of a role: the answer of the role.
- * @param {string} name the name of the schema
- * @param {object} args the data of the answer
- * @returns {object}
- */
-function schemaAnswer(name, args) {
-    return {
-        id: 'resp_3',
-        status: 'completed',
-        model: 'test-model',
-        output: [{
-            type: 'function_call',
-            call_id: `call_${name}`,
-            name,
-            arguments: JSON.stringify(args),
-        }],
-        usage: { input_tokens: 12, output_tokens: 6, total_tokens: 18 },
-    };
-}
-
-/**
- * The data of the answer of the coder.
- * @returns {object}
- */
-function codeData() {
-    return {
-        summary: 'The page is written.',
-        files: [{ path: 'index.html', content: '<h1>Привет</h1>', language: 'html' }],
-        commands: [],
-        notes: 'Nothing else.',
-    };
-}
+import { mockApi, toolAnswer, schemaAnswer, textAnswer, codeData } from './helpers/role-api.js';
 
 test('every built-in role is in the registry', () => {
     for (const name of [
@@ -1149,13 +1032,55 @@ test('the estimate of the gate sizes the budget of the write turn', async () => 
         assert.equal(answer.stopped, 'completed');
         // The inspection turn keeps the reduced budget.
         assert.equal(api.requests[0].max_output_tokens, 8192);
-        // The write turn takes the budget of the estimate.
-        assert.equal(api.requests[1].max_output_tokens, 51_200);
+        // The write turn takes the budget of the estimate. The role has Code Mode, and a
+        // turn that carries a program gets more room: the program is text, and the model
+        // writes it before the program writes the files.
+        assert.equal(api.requests[1].max_output_tokens, 65_536);
         // The gate says what the budget of the next turn is.
         const ready = events.find((event) => event.type === 'role.write_ready');
         assert.equal(ready.outputTokens, 40_000);
     } finally {
         api.close();
+    }
+});
+
+test('a turn without Code Mode keeps the budget of the estimate', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-write-estimate-'));
+    const home = await mkdtemp(path.join(os.tmpdir(), 'ai-webdev-home-'));
+    const env = { HOME: home, USERPROFILE: home };
+
+    const api = await mockApi([
+        toolAnswer('write_ready', { outputTokens: 40_000 }),
+        toolAnswer('write_file', { path: 'index.html', content: '<h1>Привет</h1>' }),
+        schemaAnswer('code', codeData()),
+    ]);
+
+    try {
+        const config = structuredClone(defaults);
+        config.model = 'google/gemini-4-hydrogen';
+        config.backends = [{ baseURL: api.url, apiKey: 'test-key' }];
+        config.reasoning.effort = 'low';
+        // Code Mode is off: the budget of the write is the budget of the estimate.
+        config.roles.coder.tools = ROLES.coder.tools.filter((name) => name !== 'code_mode');
+        const client = await createClient({ config, env });
+
+        await runRole({
+            client,
+            config,
+            role: 'coder',
+            input: 'Make the page.',
+            context: { task: 'Make the page.' },
+            root,
+            env,
+            requireFiles: true,
+        });
+
+        assert.equal(api.requests[0].max_output_tokens, 8192);
+        assert.equal(api.requests[1].max_output_tokens, 51_200);
+    } finally {
+        api.close();
+        await rm(root, { recursive: true, force: true });
+        await rm(home, { recursive: true, force: true });
     }
 });
 

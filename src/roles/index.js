@@ -44,6 +44,7 @@ import { sourcesBlock } from '../agent/sources.js';
 import { createToolset } from '../agent/tools.js';
 import { toolSpecs as buildToolSpecs } from '../agent/tool-specs.js';
 import { createSubagentSpawner, subagentGateNote } from '../agent/subagent.js';
+import { codeModeInstruction, codeModeBudgetFor } from '../agent/code-mode.js';
 import { effortFor, kindEffortFor } from '../agent/pace.js';
 import { getModelProfile, maxOutputFor, snapEffort, writeBudgetFor } from '../model/profiles.js';
 import { familyOf, rankPath, resolveModelRef } from '../model/refs.js';
@@ -301,6 +302,16 @@ const READ_ONLY_TOOLS = new Set([
     'read_skill', 'web_guidance', 'fetch_url', 'search_icons', 'ask_user',
 ]);
 const REVIEW_TOOLS = new Set(['read_file', 'find_line']);
+
+/**
+ * The tools that write, and the tools that write through a program.
+ *
+ * Code Mode is a write: the program calls the tools of the parent, and the parent writes
+ * the files with its own hands. A program is therefore behind the write gate like any
+ * other write, and the turn that carries it earns the budget of the write.
+ */
+const CODE_MODE_TOOL = 'code_mode';
+const WRITE_TOOLS_WITH_CODE = Object.freeze([...WRITE_TOOLS, CODE_MODE_TOOL]);
 
 /**
  * Whether an operation only reads and has no report or summary to produce.
@@ -817,6 +828,13 @@ export async function runRole({
     const readSpecs = specs.filter((spec) => READ_ONLY_TOOLS.has(String(spec?.name ?? '')));
     const hasActionTools = Boolean(requireFiles) && key !== 'reviewer' && readSpecs.length < specs.length;
     const preWriteSpecs = [...readSpecs, ...(hasActionTools ? [WRITE_READY_TOOL] : [])];
+    // Code Mode is a write: the program calls the tools of the parent, and the parent
+    // writes the files. It is behind the write gate like any other write, and the turn
+    // that carries it earns the budget of the write.
+    const hasCodeMode = specs.some((spec) => spec.name === CODE_MODE_TOOL);
+    if (hasCodeMode) {
+        instructions += `\n\n${codeModeInstruction(specs.map((spec) => String(spec?.name ?? '')).filter((name) => name !== CODE_MODE_TOOL))}`;
+    }
     if (hasActionTools) {
         instructions += '\n\nBefore writing files or using any action-capable tool, call `write_ready` first. Until then, only the read tools are available. After `write_ready`, the next turn has the writing tools and the output budget: write every file of the step there — several `write_file` calls in one turn are allowed and are the cheapest way. In `write_ready` you may name `outputTokens`: your estimate of how many output tokens the write of the step will take. It sizes the budget of the write turn — the run clamps it between the half of the budget and the whole budget, so an honest guess costs you nothing. If you do not know the size, leave the field out: the write turn then gets the whole budget.';
     }
@@ -1020,8 +1038,19 @@ export async function runRole({
         // on the disk have the full one — the answer is not the write.
         const writing = writeReady && hasActionTools && !fullOutput
             && phase === 'work' && boundedTools.length > 0;
+        // The budget of the write turn. A turn that carries a program of Code Mode needs
+        // more room: the program is text, and the model writes it before the program
+        // writes the files. The factor of the config grows the budget, and the ceiling of
+        // the config and the cap of the model hold it back.
+        const codeModeTurn = writing && boundedTools.some((spec) => spec.name === CODE_MODE_TOOL);
+        const writeBudget = writeBudgetFor(currentModel, config, definition.maxOutputTokens, writeEstimate);
         const maxOutputTokens = writing
-            ? writeBudgetFor(currentModel, config, definition.maxOutputTokens, writeEstimate)
+            ? (codeModeTurn
+                ? codeModeBudgetFor(writeBudget, true, {
+                    factor: config?.limits?.codeModeBudgetFactor ?? 2,
+                    ceiling: config?.limits?.codeModeMaxOutputTokens ?? 65_536,
+                })
+                : writeBudget)
             : maxOutputFor(currentModel, config, definition.maxOutputTokens, { readOnly: reduced });
         // Пропуск оператора прерывает ход, который идёт: `/skip` должен работать и
         // тогда, когда хост молчит. Без этого запрос ждёт своего ответа, а оператор
@@ -1468,7 +1497,7 @@ export async function runRole({
                 inputChannel?.setLocation?.({ stage: roleStage, role: key, step: context?.step?.id ?? null });
                 continue;
             }
-            if (WRITE_TOOLS.includes(call.name) && wroteSomething(output)) writes.push(call);
+            if (WRITE_TOOLS_WITH_CODE.includes(call.name) && wroteSomething(output)) writes.push(call);
             const callId = call.callId ?? call.id ?? `${call.name}-${calls.length}`;
             // The answer of the tool goes into the log only when it is short: the content
             // of a file is not a line of the log.

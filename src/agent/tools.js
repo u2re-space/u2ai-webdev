@@ -37,6 +37,7 @@ import { readSkill, readSkillFile, discoverSkills } from './skills.js';
 import { toolForName } from './tool-pointer.js';
 import { guidanceSearchText, guidanceRetrieveText, GUIDANCE_SOURCE } from './guidance.js';
 import { runProgram as runProgramIn } from './programs.js';
+import { createCodeModeRunner } from './code-mode.js';
 import { pictureExtension, contentLooksLikePicture } from './syntax.js';
 import { inScope as inScopeOf } from '../stages/scope.js';
 import { memoryArgs, memoryConnection, callMemoryProgram } from './memory-program.js';
@@ -492,6 +493,16 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
     // The files the role has already read: the content of a file stays in the conversation,
     // and the second read of it costs the context of the run for nothing.
     const reads = new Map();
+
+    /**
+     * The names of the tools the toolset may run.
+     *
+     * The program of Code Mode may call the tools of this toolset and nothing else: the
+     * catalogue of the program is the catalogue of the turn.
+     *
+     * @returns {string[]}
+     */
+    const allowedNames = () => specs.map((spec) => String(spec?.name ?? '')).filter(Boolean);
 
     /**
      * The mark of a file: its size and the time of the last change.
@@ -1191,6 +1202,19 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                     [script.abs, ...parseArgsList(args.args)],
                     Number.isSafeInteger(Number(args.timeoutMs)) ? Number(args.timeoutMs) : 120_000,
                 );
+            }
+            case 'code_mode': {
+                // The program of the model runs in the sandbox, and every tool it calls
+                // travels back here: the executor of the parent runs it with the rules of
+                // the parent.
+                const runner = createCodeModeRunner({
+                    execute: async (name, toolArgs) => await runTool(name, toolArgs),
+                    specs,
+                    tools: allowedNames(),
+                    notify,
+                    signal,
+                });
+                return await runner(args ?? {});
             }
             case 'read_skill': {
                 const file = String(args.file ?? '').trim();

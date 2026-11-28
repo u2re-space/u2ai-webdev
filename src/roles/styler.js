@@ -30,7 +30,7 @@ export const schema = 'style';
 export const tools = [
     'list_files', 'read_file', 'write_file', 'replace_text', 'search_files',
     'download_font', 'read_skill', 'web_guidance', 'call_ai_memory',
-    'screenshot', 'subagent', 'compare_images',
+    'screenshot', 'subagent', 'compare_images', 'code_mode',
     ...economyTools(),
     devToolsMarker(),
 ];
