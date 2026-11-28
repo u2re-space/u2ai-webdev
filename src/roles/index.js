@@ -1062,9 +1062,21 @@ export async function runRole({
     const availableTools = delegationUsed
             ? toolList.filter((spec) => spec.name !== 'subagent')
             : toolList;
-        const boundedTools = key === 'styler' && stylerResearchCalls >= STYLER_RESEARCH_LIMIT
-            ? availableTools.filter((spec) => !STYLER_RESEARCH_TOOLS.has(spec.name))
+        // **Полировка не пишет.** Хвост лестницы — это младшая модель семейства, и её
+        // работа — посмотреть на написанное и сказать, что не так. Если ей дать
+        // инструменты записи, она перепишет файл, который только что написала старшая
+        // модель: работа сильной модели уходит в замену, и прогон отдаёт деньги за
+        // текст, который никто не проверял.
+        //
+        // Полировка читает и отвечает. За починкой зовут старшую модель: починка —
+        // это работа заново, и она идёт с начала лестницы (`phase` начинается как
+        // `work`).
+        const polishTools = phase === 'polish'
+            ? availableTools.filter((spec) => !WRITE_TOOLS_WITH_CODE.includes(spec.name))
             : availableTools;
+        const boundedTools = key === 'styler' && stylerResearchCalls >= STYLER_RESEARCH_LIMIT
+            ? polishTools.filter((spec) => !STYLER_RESEARCH_TOOLS.has(spec.name))
+            : polishTools;
         const exploring = hasActionTools && !writeReady && boundedTools.length > 0
             && !boundedTools.every((spec) => spec.name === schemaName);
         const useSchema = schemaOverride === undefined
@@ -1623,7 +1635,6 @@ export async function runRole({
                 rank: rankFor(definition.path, phase),
             });
         }
-
         if (turns >= limit) {
             stopped = 'maxTurns';
             answer = parsed;

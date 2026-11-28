@@ -74,6 +74,11 @@ export function contractOf(role) {
  * «стилей пока нет», «код ещё не написан». Факт о проекте — «проектных тестов пока
  * нет» — это не ожидание чужой работы, и роль, честно сказавшая о нём, не должна
  * быть отправлена переписывать своё.
+ *
+ * **Отрицание — не ожидание.** Роль, что сказала «не ждёт стилей» или «does not wait
+ * for CSS readiness», ждать не ждёт: она сделала работу и сказала, что она
+ * независима. Без этого детектора прогон ругал на шаг, который явно сказал, что не
+ * ждёт, — и прогонял его переписывать.
  * @type {RegExp}
  * @exports
  */
@@ -93,7 +98,32 @@ export const WAITING_WORDS = new RegExp([
 ].join('|'), 'i');
 
 /**
+ * Слова отрицания, что ждёт.
+ *
+ * «не ждёт», «does not wait», «без ожидания», «no need to wait» — роль сказала, что
+ * она **не** ждёт, и детектор не должен считать её ожидающей.
+ *
+ * @type {RegExp}
+ * @exports
+ */
+export const NOT_WAITING_WORDS = new RegExp([
+    // «не ждёт», «не нужно ждать», «не требует ожидания»
+    String.raw`(?:не\s+нужно\s+)?не\s+(?:жду|ждёт|ждут|ожида[а-яё]*|подожд[а-яё]*)`,
+    String.raw`без\s+ожидания`,
+    // «does not wait», \"doesn't wait\", \"no need to wait\", \"without waiting\"
+    String.raw`\b(?:does\s+not|doesn't|do\s+not|don't)\s+wait\b`,
+    String.raw`\bno\s+need\s+to\s+wait\b`,
+    String.raw`\bwithout\s+waiting\b`,
+    // «не дожидается», «не блокируется»
+    String.raw`не\s+дожида[а-яё]*`,
+    String.raw`не\s+блокиру[а-яё]*`,
+].join('|'), 'i');
+
+/**
  * Ждёт ли роль чужую работу?
+ *
+ * Отрицание снимает ожидание: «не ждёт стилей» и «does not wait for CSS readiness» —
+ * это работа, которая сделана и сказала, что она независима.
  *
  * @param {string} text текст ответа роли
  * @returns {boolean}
@@ -103,7 +133,9 @@ export const WAITING_WORDS = new RegExp([
 export function isWaiting(text) {
     const value = String(text ?? '');
     if (!value.trim()) return false;
-    return WAITING_WORDS.test(value);
+    if (!WAITING_WORDS.test(value)) return false;
+    // Отрицание рядом со словом ожидания снимает его: «не ждёт», «does not wait».
+    return !NOT_WAITING_WORDS.test(value);
 }
 
 /**

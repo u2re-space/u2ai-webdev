@@ -1509,6 +1509,16 @@ The step down is a phase of the work, not a one-way road:
 - when its files are on the disk, the polish of them goes with the tail of the ladder;
 - when it has to write again, the head answers again.
 
+**The polish reads; it does not write.** The tail of the ladder looks at what the head wrote
+and says what is wrong with it — and it has no instruments of writing. If the tail could
+write, it would replace the work of the head with its own, and the run would pay for a
+text nobody checked. The repair of what is wrong is not the polish: it is work done again,
+and work done again belongs to the head.
+
+A role that says it **does not wait** — «does not wait for CSS readiness», «не ждёт
+стилей» — is not waiting, and the run does not send it to write its step over. Only a role
+that really waits is told that waiting is not needed.
+
 The model of a turn is recomputed every time, so an earlier call never takes the model of the
 house away for good. The hand-over follows the same rule: the work of the sub-agent is
 the work of the caller, so the sub-agent answers with the model of the role it inherits.
