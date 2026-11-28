@@ -53,7 +53,7 @@ test('the architect answers with the best model of the family, not with the mode
     // The structure of the project is the most expensive thing to change later.
     for (const model of ['minimax/minimax-m3.1-flash', 'google/gemini-4-hydrogen', 'moonshotai/kimi-k3.1-pro']) {
         const config = configFor({ model });
-        assert.equal(resolveRole('architect', config).model, 'openai/gpt-6.2-sol');
+        assert.equal(resolveRole('architect', config).model, 'openai/gpt-6.1-terra');
     }
     // The pin of the role still wins over the model of the house.
     const pinned = configFor({ roles: { architect: { model: 'google/gemini-4-hydrogen' } } });

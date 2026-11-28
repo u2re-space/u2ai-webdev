@@ -180,7 +180,7 @@ export const defaults = {
         artist: [1],
         // The architect only answers: there is nothing for it to polish on the disk, so it
         // stays on the head of the ladder. Голова — это `gpt-6.2-sol`.
-        architect: [1],
+        architect: [0],
         // The animator writes the motion and then answers for it: the whole session of the
         // animator is the work of the model of the house.
         animator: [1],
