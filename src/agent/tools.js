@@ -923,6 +923,14 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                     // Файла нет — это факт о проекте, а не поломка инструмента: его пишет
                     // другая роль, и ждать его бессмысленно.
                     if (!existsSync(abs)) {
+                        // Но в памяти прогона он может быть: файл, который шаг сделал, но
+                        // который не дошёл до диска. Он отдаётся оттуда, и роль видит
+                        // свою работу, а не пустоту.
+                        const remembered = await context?.memory?.get?.(relKey);
+                        if (typeof remembered === 'string' && remembered) {
+                            await noteRead(relKey);
+                            return `# ${rel} — из памяти прогона (на диске его нет)\n${remembered}`;
+                        }
                         return `Файл ${target} не найден: его ещё нет на диске. Посмотри, кто его `
                             + 'пишет (список файлов шага и отчёт плана), и не жди его: сделай свою '
                             + 'часть работы и скажи в ответе, что файла не было.';
@@ -1060,7 +1068,9 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                 rememberWrite(target.rel);
                 await rememberInMap(target.rel);
                 await forgetReadFact(target.rel);
-                await context?.file?.(target.rel);
+                // The memory of the run keeps the text: a file that the disk does not have
+                // yet is still here, and the next stage can take it from here.
+                await context?.file?.(target.rel, String(args.content ?? ''));
                 return `Записан ${result.rel} (${result.bytes} байт${result.created ? ', новый файл' : ''}).`;
             }
             case 'replace_text': {
@@ -1076,6 +1086,9 @@ export function createToolset({ root, config, role = null, mcp = [], writeDirs =
                 rememberWrite(target.rel);
                 await rememberInMap(target.rel);
                 await forgetReadFact(target.rel);
+                // The memory of the run keeps the new text of the file.
+                const after = await readFile(path.resolve(root, target.rel), 'utf8').catch(() => null);
+                await context?.file?.(target.rel, after);
                 return `Заменено в ${result.rel}: ${result.replacements} (${result.bytes} байт).`;
             }
             case 'delete_file': {

@@ -37,6 +37,7 @@ import path from 'node:path';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { runRole, roleReason, syntaxCorrection, partialCorrection } from '../roles/index.js';
 import { writeTextFile } from '../agent/fs-tools.js';
+import { openMemory } from '../agent/memory.js';
 import { resolveInside } from '../agent/paths.js';
 import { checkFiles, missingPartials, checkPicture } from '../agent/syntax.js';
 import { inputContext } from '../inputs/index.js';
@@ -880,7 +881,14 @@ export async function resumableStep(root, config = {}, id = null, step = {}, pla
         : (Array.isArray(report.files) ? report.files.map((file) => file?.path ?? file) : []);
     const names = written.length ? written : (Array.isArray(step.files) ? step.files : []);
     const missing = await missingFiles(root, names);
-    if (missing.length) return null;
+    // The memory of the run may hold the files the disk lost: the step is not lost, and
+    // its files go back to the disk from there.
+    const memory = await runMemory(root, config, id);
+    const recoverable = [];
+    for (const rel of missing) {
+        if (!(await memory?.has?.(rel))) return null;
+        recoverable.push(rel);
+    }
     // Картинка, которая не картинка, — не работа этого шага: SVG внутри `.webp` браузер не
     // покажет, и шаг делается заново — роль пишет файл правильно.
     for (const rel of names) {
@@ -899,9 +907,17 @@ export async function resumableStep(root, config = {}, id = null, step = {}, pla
         // A later step of the plan owns the file now.
         if (await ownedByLater(root, config, id, plan, step, rel)) continue;
         const disk = await currentContent(root, rel);
-        if (disk === null || disk !== content) return null;
+        if (disk === null || disk !== content) {
+            const remembered = await memory?.get?.(rel);
+            if (remembered !== content) return null;
+        }
     }
-    return { ...report, resumed: true };
+    for (const rel of recoverable) {
+        const text = await memory?.get?.(rel);
+        if (typeof text !== 'string') continue;
+        await writeTextFile({ root, file: rel, content: text }).catch(() => {});
+    }
+    return { ...report, resumed: true, recovered: recoverable };
 }
 
 /**
@@ -932,7 +948,15 @@ export async function resumablePass(root, config = {}, id = null, step = {}, pla
         : (Array.isArray(report.files) ? report.files.map((file) => file?.path ?? file) : []);
     const names = written.length ? written : (Array.isArray(step.files) ? step.files : []);
     const missing = await missingFiles(root, names);
-    if (missing.length) return null;
+    // A file that the disk does not have may be in the memory of the run: the step made it,
+    // and the answer was never written to the disk. The step is not lost — the memory holds
+    // the file, and it goes back to the disk from there.
+    const memory = await runMemory(root, config, id);
+    const recoverable = [];
+    for (const rel of missing) {
+        if (!(await memory?.has?.(rel))) return null;
+        recoverable.push(rel);
+    }
     for (const rel of names) {
         const picture = await checkPicture(root, String(rel ?? '')).catch(() => null);
         if (picture && picture.ok === false) return null;
@@ -945,9 +969,96 @@ export async function resumablePass(root, config = {}, id = null, step = {}, pla
         if (own.has(rel)) continue;
         if (await ownedByLater(root, config, id, plan, step, rel)) continue;
         const disk = await currentContent(root, rel);
-        if (disk === null || disk !== content) return null;
+        if (disk === null || disk !== content) {
+            // The file is not on the disk as the answer says it is. The memory may still have
+            // it: then the answer is the truth and the file goes back to the disk.
+            const remembered = await memory?.get?.(rel);
+            if (remembered !== content) return null;
+        }
     }
-    return { ...report, resumed: true };
+    // The files that the disk lost go back to the disk from the memory: the work of the
+    // step is not lost, and the stages after it see what they expect.
+    for (const rel of recoverable) {
+        const text = await memory?.get?.(rel);
+        if (typeof text !== 'string') continue;
+        await writeTextFile({ root, file: rel, content: text }).catch(() => {});
+    }
+    return { ...report, resumed: true, recovered: recoverable };
+}
+
+/**
+ * The files of the проект, that a file names and that are not there yet.
+ *
+ * A файл, который ссылается на другой файл, должен ссылаться на тот, который уже есть:
+ * `import './styles.scss'` в скелете кода, написанном раньше стилей, ссылается на пустоту.
+ *
+ * The names of the files of the проект are taken from the text: `import './x.scss'`,
+ * `href="/x.html"`, `url(y.png)`. The links to the outside are not names of files of the
+ * проект, and they are left alone.
+ *
+ * @param {string} root the working directory of the project
+ * @param {string} content the text of the file
+ * @param {{ own?: string[], skip?: string[] }} [options]
+ *   `own` — the file itself: it does not reference itself. `skip` — the files that are
+ *   written by the role right now: they are there.
+ * @returns {Promise<string[]>} the names of the files, that are not there
+ * @exports
+ * @ai.hint io
+ */
+export async function missingReferences(root, content, { own = [], skip = [] } = {}) {
+    const text = String(content ?? '');
+    if (!text) return [];
+    const mine = new Set([...own, ...skip].map((item) => String(item ?? '').trim().toLowerCase()).filter(Boolean));
+    const named = new Set();
+    // `import './x.scss'`, `from './x.js'`, `href="/x.html"`, `src="x.png"`, `url(y.svg)`.
+    const re = /(?:import|from|href|src)\s*\(?\s*['"]([^'"]+)['"]|\burl\(\s*['"]?([^'")]+)['"]?\s*\)/gi;
+    let match = re.exec(text);
+    while (match) {
+        const raw = String(match[1] ?? match[2] ?? '').trim();
+        if (raw && !/^(?:https?:|data:|\/\/|#|mailto:|javascript:)/i.test(raw)) {
+            named.add(raw.split('?')[0].split('#')[0]);
+        }
+        match = re.exec(text);
+    }
+    const out = [];
+    for (const raw of named) {
+        const base = path.posix.basename(raw);
+        if (!base) continue;
+        if (mine.has(base.toLowerCase())) continue;
+        // The file may be named by its path in the проект, not only by its name.
+        const candidates = [base, raw.replace(/^\.?\//, '')];
+        let found = false;
+        for (const candidate of candidates) {
+            const abs = path.resolve(root, candidate);
+            if (await stat(abs).then((info) => info.isFile()).catch(() => false)) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) out.push(base);
+    }
+    return [...new Set(out)];
+}
+
+/**
+ * The memory of the run, opened for the files it holds.
+ *
+ * The memory is on the disk of the run, so a run that is continued finds the files it
+ * made and the answers it got. A memory that cannot be opened is not a reason to fail:
+ * the run goes on without it.
+ *
+ * @param {string} root the working directory of the project
+ * @param {object} config the configuration of the run
+ * @param {string|null} id the identifier of the run
+ * @returns {Promise<object|null>}
+ * @ai.hint io
+ */
+async function runMemory(root, config = {}, id = null) {
+    try {
+        return openMemory({ root, config, id: String(id ?? '') });
+    } catch {
+        return null;
+    }
 }
 
 /**
@@ -1381,6 +1492,29 @@ async function runStepPass({
                 await runContext?.file?.(rel);
             }
         }
+        // The memory of the run keeps the text of **every** file of the answer — and of the
+        // files that were not written too. A file that the disk does not have is still here:
+        // the next step takes it from the memory, and a run that is continued finds it.
+        for (const file of files) {
+            const rel = String(file?.path ?? '').trim();
+            const content = typeof file?.content === 'string' ? file.content : null;
+            if (!rel || content === null) continue;
+            await runContext?.memory?.put?.(rel, content);
+        }
+        // Файл, который ссылается на файл, которого ещё нет, — это шаг, который встал
+        // раньше своей очереди. План может попросить скелет кода раньше стилей, и скелет
+        // при этом импортирует `styles.scss`, которого нет: следующий шаг читает пустоту.
+        // Run знает, кто владеет каким файлом, и говорит об этом — файл дожидается своего
+        // шага, а прогон не тратит деньги на починку.
+        for (const file of files) {
+            const rel = String(file?.path ?? '').trim();
+            const content = typeof file?.content === 'string' ? file.content : null;
+            if (!rel || content === null) continue;
+            for (const missing of await missingReferences(root, content, { own: [rel], skip: own })) {
+                warnings.push(`Шаг ${step.id}: файл ${rel} ссылается на ${missing}, которого ещё `
+                    + 'нет на диске — шаг, который его пишет, должен идти раньше.');
+            }
+        }
 
         // The files of the step have to compile. The compiler of the platform sees the lost
         // quote and the stray backslash that the reader of the code does not see. The files
@@ -1542,5 +1676,17 @@ async function runStepPass({
             warnings.push(`Шаг ${step.id}: хост не ответил${status}: ${answer.error.message ?? 'без причины'}.`);
         }
         await writePassReport(root, config, run, step.id, role, pass, report);
+        // The answer goes into the memory of the run: a run that is continued does not pay
+        // for an answer it already has, and a stage that needs the file takes it from here.
+        await runContext?.memory?.answer?.(step.id, pass, {
+            role,
+            pass,
+            files: Array.isArray(answer.data?.files) ? answer.data.files : [],
+            commands: Array.isArray(answer.data?.commands) ? answer.data.commands : [],
+            notes: String(answer.data?.notes ?? '').trim(),
+            summary: String(answer.data?.summary ?? report?.summary ?? '').trim(),
+            stopped: answer.stopped ?? null,
+            at: new Date().toISOString(),
+        });
         return { report, turns: turnUsed + repairTurns, usage: turnUsage ?? repairUsage };
 }

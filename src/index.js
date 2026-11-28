@@ -91,5 +91,6 @@ export * from './shared/worker.js';
 export * from './access/ramdisk.js';
 export * from './shared/code-mode.js';
 export * from './agent/code-mode.js';
+export * from './agent/memory.js';
 export * from './agent/worker.js';
 export * from './agent/worker-runner.js';

@@ -1821,6 +1821,48 @@ And the roles write into it: their answers, their decisions, the plan and the le
 all land in the journal and in the state. The next stage starts from that instead of asking the
 model the same thing again.
 
+### The memory of the run
+
+The context says what the run *knows*. The memory says what the run *made*.
+
+```
+.ai/tmp/<id>/memory/
+  files/     текст каждого файла, что прогон сделал
+  answers/   ответы ролей, по шагу и проходу
+```
+
+The memory is the answer to a real loss. A role writes `main.js` that imports
+`./styles.scss`; the plan puts the skeleton of the code before the styles, and the file that
+the skeleton names does not exist yet. The next step reads the empty. When the run is
+paused, or the step is redone, or the disk loses the file — the memory still has it.
+
+- **A file that the disk lost is read from the memory.** `read_file` answers with it and
+  says where it came from: `# styles.scss — из памяти прогона (на диске его нет)`.
+- **A file that the disk lost goes back to the disk.** A continued run does not redo a step
+  whose work the memory still holds — it puts the file back and goes on.
+- **The answers of the roles are kept too**, by step and pass, so a continued run does not
+  pay for an answer it already has.
+
+The memory lives on the disk of the run, not in the RAM of the process: a run that was
+paused and continued finds its files. It dies with the run, like everything else of the run.
+
+The memory and the cache of the context are different things: the **cache** answers a
+*question* (`read_file` was already asked), and the **memory** keeps the *work* — the files
+and the answers.
+
+### A file that names a file that is not there
+
+The plan may ask for the wrong order: the dependencies in it are incomplete, and nothing
+warns the planner about it. The run finds out by itself — a file that references a file
+that does not exist yet is a step that jumped its queue:
+
+```
+Шаг js-skeleton: файл main.js ссылается на styles.scss, которого ещё нет на диске —
+шаг, который его пишет, должен идти раньше.
+```
+
+The warning names the step and the file, so the reader knows why the page did not build.
+
 ## The economy of the run
 
 The tokens of a run are the money of the run, and the same work can cost ten times more or

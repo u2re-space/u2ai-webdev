@@ -31,6 +31,7 @@ import { createHash } from 'node:crypto';
 import { appendFile, mkdir, readFile } from 'node:fs/promises';
 import { workRoot, sanitizeId } from '../stages/workspace.js';
 import { workRel, writeFileAtomic } from '../shared/house.js';
+import { openMemory } from './memory.js';
 
 /** Имя каталога контекста внутри каталога прогона. */
 export const CONTEXT_DIR = 'context';
@@ -240,6 +241,16 @@ export async function openContext({
         rel,
         state,
         /**
+         * The memory of the run: the files it made and the answers it got.
+         *
+         * The memory holds the text of the files, so a stage that needs a file the disk
+         * does not have takes it from here. It also holds the answers of the roles, so a
+         * continued run does not pay for an answer it already has.
+         *
+         * @type {object|null}
+         */
+        memory: openMemory({ root, config, id }),
+        /**
          * The map of the run: the index of the files of the working directory.
          *
          * The map hangs on the context because it is the same knowledge: the context says
@@ -390,14 +401,21 @@ export async function openContext({
 
         /**
          * Файл, который прогон записал.
+         *
+         * Файл попадает и в список файлов прогона, и в память прогона: память помнит его
+         * текст, даже когда шаг не успел довести файл до диска.
          * @param {string} file путь файла
+         * @param {string} [content] текст файла, если он есть
          * @returns {Promise<void>}
          * @ai.hint io
          */
-        async file(file) {
+        async file(file, content = null) {
             const rel = String(file ?? '');
             if (!rel) return;
             if (!state.files.includes(rel)) state.files.push(rel);
+            if (typeof content === 'string' && content) {
+                await context.memory?.put?.(rel, content);
+            }
             await saveState().catch(() => {});
         },
 
